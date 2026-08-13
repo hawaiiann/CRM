@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дизайн CRM</title>
+<!-- Минималистичный Favicon с буквой D -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23A8E10C'/><text x='16' y='22' font-size='18' font-weight='800' font-family='sans-serif' fill='%231E1E1E' text-anchor='middle'>D</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">D</div>
+      <div class="brand-name">Дизайн · CRM</div>
+    </div>
+
+    <nav class="navlist">
+      <div class="navlabel">Обзор</div>
+      <button class="navitem active" data-view="overview" onclick="switchView('overview')">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+        Дашборд
+      </button>
+      <button class="navitem" data-view="finance" onclick="switchView('finance')">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M4 4h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.6"/><path d="M12 10a2 2 0 11-4 0 2 2 0 014 0z" stroke="currentColor" stroke-width="1.6"/></svg>
+        Финансы
+      </button>
+
+      <div class="navlabel">Работа</div>
+      <button class="navitem" data-view="orders" onclick="switchView('orders')">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="3.5" cy="5" r="1.3" fill="currentColor"/><circle cx="3.5" cy="10" r="1.3" fill="currentColor"/><circle cx="3.5" cy="15" r="1.3" fill="currentColor"/><line x1="7" y1="5" x2="17" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="7" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="7" y1="15" x2="17" y2="15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Заказы
+      </button>
+      <button class="navitem" data-view="timeline" onclick="switchView('timeline')">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="3" width="8" height="3" rx="1" fill="currentColor"/><rect x="6" y="8.5" width="12" height="3" rx="1" fill="currentColor"/><rect x="2" y="14" width="10" height="3" rx="1" fill="currentColor"/></svg>
+        Таймлайн
+      </button>
+      <button class="navitem" data-view="tasks" onclick="switchView('tasks')">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M7 8h6M7 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Задачи
+      </button>
+      <!-- РАЗДЕЛ ПЛАНИРОВАНИЕ ПОСЛЕ ЗАДАЧ -->
+      <button class="navitem" data-view="planning" onclick="switchView('planning')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 11h6M7 15h4" stroke-linecap="round"/></svg>
+        Планирование
+      </button>
+
+      <div class="navlabel">Настройки</div>
+      <button class="navitem" data-view="settings" onclick="switchView('settings')">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M10 2V4M10 16V18M15.6569 4.34315L14.2426 5.75736M5.75736 14.2426L4.34315 15.6569M18 10H16M4 10H2M15.6569 15.6569L14.2426 14.2426M5.75736 5.75736M4.34315 4.34315" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Справочники
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <!-- Закрепленный таймер внизу сайдбара (выделенная область со Скрина 1) -->
+      <div class="sidebar-pomo-card" id="sidebarPomoCard">
+        <div class="spc-body">
+          <div class="spc-top-row">
+            <div class="spc-label">Таймер</div>
+            <div class="spc-title" id="spcTaskName">Свободный замер</div>
+          </div>
+          <div class="spc-ring-wrap" id="spcRingWrap" onclick="toggleSidebarTimer()">
+            <svg class="spc-ring-svg" viewBox="0 0 100 100">
+              <circle class="spc-ring-track" cx="50" cy="50" r="42"></circle>
+              <circle class="spc-ring-progress" id="spcRingProgress" cx="50" cy="50" r="42"></circle>
+            </svg>
+            <span class="spc-ring-icon" id="spcRingIcon">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4l12 6-12 6V4z"/></svg>
+            </span>
+          </div>
+          <div class="spc-time" id="spcDisplay">00:00</div>
+          <button class="btn danger small spc-finish-btn" onclick="stopSidebarTimer()">Завершить</button>
+        </div>
+      </div>
+
+      <!-- Разделительная черта: таймер выше, переключатель темы и загрузка/сохранение — ниже -->
+      <div style="border-top:1px solid var(--border); margin: 2px 0;"></div>
+
+      <!-- Theme Switcher -->
+      <div class="theme-toggle-container">
+        <button class="theme-btn active" id="btnThemeLight" onclick="setTheme('light')">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="3.5"/><path d="M10 2v2m0 12v2M3 10H1m18 0h-2M5.05 5.05l1.41 1.41m7.08 7.08l1.41 1.41M5.05 14.95l1.41-1.41m7.08-7.08l1.41-1.41" stroke-linecap="round"/></svg>
+          Светлая
+        </button>
+        <button class="theme-btn" id="btnThemeDark" onclick="setTheme('dark')">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.25 10.25A7 7 0 119.75 2.75a5.5 5.5 0 007.5 7.5z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Тёмная
+        </button>
+      </div>
+
+      <!-- Load / Save Buttons -->
+      <div class="theme-toggle-container">
+        <button class="theme-btn" id="btnImport">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14V3m0 0L6 7m4-4l4 4M3 17h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Load
+        </button>
+        <button class="theme-btn" id="btnExport">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3v11m0 0l-4-4m4 4l4-4M3 17h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Save
+        </button>
+      </div>
+      <div style="text-align:center; font-size:10px; color:var(--text-faint); margin-top:6px; font-weight:700;" id="appVersionDisplay"></div>
+      <input type="file" id="fileInput" accept="application/json">
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <div class="content">
+
+      <!-- OVERVIEW (DASHBOARD СЕТКА ИЗ МАКЕТА СТРОГО 50/50) -->
+      <section class="view active" id="view-overview">
+        <div class="topbar">
+          <div><h1>Дашборд</h1><p>Общая картина по вашей загрузке, статистике и доходу</p></div>
+        </div>
+
+        <!-- 1. Верхний ряд макета — три равные колонки: Задачи | Статистика+Прогресс | Активные дни -->
+        <div class="dashboard-top-grid">
+          <div class="card panel tasks-widget-panel" id="dashTasksWidget"></div>
+
+          <div class="dashboard-top-middle">
+            <div class="stat-grid-2x2" id="ovStats"></div>
+
+            <div class="card panel ov-progress-card">
+              <h3>Прогресс по классам</h3>
+              <div class="sub" style="margin-bottom:6px;">Завершение выработки материалов</div>
+              <div id="ovClassProgressContainer" class="cpw-container"></div>
+            </div>
+          </div>
+
+          <div class="card panel active-days-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <h3 style="margin:0;">Активные дни</h3>
+              <select id="activeDaysMonthSelect" class="metrics-period-select" onchange="renderActiveDaysCalendar(this.value); adjustSelectWidth(this);"></select>
+            </div>
+            <div id="activeDaysGrid"></div>
+          </div>
+        </div>
+
+        <!-- 2. Средний ряд макета (50% / 50%): Статистика производства (слева) | Доход (справа) -->
+        <div class="grid-2">
+          <div class="card panel">
+            <h3>Статистика производства</h3>
+            <div class="sub">Выработка по видам работ за текущий месяц</div>
+            <div class="prod-stats-container" id="ovMatStats"></div>
+          </div>
+
+          <div class="card panel" style="display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <h3>Доход по месяцам</h3>
+              <div class="sub">За последние 6 месяцев по завершённым проектам</div>
+            </div>
+            <div class="barchart" id="ovRevenueChart"></div>
+          </div>
+        </div>
+
+        <!-- 3. Нижний ряд макета: Активность (несколько показателей одновременно, настраиваются в Справочниках) -->
+        <div class="card panel daily-stats-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:8px;">
+            <div>
+              <h3>Активность</h3>
+              <div class="sub" style="margin-bottom:0;" id="dashboardMetricsSubtitle">По показателям из Справочников</div>
+            </div>
+            <select id="dashboardMetricsPeriodSelect" class="metrics-period-select" onchange="switchDashboardMetricsPeriod(this.value); adjustSelectWidth(this);">
+              <option value="day">День</option>
+              <option value="week">Неделя</option>
+              <option value="month">Месяц</option>
+              <option value="year">Год</option>
+            </select>
+          </div>
+          <div id="dashboardMetricsGrid" style="margin-top:14px;"></div>
+        </div>
+      </section>
+
+      <!-- FINANCE VIEW -->
+      <section class="view" id="view-finance">
+        <div class="topbar">
+          <div><h1>Финансы</h1><p>Учет доходов, чистой прибыли, налоговых отчислений и управления авансами</p></div>
+          <div class="topbar-actions">
+            <button class="btn btn-accent" onclick="openDepositModal()">Внести аванс</button>
+          </div>
+        </div>
+
+        <div class="finance-tabs">
+          <button class="finance-tab active" id="finTabOverview" onclick="switchFinanceTab('overview')">Обзор финансов</button>
+          <button class="finance-tab" id="finTabAdvances" onclick="switchFinanceTab('advances')">Баланс авансов по клиентам</button>
+        </div>
+
+        <div id="financeOverviewTab">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;" id="financeCardsGrid"></div>
+          
+          <div class="card panel" style="margin-top:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h3>Финансовая статистика по заказам</h3>
+                <div class="sub" style="margin-bottom:0;">Кликните по названию проекта для перехода к нему. Кликните по плашке оплаты для смены статуса.</div>
+              </div>
+
+              <!-- Панель сортировки в финансах -->
+              <div class="toolbar" style="margin-bottom:0;">
+                <select id="finSortBy" onchange="renderFinance()">
+                  <option value="default">Сортировка: По умолчанию</option>
+                  <option value="status">По статусу оплаты</option>
+                  <option value="price_desc">По общей сумме (убывание)</option>
+                  <option value="price_asc">По общей сумме (возрастание)</option>
+                  <option value="pending_desc">По остатку к доплате (убывание)</option>
+                  <option value="adv_desc">По списанному авансу (убывание)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="overflow-x:auto; overflow-y:auto; margin-top:16px;" id="financeTableWrapper">
+              <table class="finance-table">
+                <thead>
+                  <tr>
+                    <th>Проект</th>
+                    <th>Заказчик</th>
+                    <th>Выручка (с налогом)</th>
+                    <th>Налог</th>
+                    <th>Оплачено из аванса</th>
+                    <th>К доплате</th>
+                    <th>Статус оплаты (Кликабельно)</th>
+                  </tr>
+                </thead>
+                <tbody id="financeTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="financeAdvancesTab" style="display:none;">
+          <div class="card panel">
+            <h3>Реестр полученных авансов и депозитов</h3>
+            <div class="sub">История поступлений авансов от клиентов и их доступный остаток</div>
+            <div style="overflow-x:auto;">
+              <table class="finance-table">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Заказчик</th>
+                    <th>Внесенная сумма</th>
+                    <th>Списано на заказы</th>
+                    <th>Доступный остаток</th>
+                    <th>Примечание</th>
+                    <th>Действие</th>
+                  </tr>
+                </thead>
+                <tbody id="advancesRegistryBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ORDERS -->
+      <section class="view" id="view-orders">
+        <div id="backToPrevViewSlot"></div>
+        <div class="topbar">
+          <div><h1>Заказы</h1><p>Управление всеми проектами и их наполнением</p></div>
+          <div class="topbar-actions"><button class="btn btn-accent" id="btnAdd">Новый заказ</button></div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="searchOrders" placeholder="Поиск по заказам, клиентам, предметам..." style="min-width: 240px;" oninput="renderOrders()">
+          
+          <select id="filterStatus">
+            <option value="all">Все статусы</option>
+            <option value="queue">В очереди</option>
+            <option value="progress">В работе</option>
+            <option value="review">На согласовании</option>
+            <option value="done">Завершён</option>
+            <option value="cancelled">Отменён</option>
+          </select>
+          <select id="groupStatus">
+            <option value="none">Без группировки</option>
+            <option value="class">По классам</option>
+          </select>
+          <select id="sortBy">
+            <option value="deadline">Сначала ближайшие по сдаче</option>
+            <option value="deadline_desc">Сначала дальние по сдаче</option>
+            <option value="created">По дате добавления (новые)</option>
+            <option value="price_desc">По стоимости (убывание)</option>
+            <option value="price_asc">По стоимости (возрастание)</option>
+            <option value="client">По клиенту (А-Я)</option>
+          </select>
+        </div>
+        <div class="order-list" id="orderList"></div>
+      </section>
+
+      <!-- TIMELINE -->
+      <section class="view" id="view-timeline">
+        <div class="topbar">
+          <div><h1>Таймлайн</h1><p>Визуализация нахлеста и параллельных заказов</p></div>
+          <div class="topbar-actions"><button class="btn btn-accent" id="btnAdd2">Новый заказ</button></div>
+        </div>
+
+        <div class="tl-toolbar">
+          <div class="seg">
+            <button id="seg1w" onclick="setTlMode('1w')">1 неделя</button>
+            <button id="seg2w" class="active" onclick="setTlMode('2w')">2 недели</button>
+            <button id="seg1m" onclick="setTlMode('1m')">Месяц (2×14 дн.)</button>
+          </div>
+          <div class="tl-nav">
+            <button class="btn secondary small" onclick="navTlRange(-1)">←</button>
+            <div class="tl-range-label" id="tlRangeLabel"></div>
+            <button class="btn secondary small" onclick="navTlRange(1)">→</button>
+            <button class="btn ghost small" onclick="navTlRange(0)">Сегодня</button>
+          </div>
+        </div>
+
+        <div class="card panel tl-card-panel">
+          <div class="tl-container" id="tlContainerMain"></div>
+        </div>
+      </section>
+
+      <!-- TASKS SECTION -->
+      <section class="view" id="view-tasks">
+        <div class="topbar">
+          <div><h1>Задачи</h1><p>Операционный список дел с разбивкой по временным периодам</p></div>
+        </div>
+        <div class="tasks-2col-grid">
+          <div class="card panel tasks-widget-panel" id="tasksCol1Widget"></div>
+          <div class="card panel tasks-widget-panel" id="tasksCol2Widget"></div>
+        </div>
+      </section>
+
+      <!-- PLANNING VIEW -->
+      <section class="view" id="view-planning">
+        <div class="topbar">
+          <div><h1>Планирование</h1><p>Сетка уроков по классам с полной автосинхронизацией заказов и архивом</p></div>
+          <div class="topbar-actions">
+            <select id="planningSortBy" onchange="renderPlanning()">
+              <option value="class">Сортировка: По классу (А-Я)</option>
+              <option value="subject">Сортировка: По предмету (А-Я)</option>
+              <option value="deadline">Сортировка: По дедлайну</option>
+            </select>
+            <button class="btn btn-accent" onclick="openBoardModal()">Добавить класс</button>
+          </div>
+        </div>
+        <div class="planning-container" id="planningContainer"></div>
+        <div id="planCellTooltip" class="plan-cell-tooltip"></div>
+      </section>
+
+      <!-- SETTINGS VIEW -->
+      <section class="view" id="view-settings">
+        <div class="topbar">
+          <div><h1>Справочники и Настройки</h1><p>Настройка списков, заказчиков и автосохранения резервных копий</p></div>
+        </div>
+        <div class="settings-grid">
+          <div class="card panel">
+            <h3>Заказчики</h3>
+            <div class="settings-list" id="set-clients"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addSetting('clients')">+ Добавить</button>
+          </div>
+          <div class="card panel">
+            <h3>Типы работ</h3>
+            <div class="settings-list" id="set-types"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addSetting('types')">+ Добавить</button>
+          </div>
+          <div class="card panel">
+            <h3>Единицы измерения</h3>
+            <div class="settings-list" id="set-units"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addSetting('units')">+ Добавить</button>
+          </div>
+          <div class="card panel">
+            <h3>Предметы</h3>
+            <div class="settings-list" id="set-subjects"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addSetting('subjects')">+ Добавить</button>
+          </div>
+          <div class="card panel">
+            <h3>Классы</h3>
+            <div class="settings-list" id="set-classes"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addSetting('classes')">+ Добавить</button>
+          </div>
+
+          <!-- ПОКАЗАТЕЛИ ДАШБОРДА -->
+          <div class="card panel" style="grid-column: 1 / -1;">
+            <h3>Показатели дашборда</h3>
+            <div class="sub">Какие метрики показывать на графике "Активность" и цель на день по каждой. Цвет назначается автоматически.</div>
+            <div id="dashboardMetricsList" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="addDashboardMetric()">+ Добавить показатель</button>
+          </div>
+
+          <!-- НАСТРОЙКИ АВТОБЭКАПА С ПОЛНЫМ ПУТЕМ -->
+          <div class="card panel backup-card">
+            <h3>Автоматическое резервное копирование (Auto-Backup)</h3>
+            <div class="sub">Укажите полный путь к директории хранения на ПК для контроля расположения папки</div>
+            
+            <div class="row2" style="margin-bottom:14px;">
+              <div class="field">
+                <label>Режим автобэкапа</label>
+                <select id="cfg_backupEnabled" onchange="saveBackupSettings()">
+                  <option value="true">Включен</option>
+                  <option value="false">Отключен</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Периодичность автосохранения</label>
+                <select id="cfg_backupInterval" onchange="saveBackupSettings()">
+                  <option value="change">При каждом изменении данных</option>
+                  <option value="1h">Каждый час</option>
+                  <option value="6h">Каждые 6 часов</option>
+                  <option value="24h">Раз в день (24 часа)</option>
+                  <option value="7d">Раз в неделю</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Полный путь к директории хранения бекапов на диске</label>
+              <div style="display:flex; gap:10px;">
+                <input type="text" id="cfg_backupPath" placeholder="Например: D:\Design_CRM\Backups" oninput="saveBackupSettings()" style="flex:1;">
+                <button class="btn secondary small" onclick="selectBackupDirectory()">Выбрать папку</button>
+              </div>
+              <div style="font-size:11.5px; color:var(--text-faint); margin-top:4px;">
+                * Впишите полный путь к папке вручную или выберите через диалог. CRM сохраняет бекапы локально и выгружает файлы в указанную папку.
+              </div>
+              <div id="backupDirWarning" style="display:none; font-size:11.5px; font-weight:700; color:var(--rose); margin-top:6px;"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:14px; border-top:1px dashed var(--border);">
+              <div>
+                <span style="font-size:12.5px; font-weight:700;">Последний автобэкап: </span>
+                <span id="lastBackupTimeDisplay" style="font-size:12.5px; color:var(--text-soft);">Еще не производился</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn secondary small" onclick="triggerManualBackup()">Сделать бэкап сейчас</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODAL: CREATE / EDIT ORDER -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="close-x" id="closeModal">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="modalTitle">Новый заказ</h2>
+    <form id="orderForm">
+      <input type="hidden" id="orderId">
+      
+      <div class="field">
+        <label>Название проекта (Опционально)</label>
+        <input type="text" id="f_title" placeholder="Введите название или оставьте пустым">
+      </div>
+      
+      <div class="row3">
+        <div class="field">
+          <label>Клиент / Заказчик</label>
+          <input type="text" id="f_client" list="clientsDatalist" placeholder="Введите или выберите заказчика..." onchange="updateModalAdvanceInfo()">
+          <datalist id="clientsDatalist"></datalist>
+        </div>
+        <div class="field">
+          <label>Статус</label>
+          <select id="f_status">
+            <option value="queue">В очереди</option>
+            <option value="progress">В работе</option>
+            <option value="review">На согласовании</option>
+            <option value="done">Завершён</option>
+            <option value="cancelled">Отменён</option>
+          </select>
+        </div>
+        <div class="field">
+          <label style="text-transform:none;">&nbsp;</label>
+          <label style="display:flex; align-items:center; gap:8px; font-weight:700; color:var(--rose); cursor:pointer; height:44px;">
+            <input type="checkbox" id="f_priority" style="width:auto;"> Приоритетный заказ
+          </label>
+        </div>
+      </div>
+
+      <div class="row4">
+        <div class="field">
+          <label>Предмет</label>
+          <select id="f_subject"></select>
+        </div>
+        <div class="field">
+          <label>Класс</label>
+          <select id="f_class"></select>
+        </div>
+        <div class="field">
+          <label>Четверть</label>
+          <input type="text" id="f_quarter" placeholder="Например: 1 четверть">
+        </div>
+        <div class="field">
+          <label>Номер урока</label>
+          <input type="text" id="f_lesson" placeholder="Например: 12">
+        </div>
+      </div>
+      
+      <div class="row2">
+        <div class="field"><label>Дата начала</label><input type="date" id="f_start" required></div>
+        <div class="field"><label>Планируемый срок сдачи</label><input type="date" id="f_deadline" required></div>
+      </div>
+      
+      <div class="row2">
+        <div class="field"><label>Оценка (часов)</label><input type="text" inputmode="decimal" id="f_est" placeholder="План. часы"></div>
+        <div class="field"><label>Факт. часы</label><input type="text" inputmode="decimal" id="f_act" placeholder="Факт. часы"></div>
+      </div>
+
+      <!-- БЛОК РАСПРЕДЕЛЕНИЯ АВАНСА -->
+      <div style="background:var(--subcard); padding:16px; border-radius:18px; border:1px solid var(--border); margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:12px; font-weight:800; text-transform:uppercase; color:var(--text-faint);">Распределение аванса по заказу</span>
+          <span id="clientAvailableAdvanceBadge" style="font-size:11.5px; font-weight:700; color:var(--green);">Доступный аванс клиента: 0 ₽</span>
+        </div>
+        <div class="row2" style="margin-bottom:0;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Списать из аванса на этот заказ (₽)</label>
+            <input type="text" inputmode="decimal" id="f_advanceUsed" placeholder="0 ₽" oninput="calculateModalAdvanceDiff(); warnIfAdvanceExceedsOrder();">
+          </div>
+          <div class="field" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+            <button type="button" class="btn secondary small" style="margin-top:14px;" onclick="fillMaxAdvanceForOrder()">Списать всю стоимость из аванса</button>
+          </div>
+        </div>
+        <div id="advanceCalcSummary" style="font-size:12px; font-weight:700; margin-top:10px; color:var(--text-soft);">
+          Остаток к доплате заказчиком: 0 ₽
+        </div>
+      </div>
+
+      <div class="field">
+        <label style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Состав заказа (Тип, Ед.изм, Кол-во, Часы, Ставка)</span>
+          <label style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--text); cursor:pointer; text-transform:none;">
+            <input type="checkbox" id="f_isPaid" style="width:auto;"> Заказ полностью оплачен
+          </label>
+        </label>
+
+        <div class="lines-table">
+          <div class="lines-head">
+            <div>Тип</div>
+            <div>Ед. изм.</div>
+            <div>Кол-во</div>
+            <div>Часы</div>
+            <div>Ставка (₽)</div>
+            <div>Сумма</div>
+            <div title="Готово — таймер переключится на следующую позицию">Готов</div>
+            <div></div>
+          </div>
+          <div id="linesBody"></div>
+        </div>
+        <button type="button" class="btn secondary small" id="btnAddLine">+ Добавить позицию</button>
+
+        <div class="field" style="margin-top:12px;">
+          <label>Налог для конечной цены</label>
+          <select id="f_taxType" onchange="updateLinesTotalSum()">
+            <option value="none">Без налога</option>
+            <option value="individual">Физ. лицо (+4%)</option>
+            <option value="entity">Юр. лицо (+6%)</option>
+          </select>
+        </div>
+
+        <div class="lines-total-box">
+          <span>Сумма позиций:</span>
+          <span class="lines-total-amount" id="linesTotal">0 ₽</span>
+        </div>
+        <div class="lines-total-box">
+          <span>Конечная цена (с учётом налога):</span>
+          <span class="lines-total-amount" id="linesTotalWithTax">0 ₽</span>
+        </div>
+      </div>
+
+      <div class="field"><label>Заметки и требования</label><textarea id="f_notes" placeholder="Ссылка на ТЗ, правки..."></textarea></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn danger" id="btnDelete" style="display:none;margin-right:auto;">Удалить</button>
+        <button type="button" class="btn secondary" id="btnCancel">Отмена</button>
+        <button type="submit" class="btn btn-accent">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: CLASS SETTINGS POPUP (ПЛАНИРОВАНИЕ) -->
+<div class="overlay" id="boardModalOverlay">
+  <div class="modal" style="max-width:540px;">
+    <button class="close-x" onclick="closeBoardModal()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="boardModalTitle">Настройка класса</h2>
+    <form id="boardForm" onsubmit="handleBoardSubmit(event)">
+      <input type="hidden" id="bmBoardIdx">
+      <div class="row2">
+        <div class="field">
+          <label>Предмет</label>
+          <input type="text" id="bm_subject" list="subjectsDatalist" placeholder="Предмет..." required>
+          <datalist id="subjectsDatalist"></datalist>
+        </div>
+        <div class="field">
+          <label>Класс</label>
+          <input type="text" id="bm_title" list="classesDatalist" placeholder="Например: 5 класс" required>
+          <datalist id="classesDatalist"></datalist>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label>Четверть</label>
+          <input type="text" id="bm_quarter" placeholder="1 четверть">
+        </div>
+        <div class="field">
+          <label>Старт. № урока</label>
+          <input type="number" id="bm_startNum" value="1" min="1" required>
+        </div>
+        <div class="field">
+          <label>Кол-во уроков</label>
+          <input type="number" id="bm_count" value="24" min="1" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Дедлайн класса</label>
+        <input type="date" id="bm_deadline">
+      </div>
+      
+      <!-- Интерактивный список базового наполнения из Справочника -->
+      <div class="field">
+        <label>Базовое наполнение уроков (материалы из справочника или вручную)</label>
+        <div id="bmTemplateList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;"></div>
+        <button type="button" class="btn secondary small" onclick="addBmTemplateItem('')">+ Добавить материал</button>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn secondary" onclick="closeBoardModal()">Отмена</button>
+        <button type="submit" class="btn btn-accent">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRM DELETE ORDER -->
+<div class="overlay" id="deleteOrderOverlay">
+  <div class="modal" style="max-width:420px;">
+    <button class="close-x" onclick="closeDeleteOrderModal()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2>Удалить заказ?</h2>
+    <p style="font-size:13px; color:var(--text-soft); margin-top:-6px; margin-bottom:18px;">
+      Заказ будет удалён безвозвратно. Выберите, что сделать со статистикой (часы, слайды, страницы, выручка), которая уже была по нему записана в журнал активности.
+    </p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" class="btn danger" style="width:100%;" onclick="confirmDeleteOrder(true)">Удалить и очистить статистику по нему</button>
+      <button type="button" class="btn secondary" style="width:100%;" onclick="confirmDeleteOrder(false)">Удалить, но оставить статистику как есть</button>
+      <button type="button" class="btn secondary" style="width:100%;" onclick="closeDeleteOrderModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD DEPOSIT / ADVANCE -->
+<div class="overlay" id="depositOverlay">
+  <div class="modal" style="max-width:480px;">
+    <button class="close-x" onclick="closeDepositModal()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2>Внести аванс от клиента</h2>
+    <form id="depositForm" onsubmit="handleDepositSubmit(event)">
+      <div class="field">
+        <label>Заказчик / Клиент</label>
+        <input type="text" id="dep_client" list="clientsDatalist" placeholder="Выберите или впишите клиента..." required>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Сумма аванса (₽)</label>
+          <input type="text" inputmode="decimal" id="dep_amount" placeholder="50 000 ₽" required>
+        </div>
+        <div class="field">
+          <label>Дата поступления</label>
+          <input type="date" id="dep_date" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Примечание / Комментарий</label>
+        <input type="text" id="dep_note" placeholder="Например: Предоплата за август">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn secondary" onclick="closeDepositModal()">Отмена</button>
+        <button type="submit" class="btn btn-accent">Внести аванс</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: LESSON POPUP -->
+<div class="overlay" id="lessonModalOverlay">
+  <div class="lesson-modal-card">
+    <button class="close-x" onclick="closeLessonModal()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    
+    <div class="lesson-modal-header">
+      <span class="lesson-modal-class-title" id="lmClassTitle">5 класс</span>
+    </div>
+
+    <!-- Переключатель цвета ячейки -->
+    <div style="font-size:11px; font-weight:800; color:var(--text-faint); text-transform:uppercase; margin-bottom:6px;">Статус / Цвет ячейки</div>
+    <div class="color-selector-bar">
+      <button class="color-pill-btn gray" id="cpBtnGray" onclick="setLessonColor('gray')">Неактив</button>
+      <button class="color-pill-btn yellow" id="cpBtnYellow" onclick="setLessonColor('yellow')">В работе</button>
+      <button class="color-pill-btn green" id="cpBtnGreen" onclick="setLessonColor('green-3')">Готово</button>
+      <button class="color-pill-btn red" id="cpBtnRed" onclick="setLessonColor('red')">Срочно</button>
+    </div>
+
+    <!-- Настройка точечного номера урока -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; background:var(--subcard); padding:8px 12px; border-radius:var(--radius-pill); border:1px solid var(--border);">
+      <span style="font-size:12px; font-weight:800; color:var(--text-soft);">Порядковый номер урока:</span>
+      <input type="number" id="lmLessonNumInput" style="width:70px; padding:4px 8px; font-weight:800; text-align:center; border-radius:var(--radius-pill);" onchange="saveLessonNum(this.value)">
+    </div>
+
+    <!-- Содержимое урока -->
+    <div class="lesson-inner-box">
+      <div class="lesson-inner-header">
+        <input type="text" class="lesson-title-input" id="lmLessonTitle" placeholder="Название урока..." onchange="saveLessonTitle(this.value)">
+        <span class="lesson-progress-badge" id="lmProgressBadge">0/0</span>
+      </div>
+
+      <div id="lmChecklist" style="display:flex; flex-direction:column; gap:8px; margin-top:4px;"></div>
+
+      <div class="add-task-input-row combo-wrap" style="margin-top:6px;">
+        <input type="text" id="lmNewItemInput" placeholder="Состав урока (Enter)..." onkeydown="handleLessonAddItem(event)" oninput="filterCombo(this)" onfocus="openComboList(this)">
+        <button type="button" class="combo-toggle" onclick="toggleCombo(this, event)" tabindex="-1">
+          <svg width="10" height="10" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="combo-list" id="lmNewItemCatalogList"></div>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label>Заметки к уроку</label>
+      <textarea id="lmNotes" placeholder="Идеи, правки, ссылки на материалы..." onchange="saveLessonNotes(this.value)"></textarea>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+      <button class="btn danger small" onclick="deleteCurrentLesson()">Удалить урок</button>
+      <button class="btn secondary small" onclick="closeLessonModal()">Готово</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/db.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/planning.js"></script>
+<script src="js/overview.js"></script>
+<script src="js/finance.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/orders.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
