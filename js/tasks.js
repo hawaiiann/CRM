@@ -107,7 +107,12 @@ function renderTasksWidget(containerId, activePeriod, periodChangeFnName) {
     </div>
 
     <div class="tasks-list">
-      ${activeHtml || '<div style="font-size:12.5px; color:var(--text-faint); padding:6px 0;">Нет активных задач</div>'}
+      ${activeHtml || `
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; font-size:13.5px; color:var(--text-faint);">
+          <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="1.6" width="10.8" height="12.8" rx="1.8"/><path d="M5.4 5.6H10.6M5.4 8.4H10.6M5.4 11.2H8.4"/></svg>
+          Нет активных задач
+        </div>
+      `}
     </div>
 
     <div class="tasks-bottom-pinned">
