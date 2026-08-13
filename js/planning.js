@@ -255,27 +255,11 @@ function renderClassProgressWidget() {
     doneItemsAll += doneItems;
 
     const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
-    // Заливка "снизу вверх" по проценту — через SVG clip-path (не CSS-градиент), чтобы не было
-    // "рваных" промежуточных кадров: у CSS нет надёжной анимации между двумя разными градиентами.
-    const clipId = 'cpwClip' + idx;
-    const gradId = 'cpwGrad' + idx;
-    const fillTop = 100 - pct; // Y, с которой начинается видимая (залитая) часть circle
 
     return `
       <div class="cpw-item" title="${escapeHtml(board.subject ? board.subject + ' · ' : '')}${escapeHtml(board.title)}: ${pct}%">
-        <div class="cpw-circle">
-          <svg width="76" height="76" viewBox="0 0 100 100">
-            <defs>
-              <clipPath id="${clipId}"><rect x="0" y="${fillTop}" width="100" height="${pct}"/></clipPath>
-              <linearGradient id="${gradId}" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stop-color="#7CB518"/>
-                <stop offset="100%" stop-color="#A8E10C"/>
-              </linearGradient>
-            </defs>
-            <circle cx="50" cy="50" r="47" fill="none" stroke="var(--border)" stroke-width="3"/>
-            ${pct > 0 ? `<circle cx="50" cy="50" r="47" fill="url(#${gradId})" clip-path="url(#${clipId})"/>` : ''}
-          </svg>
-          <div class="cpw-circle-num">${pct}%</div>
+        <div class="cpw-circle-ring" style="background: conic-gradient(var(--green) 0%, var(--green) ${pct}%, var(--border) ${pct}%, var(--border) 100%);">
+          <div class="cpw-circle-inner"><span class="cpw-circle-num">${pct}%</span></div>
         </div>
         <div class="cpw-label">${escapeHtml(board.title)}</div>
       </div>

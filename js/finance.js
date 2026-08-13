@@ -131,10 +131,10 @@ function renderFinance() {
           </a>
         </td>
         <td>${escapeHtml(o.client || '—')}</td>
-        <td><b>${fmtMoney(full)}</b></td>
-        <td style="color:var(--text-soft);">${fmtMoney(tax)}</td>
-        <td style="color:var(--amber); font-weight:700;">${advUsed > 0 ? fmtMoney(advUsed) : '—'}</td>
-        <td style="color:var(--rose); font-weight:700;">${remToPay > 0 ? fmtMoney(remToPay) : '0 ₽'}</td>
+        <td><b class="num-font">${fmtMoney(full)}</b></td>
+        <td class="num-font" style="color:var(--text-soft);">${fmtMoney(tax)}</td>
+        <td class="num-font" style="color:var(--amber); font-weight:700;">${advUsed > 0 ? fmtMoney(advUsed) : '—'}</td>
+        <td class="num-font" style="color:var(--rose); font-weight:700;">${remToPay > 0 ? fmtMoney(remToPay) : '0 ₽'}</td>
         <td>${statusHtml}</td>
       </tr>
     `;

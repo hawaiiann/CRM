@@ -99,8 +99,9 @@ function loadData(){
       if(!appSettings.units) appSettings.units = ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'];
       if(!appSettings.dashboardMetrics) appSettings.dashboardMetrics = [
         { id: 'dm1', type: 'hours', goal: 4 },
-        { id: 'dm2', type: 'slides', goal: 20 },
-        { id: 'dm3', type: 'netIncome', goal: 7500 }
+        { id: 'dm2', type: 'slides', goal: 15 },
+        { id: 'dm3', type: 'netIncome', goal: 4000 },
+        { id: 'dm4', type: 'presentations', goal: 0 }
       ];
       if(!appSettings.subjects) appSettings.subjects = ['Математика', 'Русский язык', 'Литература', 'Дизайн'];
       if(!appSettings.classes) appSettings.classes = ['5 класс', '6 класс', '7 класс', 'Без класса'];

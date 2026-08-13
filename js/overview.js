@@ -2,6 +2,72 @@
  * overview.js — Дашборд (Обзор): статистика и графики
  * ============================================================ */
 
+/* ПЛАНИРОВАНИЕ НЕДЕЛИ — мини-Гант на 7 дней текущей недели, на Дашборде */
+function getOrderWeekLabel(o) {
+  if (o.subject && o.grade && o.lesson) {
+    return [o.subject, o.grade, o.quarter, 'Урок ' + o.lesson].filter(Boolean).join(', ');
+  }
+  return o.title || 'Заказ';
+}
+
+function renderWeekPlanningWidget() {
+  const el = document.getElementById('ovWeekPlanning');
+  if (!el) return;
+
+  const today = new Date();
+  const dayOfWeek = (today.getDay() + 6) % 7; // Понедельник = 0
+  const monday = addDays(today, -dayOfWeek);
+  const weekDays = [];
+  for (let i = 0; i < 7; i++) weekDays.push(addDays(monday, i));
+  const weekStartKey = dateKey(weekDays[0]);
+  const weekEndKey = dateKey(weekDays[6]);
+  const todayKey = dateKey(today);
+  const weekdayLabels = ['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'];
+
+  const headerHtml = weekDays.map((d, i) => {
+    const isToday = dateKey(d) === todayKey;
+    return `
+      <div style="text-align:center; padding:6px 2px; border-radius:8px; ${isToday ? 'background: var(--green-soft);' : ''}">
+        <div style="font-size:9.5px; font-weight:700; color:${isToday ? 'var(--green)' : 'var(--text-faint)'}; letter-spacing:0.03em;">${weekdayLabels[i]}</div>
+        <div style="font-size:12px; font-weight:700; color:${isToday ? 'var(--green)' : 'var(--text-faint)'}; margin-top:1px;" class="num-font">${d.getDate()}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Заказы, чей диапазон (начало—сдача) пересекается с этой неделей
+  const weekOrders = orders.filter(o => {
+    if (o.status === 'cancelled') return false;
+    const startStr = o.start || o.deadline;
+    const endStr = o.deadline || o.start;
+    if (!startStr && !endStr) return false;
+    return startStr <= weekEndKey && endStr >= weekStartKey;
+  }).sort((a, b) => (a.start || a.deadline || '').localeCompare(b.start || b.deadline || ''));
+
+  const rowsHtml = weekOrders.map(o => {
+    const startStr = o.start || o.deadline;
+    const endStr = o.deadline || o.start;
+    const startCol = Math.max(1, Math.min(7, dateDiffDays(weekStartKey, startStr) + 1));
+    const endCol = Math.max(1, Math.min(7, dateDiffDays(weekStartKey, endStr) + 1));
+    const span = Math.max(1, endCol - startCol + 1);
+    const label = getOrderWeekLabel(o);
+    return `
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;">
+        <div class="gantt-item-bar status-${o.status}" title="${escapeHtml(label)}" onclick="goToOrderCard('${o.id}')"
+             style="grid-column:${startCol} / span ${span}; border-radius:7px; padding:6px 8px; font-size:10.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:14px; cursor:pointer;">
+          ${escapeHtml(label)}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:10px;">${headerHtml}</div>
+    <div style="display:flex; flex-direction:column; gap:5px; max-height:150px; overflow-y:auto;">
+      ${rowsHtml || '<div style="font-size:12.5px; color:var(--text-faint); padding:8px 0;">На этой неделе заказов нет</div>'}
+    </div>
+  `;
+}
+
 function renderOverview(){
   const active = orders.filter(o=>['progress','review'].includes(o.status));
   const done = orders.filter(o=>o.status==='done');
@@ -74,24 +140,24 @@ function renderOverview(){
   }
 
   const statIcons = {
-    active: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="12" height="14" rx="2"/><path d="M7 8h6M7 11h6M7 14h3" stroke-linecap="round"/></svg>`,
-    done: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M7 10l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    revenue: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="14" height="10" rx="2"/><path d="M3 9h14M13 13h1.5" stroke-linecap="round"/></svg>`,
-    pending: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    active: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6.3 4.6L11.4 8L6.3 11.4V4.6Z"/></svg>`,
+    done: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8.4L6.4 11.4L12.6 4.6"/></svg>`,
+    revenue: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 12.6V3.6H8.6C10.1 3.6 11.2 4.6 11.2 6C11.2 7.4 10.1 8.4 8.6 8.4H5.4M3.8 7.2H9.6M3.8 9.4H8.6"/></svg>`,
+    pending: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8.2L10.6 9.9"/></svg>`
   };
 
   document.getElementById('ovStats').innerHTML = [
-    { num: active.length, lbl: 'Активных заказов', icon: statIcons.active, featured: true, pctHtml: '' },
-    { num: done.length, lbl: 'Выполнено заказов', icon: statIcons.done, featured: false, pctHtml: pctBadgeHtml(donePct, false) },
-    { num: fmtMoney(currentMonthRev), lbl: 'Выручка (с налогом)', icon: statIcons.revenue, featured: false, pctHtml: pctBadgeHtml(revPct, false) },
-    { num: activeRev ? fmtMoney(activeRev) : '0 ₽', lbl: 'Ожидает оплаты', icon: statIcons.pending, featured: false, pctHtml: '' }
+    { num: active.length, lbl: 'Активных заказов', icon: statIcons.active, featured: true, tone: '', pctHtml: '' },
+    { num: done.length, lbl: 'Выполнено заказов', icon: statIcons.done, featured: false, tone: 'green', pctHtml: pctBadgeHtml(donePct, false) },
+    { num: fmtMoney(currentMonthRev), lbl: 'Выручка (с налогом)', icon: statIcons.revenue, featured: false, tone: 'amber', pctHtml: pctBadgeHtml(revPct, false) },
+    { num: activeRev ? fmtMoney(activeRev) : '0 ₽', lbl: 'Ожидает оплаты', icon: statIcons.pending, featured: false, tone: 'rose', pctHtml: '' }
   ].map(s => `
     <div class="card stat-card ${s.featured ? 'stat-card-featured' : ''}">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <span class="lbl" style="${s.featured ? 'color:#fff;' : ''}">${s.lbl}</span>
-        <div class="stat-icon-circle ${s.featured ? 'featured' : ''}">${s.icon}</div>
+        <div class="stat-icon-circle ${s.featured ? 'featured' : 'tone-' + s.tone}">${s.icon}</div>
       </div>
-      <div class="num" style="${s.featured ? 'color:#fff;' : ''}">${s.num}</div>
+      <div class="num num-font" style="${s.featured ? 'color:#fff;' : ''}">${s.num}</div>
       ${s.pctHtml}
     </div>`).join('');
 
@@ -115,12 +181,16 @@ function renderOverview(){
     `;
   }).join('');
 
-  document.getElementById('ovMatStats').innerHTML = `
-    <div class="prod-grid-2x2">
-      ${tilesHtml}
-    </div>
-  `;
+  const ovMatStatsEl = document.getElementById('ovMatStats');
+  if (ovMatStatsEl) {
+    ovMatStatsEl.innerHTML = `
+      <div class="prod-grid-2x2">
+        ${tilesHtml}
+      </div>
+    `;
+  }
 
+  renderWeekPlanningWidget();
   renderClassProgressWidget();
 
   const months = [];
@@ -144,7 +214,7 @@ function renderOverview(){
   document.getElementById('ovRevenueChart').innerHTML = months.map((m,i)=>{
     const h = Math.max(4, Math.round((sums[i]/maxSum)*120));
     return `<div class="col ${sums[i]===0?'empty':''}">
-      <div class="val">${sums[i]>0?fmtMoney(sums[i]):''}</div>
+      <div class="val num-font">${sums[i]>0?fmtMoney(sums[i]):''}</div>
       <div class="bar" style="height:${h}px"></div>
       <div class="mo">${monthNames[m.getMonth()]}</div>
     </div>`;
@@ -353,11 +423,11 @@ function renderDashboardMetricsGrid() {
             <line x1="${lastPt.x}" y1="${lastPt.y}" x2="${lastPt.x}" y2="${chartBottom}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3"/>
             <circle cx="${lastPt.x}" cy="${lastPt.y}" r="4.5" fill="${color}"/>
             <rect x="${bubbleX}" y="2" width="${bubbleW}" height="22" rx="11" fill="${color}"/>
-            <text x="${bubbleX + bubbleW/2}" y="16.5" text-anchor="middle" font-size="11" fill="#17190A" font-weight="700">${escapeHtml(bubbleText)}</text>
+            <text x="${bubbleX + bubbleW/2}" y="16.5" text-anchor="middle" font-size="11" fill="#17190A" font-weight="700" font-family="'Space Grotesk', sans-serif">${escapeHtml(bubbleText)}</text>
           </g>
         </svg>
         <div style="color:var(--text-faint); font-size:13px; margin-top:6px;">${escapeHtml(info.label)}</div>
-        <div style="color:var(--text); font-size:26px; font-weight:600; margin-top:2px;">${escapeHtml(formatMetricValue(info, curVal))}</div>
+        <div class="num-font" style="color:var(--text); font-size:26px; font-weight:600; margin-top:2px;">${escapeHtml(formatMetricValue(info, curVal))}</div>
         <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-faint); margin-top:14px;">
           <span>Цель</span><span style="color:var(--text-soft);">${escapeHtml(formatMetricValue(info, goalVal))}</span>
         </div>

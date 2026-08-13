@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.8.5';
+const APP_VERSION = '1.9.5';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -63,8 +63,9 @@ let appSettings = {
   units: ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'],
   dashboardMetrics: [
     { id: 'dm1', type: 'hours', goal: 4 },
-    { id: 'dm2', type: 'slides', goal: 20 },
-    { id: 'dm3', type: 'netIncome', goal: 7500 }
+    { id: 'dm2', type: 'slides', goal: 15 },
+    { id: 'dm3', type: 'netIncome', goal: 4000 },
+    { id: 'dm4', type: 'presentations', goal: 0 }
   ]
 };
 

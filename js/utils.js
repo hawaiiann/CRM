@@ -92,6 +92,12 @@ function parseNum(v){ const n = parseFloat(String(v||'').replace(',','.').replac
 function fmtMoney(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)) + ' ₽'; }
 function dateKey(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
 function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+// Разница в днях между двумя датами-строками "YYYY-MM-DD" (b - a)
+function dateDiffDays(aStr, bStr){
+  const a = parseLocalDate(aStr), b = parseLocalDate(bStr);
+  if (!a || !b) return 0;
+  return Math.round((b - a) / 86400000);
+}
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
 function parseLocalDate(str){
   if(!str) return null;
