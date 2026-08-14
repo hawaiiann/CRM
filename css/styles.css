@@ -1923,6 +1923,16 @@
     gap: 16px;
     width: 100%;
   }
+  .settings-bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    margin-top: 16px;
+  }
+  @media (max-width: 760px) {
+    .settings-bottom-grid { grid-template-columns: 1fr; }
+  }
   .settings-grid .panel {
     width: 100%;
     min-width: 0;
@@ -1990,7 +2000,7 @@
 
   .advance-box { background: var(--subcard); padding: 16px; border-radius: 18px; border: 1px solid var(--border); margin-bottom: 16px; }
   /* Форма заказа — приоритетный заказ (светлая тема): блок аванса тоже в красном монохроме */
-  body:not(.dark-theme) .modal.priority-theme .advance-box { background: var(--rose-soft); border-color: rgba(228, 72, 63, 0.3); }
+  body:not(.dark-theme) .modal.priority-theme .advance-box { background: var(--rose-soft); border-color: var(--border); }
   body:not(.dark-theme) .modal.priority-theme .advance-link-btn { background: #FEF8F7; color: var(--rose); }
   .advance-row3 { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px; align-items: end; }
   .advance-col-label { font-size: 11px; font-weight: 800; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }

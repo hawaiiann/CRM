@@ -168,8 +168,21 @@ function renderTimelineSubBoard(subDays, fixedColWidth) {
             </div>
           </div>
 
-          <div style="font-size:12.5px; color:var(--text-soft); margin-bottom:14px;">
-            Заказчик: <b>${escapeHtml(o.client||'—')}</b> · Сроки: <b>${o.start} — ${o.deadline}</b> · Сумма: <b>${fmtMoney(orderTotal(o))}</b>
+          <div class="details-meta-box" style="margin-bottom:14px;">
+            <div>
+              <div class="details-box-label">Клиент</div>
+              <div class="details-client-name">${escapeHtml(o.client || '—')}</div>
+            </div>
+            <div class="details-mini-grid">
+              <div class="details-mini-card">
+                <div class="details-box-label">Сроки работы</div>
+                <div class="details-mini-value">${fmtDateRangeCompact(o.start, o.deadline)}</div>
+              </div>
+              <div class="details-mini-card">
+                <div class="details-box-label">Сумма</div>
+                <div class="details-mini-value">${fmtMoney(orderTotal(o))}</div>
+              </div>
+            </div>
           </div>
 
           <div class="items-stack-container" style="margin-bottom:14px;">

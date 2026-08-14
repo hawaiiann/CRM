@@ -304,7 +304,7 @@ const SPC_RING_CIRCUMFERENCE = 263.89; // 2 * PI * 42 (радиус кольца
 const SPC_CYCLE_DURATION = 3600; // за сколько секунд кольцо делает один полный круг (1 час)
 let activeTimer = { id: 'standalone', title: 'Свободный замер', start: 0, elapsed: 0, segmentStart: 0, interval: null, running: false };
 
-const spcPlayIcon = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M6.3 4.6L11.4 8L6.3 11.4V4.6Z"/></svg>`;
+const spcPlayIcon = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M5.45 4.6L10.55 8L5.45 11.4V4.6Z"/></svg>`;
 const spcPauseIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>`;
 const spcPlayIconTiny = `<svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4l12 6-12 6V4z"/></svg>`;
 const spcPauseIconTiny = `<svg width="9" height="9" viewBox="0 0 20 20" fill="currentColor"><rect x="4" y="3" width="4" height="14" rx="1"/><rect x="12" y="3" width="4" height="14" rx="1"/></svg>`;
