@@ -753,13 +753,18 @@
   .task-edit-input {
     flex: 1;
     min-width: 0;
+    font-family: inherit;
     font-size: 13px;
     font-weight: 600;
+    line-height: 1.4;
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--accent-yellow);
     border-radius: 6px;
     padding: 3px 7px;
+    resize: none;
+    overflow: hidden;
+    max-height: 160px;
   }
   .task-edit-time {
     width: 64px;
@@ -816,12 +821,17 @@
     display: flex;
     gap: 8px;
   }
-  .add-task-input-row input {
+  .add-task-input-row textarea {
     flex: 1;
+    font-family: inherit;
     font-size: 12.5px;
+    line-height: 1.4;
     padding: 8px 14px;
-    border-radius: var(--radius-pill);
+    border-radius: 16px;
     background: var(--subcard);
+    resize: none;
+    overflow: hidden;
+    max-height: 160px;
   }
 
   .tasks-2col-grid {

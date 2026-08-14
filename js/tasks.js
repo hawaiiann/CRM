@@ -3,18 +3,22 @@
  * ============================================================ */
 
 let editingTaskId = null; // id задачи, которая сейчас редактируется прямо в строке (инлайн)
+let editingContainerId = null; // в каком именно виджете (Дашборд/Задачи-1/Задачи-2) её сейчас редактируют —
+// одна и та же задача (напр. период "Сегодня") может одновременно отрисовываться в нескольких виджетах,
+// и без этого id полей ввода совпадали бы, а сохранение читало бы значение из чужого (скрытого) виджета.
 
-function renderTaskRow(t) {
-  if (t.id === editingTaskId) {
+function renderTaskRow(t, containerId) {
+  if (t.id === editingTaskId && containerId === editingContainerId) {
     return `
     <div class="task-item task-item-editing">
-      <div class="task-left" style="gap:8px;">
-        <div class="task-checkbox" onclick="toggleTaskStatus('${t.id}')">${t.done ? `<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}</div>
-        <input type="text" class="task-edit-input" id="taskEditText-${t.id}" value="${escapeHtml(t.text)}" placeholder="Текст задачи" onkeydown="handleTaskEditKey(event, '${t.id}')">
-        <input type="text" class="task-edit-time" id="taskEditTime-${t.id}" value="${escapeHtml(t.time || '')}" placeholder="Время" onkeydown="handleTaskEditKey(event, '${t.id}')">
+      <div class="task-left" style="gap:8px; align-items:flex-start;">
+        <div class="task-checkbox" style="margin-top:2px;" onclick="toggleTaskStatus('${t.id}')">${t.done ? `<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}</div>
+        <textarea class="task-edit-input" id="taskEditText-${containerId}-${t.id}" placeholder="Текст задачи (Shift+Enter — новая строка)" rows="1"
+          onkeydown="handleTaskEditKey(event, '${t.id}', '${containerId}')" oninput="autoGrowTaskArea(this)">${escapeHtml(t.text)}</textarea>
+        <input type="text" class="task-edit-time" id="taskEditTime-${containerId}-${t.id}" value="${escapeHtml(t.time || '')}" placeholder="Время" onkeydown="handleTaskEditKey(event, '${t.id}', '${containerId}')">
       </div>
       <div style="display:flex; align-items:center; gap:4px;">
-        <button class="task-btn-action" title="Сохранить" onclick="saveTaskEdit('${t.id}')">
+        <button class="task-btn-action" title="Сохранить" onclick="saveTaskEdit('${t.id}', '${containerId}')">
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="task-btn-action del" title="Отменить" onclick="cancelTaskEdit()">
@@ -28,11 +32,11 @@ function renderTaskRow(t) {
     <div class="task-item ${t.done ? 'done' : ''}">
       <div class="task-left">
         <div class="task-checkbox" onclick="toggleTaskStatus('${t.id}')">${t.done ? `<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}</div>
-        <span class="task-text" title="Нажмите, чтобы отредактировать" onclick="startEditTask('${t.id}')">${escapeHtml(t.text)}</span>
+        <span class="task-text" title="Нажмите, чтобы отредактировать" onclick="startEditTask('${t.id}', '${containerId}')">${escapeHtml(t.text)}</span>
       </div>
       <div style="display:flex; align-items:center; gap:6px;">
-        ${t.time ? `<span class="task-time" onclick="startEditTask('${t.id}')" style="cursor:pointer;">${escapeHtml(t.time)}</span>` : ''}
-        <button class="task-btn-action" title="Редактировать" onclick="startEditTask('${t.id}')">
+        ${t.time ? `<span class="task-time" onclick="startEditTask('${t.id}', '${containerId}')" style="cursor:pointer;">${escapeHtml(t.time)}</span>` : ''}
+        <button class="task-btn-action" title="Редактировать" onclick="startEditTask('${t.id}', '${containerId}')">
           <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
         </button>
         <button class="task-btn-action del" title="Удалить" onclick="deleteTask('${t.id}')">
@@ -42,38 +46,48 @@ function renderTaskRow(t) {
     </div>`;
 }
 
-function startEditTask(id) {
+// Плавно растягивает textarea по высоте контента (для полей ввода/правки задачи)
+function autoGrowTaskArea(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function startEditTask(id, containerId) {
   editingTaskId = id;
+  editingContainerId = containerId;
   refreshAllTaskWidgets();
   // Автофокус и курсор в конец текста, как только поле появится на экране
   setTimeout(() => {
-    const input = document.getElementById(`taskEditText-${id}`);
-    if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+    const input = document.getElementById(`taskEditText-${containerId}-${id}`);
+    if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; autoGrowTaskArea(input); }
   }, 0);
 }
 
-function saveTaskEdit(id) {
+function saveTaskEdit(id, containerId) {
   const t = appTasks.find(x => x.id === id);
   if (!t) return;
-  const textInput = document.getElementById(`taskEditText-${id}`);
-  const timeInput = document.getElementById(`taskEditTime-${id}`);
+  const textInput = document.getElementById(`taskEditText-${containerId}-${id}`);
+  const timeInput = document.getElementById(`taskEditTime-${containerId}-${id}`);
   const newText = textInput ? textInput.value.trim() : t.text;
   if (!newText) { cancelTaskEdit(); return; } // пустой текст — не сохраняем, просто выходим из режима правки
   t.text = newText;
   t.time = timeInput ? timeInput.value.trim() : t.time;
   editingTaskId = null;
+  editingContainerId = null;
   saveData();
   refreshAllTaskWidgets();
 }
 
 function cancelTaskEdit() {
   editingTaskId = null;
+  editingContainerId = null;
   refreshAllTaskWidgets();
 }
 
-function handleTaskEditKey(event, id) {
-  if (event.key === 'Enter') { event.preventDefault(); saveTaskEdit(id); }
+function handleTaskEditKey(event, id, containerId) {
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); saveTaskEdit(id, containerId); }
   else if (event.key === 'Escape') { event.preventDefault(); cancelTaskEdit(); }
+  // Shift+Enter в текстовом поле задачи — не перехватываем, браузер сам вставит перенос строки
 }
 
 function renderTasksWidget(containerId, activePeriod, periodChangeFnName) {
@@ -95,9 +109,9 @@ function renderTasksWidget(containerId, activePeriod, periodChangeFnName) {
     </div>
   `;
 
-  const activeHtml = activeTasks.map(t => renderTaskRow(t)).join('');
+  const activeHtml = activeTasks.map(t => renderTaskRow(t, containerId)).join('');
 
-  const doneHtml = doneTasks.map(t => renderTaskRow(t)).join('');
+  const doneHtml = doneTasks.map(t => renderTaskRow(t, containerId)).join('');
 
   container.innerHTML = `
     ${tabsHtml}
@@ -127,7 +141,7 @@ function renderTasksWidget(containerId, activePeriod, periodChangeFnName) {
       ` : ''}
 
       <div class="add-task-input-row">
-        <input type="text" id="inputNewTask-${containerId}" placeholder="+ Добавить задачу... (Enter)" onkeydown="handleAddTask(event, '${containerId}', '${activePeriod}')">
+        <textarea id="inputNewTask-${containerId}" rows="1" placeholder="+ Добавить задачу... (Enter, Shift+Enter — новая строка)" onkeydown="handleAddTask(event, '${containerId}', '${activePeriod}')" oninput="autoGrowTaskArea(this)"></textarea>
       </div>
     </div>
   `;
@@ -143,7 +157,8 @@ function changeCol1TaskPeriod(newPeriod) { tasksCol1Period = newPeriod; renderTa
 function changeCol2TaskPeriod(newPeriod) { tasksCol2Period = newPeriod; renderTasksWidget('tasksCol2Widget', tasksCol2Period, 'changeCol2TaskPeriod'); }
 
 function handleAddTask(e, containerId, targetPeriod) {
-  if (e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
     const input = document.getElementById(`inputNewTask-${containerId}`);
     if (!input) return;
     const val = input.value.trim();
