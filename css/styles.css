@@ -300,7 +300,9 @@
 
   /* Main */
   main { flex: 1; min-width: 0; padding: 32px 36px 60px; }
-  .content { flex: 1; min-width: 0; padding: 28px 32px 48px; }
+  /* Потолок ширины контента — на широких/2К+ мониторах карточки и таблицы иначе растягиваются
+     до неудобной для чтения ширины. На обычных экранах (до ~1650px) эффекта не даёт. */
+  .content { flex: 1; min-width: 0; padding: 28px 32px 48px; max-width: 1600px; margin: 0 auto; }
   .topbar {
     display: flex;
     justify-content: space-between;
