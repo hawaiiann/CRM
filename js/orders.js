@@ -283,7 +283,12 @@ function renderOrderCard(o){
                 </div>
               </div>
 
-              <button type="button" class="details-edit-btn" onclick="event.stopPropagation();editOrder('${o.id}')">Редактировать заказ</button>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="details-edit-btn" style="flex:1;" onclick="event.stopPropagation();editOrder('${o.id}')">Редактировать заказ</button>
+                <button type="button" class="details-edit-btn" style="flex:0 0 44px; padding:0;" title="Дублировать заказ (следующий урок)" onclick="event.stopPropagation();duplicateOrder('${o.id}')">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" style="vertical-align:middle;"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/><path d="M13.5 6.5V4.5A1.5 1.5 0 0012 3H4.5A1.5 1.5 0 003 4.5V12a1.5 1.5 0 001.5 1.5h2"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -671,6 +676,54 @@ document.getElementById('btnAdd2').addEventListener('click', ()=>{ document.getE
 document.getElementById('closeModal').addEventListener('click', closeModal);
 document.getElementById('btnCancel').addEventListener('click', closeModal);
 
+// Открывает форму нового заказа, предзаполненную по образцу существующего —
+// тот же клиент/предмет/класс/четверть/позиции, но следующий урок и сдвинутые даты.
+// Финансовые и статусные поля намеренно НЕ копируются — это новая, ещё не начатая работа.
+function duplicateOrder(id){
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+
+  openModal(false);
+  document.getElementById('orderId').value = '';
+  document.getElementById('f_title').value = '';
+  document.getElementById('f_client').value = o.client||'';
+
+  ensureSelectOption('f_subject', o.subject);
+  document.getElementById('f_subject').value = o.subject||'';
+
+  ensureSelectOption('f_class', o.grade);
+  document.getElementById('f_class').value = o.grade||'';
+
+  document.getElementById('f_quarter').value = o.quarter||'';
+
+  const lessonNumMatch = String(o.lesson||'').match(/^\d+$/);
+  document.getElementById('f_lesson').value = lessonNumMatch ? String(parseInt(o.lesson,10)+1) : (o.lesson||'');
+
+  document.getElementById('f_status').value = 'queue';
+  document.getElementById('f_isPaid').checked = false;
+  document.getElementById('f_priority').checked = false;
+  document.getElementById('f_advanceUsed').value = '';
+
+  const origStart = parseLocalDate(o.start), origDeadline = parseLocalDate(o.deadline);
+  const durationDays = (origStart && origDeadline) ? Math.max(1, daysBetween(o.start, o.deadline)) : 7;
+  const newStart = origDeadline ? addDays(origDeadline, 1) : new Date();
+  document.getElementById('f_start').value = dateKey(newStart);
+  document.getElementById('f_deadline').value = dateKey(addDays(newStart, durationDays));
+
+  document.getElementById('f_est').value = o.estimatedHours||'';
+  document.getElementById('f_act').value = '';
+  document.getElementById('f_notes').value = '';
+  document.getElementById('f_taxType').value = o.taxType || 'none';
+
+  currentLines = (o.lines&&o.lines.length) ? JSON.parse(JSON.stringify(o.lines)).map(l => ({...l, ready:false})) : [];
+  renderLines();
+  updateModalAdvanceInfo();
+  warnIfAdvanceExceedsOrder();
+  populateLinkedLessonSelect(''); // связь с уроком не копируем — она указывала бы на тот же (уже пройденный) урок
+  syncModalStatusColor();
+  syncModalPriorityTheme();
+}
+
 function editOrder(id){
   const o = orders.find(x=>x.id===id);
   if(!o) return;
@@ -710,6 +763,21 @@ function editOrder(id){
   syncModalPriorityTheme();
 }
 
+// Ищет уже существующий (не отменённый, не тот же самый) заказ с тем же клиентом,
+// предметом, классом, четвертью и номером урока — верный признак случайного дубля.
+function findSimilarOrder(data, excludeId) {
+  if (!data.client || !data.grade || !data.lesson) return null;
+  return orders.find(o =>
+    o.id !== excludeId &&
+    o.status !== 'cancelled' &&
+    (o.client||'').trim().toLowerCase() === data.client.trim().toLowerCase() &&
+    (o.subject||'').trim().toLowerCase() === (data.subject||'').trim().toLowerCase() &&
+    (o.grade||'').trim().toLowerCase() === data.grade.trim().toLowerCase() &&
+    (o.quarter||'').trim().toLowerCase() === (data.quarter||'').trim().toLowerCase() &&
+    String(o.lesson).trim() === String(data.lesson).trim()
+  );
+}
+
 form.addEventListener('submit', (e)=>{
   e.preventDefault();
   const id = document.getElementById('orderId').value;
@@ -746,6 +814,15 @@ form.addEventListener('submit', (e)=>{
     createdAt: id ? (orders.find(o=>o.id===id)||{}).createdAt || Date.now() : Date.now(),
     linkedLessonId: document.getElementById('f_linkedLessonId').value || null
   };
+
+  // Похожий заказ (тот же клиент/предмет/класс/четверть/номер урока) уже существует —
+  // частая случайность при повторном сохранении или сбитой нумерации при дублировании.
+  const similar = findSimilarOrder(data, id);
+  if (similar) {
+    const similarTitle = similar.title || [similar.subject, similar.grade, similar.quarter, similar.lesson ? 'Урок ' + similar.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
+    const proceed = confirm(`Похожий заказ уже есть: «${similarTitle}» (клиент: ${similar.client || '—'}, сдача: ${fmtDeadline(similar.deadline)}).\n\nВсё равно сохранить этот заказ?`);
+    if (!proceed) return;
+  }
 
   const oldOrder = id ? orders.find(o=>o.id===id) : null;
 
