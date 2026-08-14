@@ -413,6 +413,7 @@
     flex-direction: column;
     gap: 16px;
     height: 100%;
+    min-width: 0;
   }
 
   .stat-grid-2x2 {
@@ -471,7 +472,7 @@
     padding: 10px 4px 4px;
   }
   /* Active Days Calendar */
-  .active-days-panel { padding: 20px 22px; }
+  .active-days-panel { padding: 20px 22px; min-width: 0; }
   .adc-weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -670,6 +671,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-width: 0;
   }
   .tw-top-row {
     display: flex;
