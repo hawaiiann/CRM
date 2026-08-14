@@ -10,8 +10,10 @@ function setTlMode(mode){
 
 function navTlRange(dir){
   if(dir===0){ tlAnchor = new Date(); }
-  else {
-    const daysToAdd = tlMode==='1w' ? 7 : (tlMode==='2w' ? 14 : 28);
+  else if(tlMode==='1m'){
+    tlAnchor = new Date(tlAnchor.getFullYear(), tlAnchor.getMonth() + dir, 1);
+  } else {
+    const daysToAdd = tlMode==='1w' ? 7 : 14;
     tlAnchor = addDays(tlAnchor, dir * daysToAdd);
   }
   renderTimeline();
@@ -20,14 +22,17 @@ function navTlRange(dir){
 function getTlDays(){
   const start = new Date(tlAnchor);
   start.setHours(0,0,0,0);
-  let totalDays = 14;
-  if(tlMode==='1w') totalDays = 7;
-  if(tlMode==='1m') totalDays = 28;
 
-  if(tlMode!=='1m'){
-    const dow = (start.getDay()+6)%7;
-    start.setDate(start.getDate()-dow);
+  if(tlMode==='1m'){
+    // Полный календарный месяц — от 1-го числа до последнего дня месяца
+    const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+    const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    return Array.from({length:daysInMonth}, (_,i)=>addDays(monthStart, i));
   }
+
+  let totalDays = tlMode==='1w' ? 7 : 14;
+  const dow = (start.getDay()+6)%7;
+  start.setDate(start.getDate()-dow);
   return Array.from({length:totalDays}, (_,i)=>addDays(start, i));
 }
 
@@ -43,29 +48,28 @@ function renderTimeline(){
 
   document.getElementById('tlRangeLabel').textContent = `${days[0].getDate()} ${days[0].toLocaleString('ru',{month:'short'})} — ${days[days.length-1].getDate()} ${days[days.length-1].toLocaleString('ru',{month:'short'})}`;
 
-  if (tlMode === '1m') {
-    const topDays = days.slice(0, 14);
-    const bottomDays = days.slice(14, 28);
+  container.classList.toggle('tl-scroll-x', tlMode === '1m');
 
-    container.innerHTML = `
-      ${renderTimelineSubBoard(topDays)}
-      <div class="month-split-line"></div>
-      ${renderTimelineSubBoard(bottomDays)}
-    `;
+  if (tlMode === '1m') {
+    // Полноценная сетка месяца в одной прокручиваемой по горизонтали доске —
+    // у каждого дня фиксированная ширина колонки, а не растяжение под контейнер (как у 1/2 недель).
+    container.innerHTML = renderTimelineSubBoard(days, 56);
   } else {
     container.innerHTML = renderTimelineSubBoard(days);
   }
   setTimeout(adjustAllBadgeSelects, 10);
 }
 
-function renderTimelineSubBoard(subDays) {
+function renderTimelineSubBoard(subDays, fixedColWidth) {
+  const colStyle = fixedColWidth ? `style="flex:0 0 ${fixedColWidth}px; min-width:${fixedColWidth}px;"` : '';
+  const rowWidthStyle = fixedColWidth ? `style="width:${fixedColWidth * subDays.length}px;"` : '';
   const todayStr = dateKey(new Date());
 
-  const headerHtml = `<div class="tl-grid-header">` + subDays.map(d => {
+  const headerHtml = `<div class="tl-grid-header" ${rowWidthStyle}>` + subDays.map(d => {
     const isWknd = d.getDay()===0 || d.getDay()===6;
     const isToday = dateKey(d) === todayStr;
     return `
-      <div class="tl-header-cell ${isWknd?'weekend':''} ${isToday?'today':''}">
+      <div class="tl-header-cell ${isWknd?'weekend':''} ${isToday?'today':''}" ${colStyle}>
         ${d.toLocaleString('ru',{weekday:'short'})}<br><b>${d.getDate()}</b>
       </div>
     `;
@@ -196,12 +200,12 @@ function renderTimelineSubBoard(subDays) {
     });
 
     boardHtml += `
-      <div class="gantt-row-container">
+      <div class="gantt-row-container" ${rowWidthStyle}>
         <div class="gantt-bg-grid">
           ${subDays.map((d)=>{
             const isWknd = d.getDay()===0 || d.getDay()===6;
             const isToday = dateKey(d) === todayStr;
-            return `<div class="gantt-bg-cell ${isWknd?'weekend':''} ${isToday?'today':''}"></div>`;
+            return `<div class="gantt-bg-cell ${isWknd?'weekend':''} ${isToday?'today':''}" ${colStyle}></div>`;
           }).join('')}
         </div>
         ${laneBarsHtml}

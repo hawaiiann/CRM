@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.9.7';
+const APP_VERSION = '1.9.8';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';

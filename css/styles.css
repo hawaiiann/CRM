@@ -1605,6 +1605,8 @@
   .seg button.active { background: var(--toggle-btn-bg); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 
   .tl-container { flex: 1; display: flex; flex-direction: column; overflow: visible !important; position: relative; min-width: 750px; }
+  /* Полная сетка месяца (30+ дней) не сжимается под ширину карточки, а прокручивается по горизонтали */
+  .tl-container.tl-scroll-x { overflow-x: auto !important; overflow-y: visible !important; padding-bottom: 4px; }
   .tl-grid-header { display: flex; border-bottom: 2px solid var(--border); background: var(--surface); }
   
   .tl-header-cell {
