@@ -183,8 +183,7 @@ function renderOrderCard(o){
   const advUsed = parseNum(o.advanceUsed);
   const remToPay = Math.max(0, fullPrice - advUsed);
 
-  // Просрочен — дедлайн уже прошёл, а заказ не завершён и не отменён
-  const isOverdue = o.deadline && o.deadline < dateKey(new Date()) && !['done', 'cancelled'].includes(o.status);
+  const isOverdue = isOrderOverdue(o);
 
   let advBadgeHtml = '';
   if (advUsed > 0) advBadgeHtml = `<span class="badge review">Аванс: ${fmtMoney(advUsed)} · Доплата: ${fmtMoney(remToPay)}</span>`;

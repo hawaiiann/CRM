@@ -739,6 +739,24 @@
   .task-item.overdue { border-color: rgba(228,72,63,0.35); }
   .task-item.overdue .task-text { color: var(--rose); }
   .task-item.overdue .task-checkbox { border-color: var(--rose); }
+
+  /* "Горит" — просроченные заказы поверх виджета задач на Дашборде */
+  .burning-orders-block {
+    background: var(--rose-soft);
+    border: 1px solid rgba(228,72,63,0.3);
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .burning-orders-title { font-size: 11px; font-weight: 800; color: var(--rose); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .burning-orders-list { display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; }
+  .burning-order-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.15s ease;
+  }
+  .burning-order-row:hover { background: rgba(228,72,63,0.1); }
+  .burning-order-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .burning-order-date { font-size: 11px; font-weight: 700; color: var(--rose); flex-shrink: 0; }
   .task-time {
     font-size: 12px;
     font-weight: 600;

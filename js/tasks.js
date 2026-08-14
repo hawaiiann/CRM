@@ -120,7 +120,33 @@ function renderTasksWidget(containerId, activePeriod, periodChangeFnName) {
 
   const doneHtml = doneTasks.map(t => renderTaskRow(t, containerId)).join('');
 
+  // "Горит" — только на дашбордовском виджете (не дублируем на вкладке "Задачи",
+  // там это не в тему: список там строго про задачи, а не про заказы)
+  let burningHtml = '';
+  if (containerId === 'dashTasksWidget') {
+    const burningOrders = orders.filter(isOrderOverdue).sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''));
+    if (burningOrders.length) {
+      burningHtml = `
+        <div class="burning-orders-block">
+          <div class="burning-orders-title">🔥 Горят заказы — ${burningOrders.length}</div>
+          <div class="burning-orders-list">
+            ${burningOrders.map(o => {
+              const displayTitle = o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
+              return `
+                <div class="burning-order-row" onclick="goToOrderCard('${o.id}')">
+                  <span class="burning-order-name" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
+                  <span class="burning-order-date">${fmtDeadline(o.deadline)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+  }
+
   container.innerHTML = `
+    ${burningHtml}
     ${tabsHtml}
     <div class="tw-top-row">
       <h3>Задачи: ${periodLabels[activePeriod]}</h3>

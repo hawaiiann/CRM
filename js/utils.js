@@ -105,6 +105,8 @@ function parseNum(v){ const n = parseFloat(String(v||'').replace(',','.').replac
 function fmtMoney(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)) + ' ₽'; }
 function dateKey(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
 function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+// Просрочен — дедлайн уже прошёл, а заказ не завершён и не отменён
+function isOrderOverdue(o){ return !!(o.deadline && o.deadline < dateKey(new Date()) && !['done','cancelled'].includes(o.status)); }
 // Разница в днях между двумя датами-строками "YYYY-MM-DD" (b - a)
 function dateDiffDays(aStr, bStr){
   const a = parseLocalDate(aStr), b = parseLocalDate(bStr);
