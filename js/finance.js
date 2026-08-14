@@ -214,16 +214,16 @@ function updateModalAdvanceInfo() {
   const clientName = document.getElementById('f_client').value.trim();
   const badge = document.getElementById('clientAvailableAdvanceBadge');
   if(!clientName) {
-    badge.textContent = 'Доступный аванс клиента: 0 ₽';
+    badge.textContent = '0 ₽';
     return;
   }
   const stats = getClientAdvanceStats(clientName);
   const currentOrderId = document.getElementById('orderId').value;
   const curOrder = orders.find(o => o.id === currentOrderId);
   const curOrderUsed = curOrder ? parseNum(curOrder.advanceUsed) : 0;
-  
+
   const trueAvail = stats.available + curOrderUsed;
-  badge.textContent = `Доступный аванс клиента: ${fmtMoney(trueAvail)}`;
+  badge.textContent = fmtMoney(trueAvail);
   calculateModalAdvanceDiff();
 }
 
@@ -234,7 +234,7 @@ function calculateModalAdvanceDiff() {
   const rate = taxSel ? (taxSel.value==='individual' ? 0.04 : (taxSel.value==='entity' ? 0.06 : 0)) : 0;
   const totalWithTax = baseTotal * (1 + rate);
   const diff = Math.max(0, totalWithTax - advUsed);
-  document.getElementById('advanceCalcSummary').textContent = `Остаток к доплате заказчиком: ${fmtMoney(diff)}`;
+  document.getElementById('advanceCalcSummary').textContent = fmtMoney(diff);
 }
 
 // Подсвечивает поле "Использовано аванса" красным, если вбили больше, чем реально стоит заказ.
