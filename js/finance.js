@@ -27,6 +27,68 @@ function getClientAdvanceStats(clientName) {
   };
 }
 
+function getSortedFinanceList() {
+  let finList = orders.slice();
+  const finSort = document.getElementById('finSortBy') ? document.getElementById('finSortBy').value : 'default';
+
+  if (finSort === 'status') {
+    finList.sort((a,b) => {
+      const getStatusScore = (o) => {
+        if (o.isPaid) return 1;
+        const adv = parseNum(o.advanceUsed);
+        const full = orderTotal(o);
+        if (adv >= full) return 2;
+        if (adv > 0) return 3;
+        return 4;
+      };
+      return getStatusScore(a) - getStatusScore(b);
+    });
+  } else if (finSort === 'price_desc') {
+    finList.sort((a,b) => orderTotal(b) - orderTotal(a));
+  } else if (finSort === 'price_asc') {
+    finList.sort((a,b) => orderTotal(a) - orderTotal(b));
+  } else if (finSort === 'pending_desc') {
+    finList.sort((a,b) => {
+      const remA = a.isPaid ? 0 : Math.max(0, orderTotal(a) - parseNum(a.advanceUsed));
+      const remB = b.isPaid ? 0 : Math.max(0, orderTotal(b) - parseNum(b.advanceUsed));
+      return remB - remA;
+    });
+  } else if (finSort === 'adv_desc') {
+    finList.sort((a,b) => parseNum(b.advanceUsed) - parseNum(a.advanceUsed));
+  }
+  return finList;
+}
+
+// Экранирует поле для CSV (кавычки удваиваются, поле в кавычках, если внутри запятая/кавычка/перевод строки)
+function csvEscape(val) {
+  const s = String(val ?? '');
+  return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportFinanceCSV() {
+  const finList = getSortedFinanceList();
+  const header = ['Проект', 'Заказчик', 'Выручка (с налогом)', 'Налог', 'Оплачено из аванса', 'К доплате', 'Статус оплаты'];
+  const rows = finList.map(o => {
+    const base = orderBaseTotal(o);
+    const full = orderTotal(o);
+    const tax = full - base;
+    const advUsed = parseNum(o.advanceUsed);
+    const remToPay = o.isPaid ? 0 : Math.max(0, full - advUsed);
+    let statusText = 'Не оплачено';
+    if (o.isPaid) statusText = 'Оплачен полностью';
+    else if (advUsed > 0) statusText = `Аванс ${fmtMoney(advUsed)}, доплата ${fmtMoney(remToPay)}`;
+    return [o.title || 'Без названия', o.client || '—', full, tax, advUsed, remToPay, statusText];
+  });
+  const csvLines = [header, ...rows].map(row => row.map(csvEscape).join(';'));
+  const csvStr = '﻿' + csvLines.join('\r\n'); // BOM — чтобы Excel сразу открыл кириллицу как UTF-8
+  const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'finance-' + dateKey(new Date()) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function renderFinance() {
   let totalRevenue = 0, totalNetIncome = 0, totalTax = 0, totalAdvancesIn = 0, totalPending = 0;
 
@@ -79,34 +141,7 @@ function renderFinance() {
     </div>
   `;
 
-  let finList = orders.slice();
-  const finSort = document.getElementById('finSortBy') ? document.getElementById('finSortBy').value : 'default';
-
-  if (finSort === 'status') {
-    finList.sort((a,b) => {
-      const getStatusScore = (o) => {
-        if (o.isPaid) return 1;
-        const adv = parseNum(o.advanceUsed);
-        const full = orderTotal(o);
-        if (adv >= full) return 2;
-        if (adv > 0) return 3;
-        return 4;
-      };
-      return getStatusScore(a) - getStatusScore(b);
-    });
-  } else if (finSort === 'price_desc') {
-    finList.sort((a,b) => orderTotal(b) - orderTotal(a));
-  } else if (finSort === 'price_asc') {
-    finList.sort((a,b) => orderTotal(a) - orderTotal(b));
-  } else if (finSort === 'pending_desc') {
-    finList.sort((a,b) => {
-      const remA = a.isPaid ? 0 : Math.max(0, orderTotal(a) - parseNum(a.advanceUsed));
-      const remB = b.isPaid ? 0 : Math.max(0, orderTotal(b) - parseNum(b.advanceUsed));
-      return remB - remA;
-    });
-  } else if (finSort === 'adv_desc') {
-    finList.sort((a,b) => parseNum(b.advanceUsed) - parseNum(a.advanceUsed));
-  }
+  const finList = getSortedFinanceList();
 
   const tbody = document.getElementById('financeTableBody');
   tbody.innerHTML = finList.map(o => {
