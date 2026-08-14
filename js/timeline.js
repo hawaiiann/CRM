@@ -171,7 +171,7 @@ function renderTimelineSubBoard(subDays, fixedColWidth) {
           <div class="details-meta-box" style="margin-bottom:14px;">
             <div>
               <div class="details-box-label">Клиент</div>
-              <div class="details-client-name">${escapeHtml(o.client || '—')}</div>
+              <div class="details-client-name">${o.client ? `<span style="cursor:pointer; text-decoration:underline dotted;" onclick="event.stopPropagation(); openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</span>` : '—'}</div>
             </div>
             <div class="details-mini-grid">
               <div class="details-mini-card">

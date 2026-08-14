@@ -697,6 +697,43 @@
   </div>
 </div>
 
+<!-- MODAL: CLIENT CARD -->
+<div class="overlay" id="clientCardOverlay">
+  <div class="modal" style="max-width:560px;">
+    <button class="close-x" onclick="closeClientCard()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="clientCardName">Клиент</h2>
+
+    <div class="details-mini-grid" style="margin-bottom:12px;">
+      <div class="details-mini-card">
+        <div class="details-box-label">Заказов (активных)</div>
+        <div class="details-mini-value" id="clientCardOrdersCount">0</div>
+      </div>
+      <div class="details-mini-card">
+        <div class="details-box-label">Выручка (с налогом)</div>
+        <div class="details-mini-value" id="clientCardRevenue">0 ₽</div>
+      </div>
+    </div>
+
+    <div class="details-sum-card" style="margin-bottom:16px;">
+      <div class="details-sum-top">
+        <div class="details-box-label">Доступный остаток аванса</div>
+      </div>
+      <div class="details-sum-value num-font" id="clientCardAvailable">0 ₽</div>
+      <div class="details-sum-footer">
+        <span>Внесено <b id="clientCardTotalIn">0 ₽</b></span>
+        <span>Списано <b id="clientCardUsed">0 ₽</b></span>
+      </div>
+    </div>
+
+    <div class="items-stack-label" style="margin-bottom:8px;">Заказы клиента</div>
+    <div id="clientCardOrdersList" style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto; margin-bottom:16px;"></div>
+
+    <button type="button" class="btn btn-accent" style="width:100%;" onclick="closeClientCard(); openDepositModal(); document.getElementById('dep_client').value = document.getElementById('clientCardName').textContent;">Внести аванс от этого клиента</button>
+  </div>
+</div>
+
 <!-- MODAL: LESSON POPUP -->
 <div class="overlay" id="lessonModalOverlay">
   <div class="lesson-modal-card">

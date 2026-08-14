@@ -11,6 +11,43 @@ function switchFinanceTab(tab) {
   renderFinance();
 }
 
+/* КАРТОЧКА КЛИЕНТА — сводка по одному заказчику: заказы, выручка, баланс аванса */
+function openClientCard(clientName) {
+  if (!clientName) return;
+  const stats = getClientAdvanceStats(clientName);
+  const clientOrders = orders.filter(o => (o.client || '').toLowerCase() === clientName.toLowerCase() && o.status !== 'cancelled');
+  const revenue = clientOrders.reduce((s, o) => s + orderTotal(o), 0);
+
+  document.getElementById('clientCardName').textContent = clientName;
+  document.getElementById('clientCardOrdersCount').textContent = clientOrders.length;
+  document.getElementById('clientCardRevenue').textContent = fmtMoney(revenue);
+  document.getElementById('clientCardAvailable').textContent = fmtMoney(stats.available);
+  document.getElementById('clientCardTotalIn').textContent = fmtMoney(stats.totalIn);
+  document.getElementById('clientCardUsed').textContent = fmtMoney(stats.used);
+
+  const sortedOrders = clientOrders.slice().sort((a, b) => (b.deadline || '').localeCompare(a.deadline || ''));
+  document.getElementById('clientCardOrdersList').innerHTML = sortedOrders.map(o => {
+    const displayTitle = o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
+    return `
+      <div class="item-subcard" style="cursor:pointer;" onclick="closeClientCard(); goToOrderCard('${o.id}')">
+        <div class="item-subcard-main">
+          <div class="item-subcard-icon">${getItemIcon('')}</div>
+          <div>
+            <div class="item-subcard-name" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</div>
+            <div class="item-subcard-type">${statusLabels[o.status] || o.status} · сдача ${fmtDeadline(o.deadline)}</div>
+          </div>
+        </div>
+        <div class="item-subcard-price">${fmtMoney(orderTotal(o))}</div>
+      </div>
+    `;
+  }).join('') || `<div style="font-size:12.5px; color:var(--text-faint);">Заказов не найдено</div>`;
+
+  document.getElementById('clientCardOverlay').classList.add('show');
+}
+function closeClientCard() {
+  document.getElementById('clientCardOverlay').classList.remove('show');
+}
+
 function getClientAdvanceStats(clientName) {
   if (!clientName) return { totalIn: 0, used: 0, available: 0 };
   const clientAdvs = advances.filter(a => a.client.toLowerCase() === clientName.toLowerCase());
@@ -165,7 +202,7 @@ function renderFinance() {
             ${escapeHtml(o.title || 'Без названия')}
           </a>
         </td>
-        <td>${escapeHtml(o.client || '—')}</td>
+        <td>${o.client ? `<a class="project-link" href="javascript:void(0)" onclick="openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</a>` : '—'}</td>
         <td><b class="num-font">${fmtMoney(full)}</b></td>
         <td class="num-font" style="color:var(--text-soft);">${fmtMoney(tax)}</td>
         <td class="num-font" style="color:var(--amber); font-weight:700;">${advUsed > 0 ? fmtMoney(advUsed) : '—'}</td>

@@ -223,7 +223,7 @@ function renderOrderCard(o){
           ${isOverdue ? `<span class="badge" style="background:var(--rose-soft); color:var(--rose);">⏰ Просрочен</span>` : ''}
           ${advBadgeHtml}
         </div>
-        <div class="occ-items-summary">${escapeHtml(o.client ? o.client + ' — ' : '')}${escapeHtml(itemsSummary)}</div>
+        <div class="occ-items-summary">${o.client ? `<span style="cursor:pointer; text-decoration:underline dotted;" onclick="event.stopPropagation(); openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</span> — ` : ''}${escapeHtml(itemsSummary)}</div>
       </div>
       <div class="occ-right">
         <div>
@@ -256,7 +256,7 @@ function renderOrderCard(o){
             <div class="details-meta-box">
               <div>
                 <div class="details-box-label">Клиент</div>
-                <div class="details-client-name">${escapeHtml(o.client||'—')}</div>
+                <div class="details-client-name">${o.client ? `<span style="cursor:pointer; text-decoration:underline dotted;" onclick="event.stopPropagation(); openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</span>` : '—'}</div>
                 <div class="details-client-sub">${[o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>
               </div>
 
