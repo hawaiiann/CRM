@@ -1164,15 +1164,73 @@
   .item-subcard-price { font-weight: 800; color: var(--text); text-align: right; font-size: 13.5px; }
   .item-subcard-no-pay { opacity: 0.6; font-style: italic; }
 
+  .details-left-col { display: flex; flex-direction: column; gap: 12px; }
+
+  .details-add-item-btn {
+    align-self: flex-start;
+    background: none;
+    border: 1px dashed var(--border-dark);
+    border-radius: var(--radius-pill);
+    padding: 9px 18px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-soft);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .details-add-item-btn:hover { border-color: var(--text-soft); color: var(--text); }
+
+  .details-notes-box {
+    background: var(--subcard);
+    border-radius: 14px;
+    padding: 13px 16px;
+    font-size: 12.5px;
+    color: var(--text-soft);
+    min-height: 60px;
+    cursor: pointer;
+    white-space: pre-wrap;
+  }
+
   .details-meta-box {
     background: var(--subcard);
     border-radius: 16px;
-    padding: 18px;
+    padding: 18px 20px;
     border: 1px solid var(--border);
-    display: flex; flex-direction: column; gap: 10px;
+    display: flex; flex-direction: column; gap: 14px;
   }
-  .details-meta-item { font-size: 13px; }
-  .details-meta-item b { color: var(--text); font-weight: 700; }
+  .details-box-label { font-size: 11px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .details-client-name { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 6px; }
+  .details-client-sub { font-size: 12.5px; color: var(--text-soft); margin-top: 2px; }
+
+  .details-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .details-mini-card { background: var(--surface); border-radius: 12px; padding: 10px 12px; }
+  .details-mini-value { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 3px; }
+
+  .details-sum-card { background: var(--surface); border-radius: 12px; padding: 12px 14px; }
+  .details-sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .details-tax-label { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+  .details-sum-value { font-size: 19px; font-weight: 700; color: var(--text); margin-top: 4px; }
+  .details-sum-footer {
+    display: flex; gap: 18px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border); font-size: 12px; color: var(--text-soft);
+  }
+  .details-sum-footer b { color: var(--text); font-weight: 700; }
+  .details-sum-footer b.amber { color: var(--amber); }
+
+  .details-edit-btn {
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-pill);
+    padding: 11px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+    margin-top: auto;
+    transition: all 0.15s ease;
+  }
+  .details-edit-btn:hover { background: var(--subcard); }
 
   /* PLANNING SECTION STYLES */
   .planning-container {

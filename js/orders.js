@@ -234,28 +234,52 @@ function renderOrderCard(o){
       <div class="occ-details-inner">
         <div class="occ-details">
           <div class="details-grid">
-            <div>
+            <div class="details-left-col">
               <div class="items-stack-container">
                 <span class="items-stack-label">Позиции в заказе:</span>
                 <div class="items-stack">
                   ${linesStackHtml}
                 </div>
               </div>
+              <button type="button" class="details-add-item-btn" onclick="event.stopPropagation();editOrder('${o.id}')">+ Добавить позицию</button>
+
+              <div>
+                <div class="details-box-label" style="margin-bottom:6px;">Заметка к заказу</div>
+                <div class="details-notes-box" onclick="event.stopPropagation();editOrder('${o.id}')">${o.notes ? escapeHtml(o.notes) : 'Идеи, правки, ссылки на материалы...'}</div>
+              </div>
             </div>
 
             <div class="details-meta-box">
-              <div class="details-meta-item">Заказчик / Клиент: <b>${escapeHtml(o.client||'—')}</b></div>
-              <div class="details-meta-item">Предмет: <b>${escapeHtml(o.subject||'—')}</b> | Класс: <b>${escapeHtml(o.grade||'—')}</b> ${o.quarter ? '| Четверть: <b>' + escapeHtml(o.quarter) + '</b>' : ''}</div>
-              <div class="details-meta-item">Номер урока: <b>${escapeHtml(o.lesson||'—')}</b></div>
-              <div class="details-meta-item">Сроки работы: <b>${o.start} — ${o.deadline}</b></div>
-              <div class="details-meta-item">Списано из аванса: <b>${advUsed > 0 ? fmtMoney(advUsed) : '0 ₽'}</b></div>
-              <div class="details-meta-item">К доплате заказчиком: <b>${fmtMoney(remToPay)}</b></div>
-              <div class="details-meta-item">Часы (План / Факт): <b>${fmtHours(o.estimatedHours)} / ${fmtHours(getOrderDisplayHours(o))}</b></div>
-              ${o.taxType && o.taxType!=='none' ? `<div class="details-meta-item">Сумма позиций: <b>${fmtMoney(orderBaseTotal(o))}</b> · Налог: <b>${orderTaxLabel(o)}</b></div>` : ''}
-              ${o.notes ? `<div style="margin-top:4px;">Заметки: <i style="color:var(--text-soft);">${escapeHtml(o.notes)}</i></div>` : ''}
-              <div style="margin-top:auto; padding-top:10px;">
-                <button class="btn secondary small" style="width:100%" onclick="event.stopPropagation();editOrder('${o.id}')">Редактировать заказ</button>
+              <div>
+                <div class="details-box-label">Клиент</div>
+                <div class="details-client-name">${escapeHtml(o.client||'—')}</div>
+                <div class="details-client-sub">${[o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>
               </div>
+
+              <div class="details-mini-grid">
+                <div class="details-mini-card">
+                  <div class="details-box-label">Сроки работы</div>
+                  <div class="details-mini-value">${fmtDateRangeCompact(o.start, o.deadline)}</div>
+                </div>
+                <div class="details-mini-card">
+                  <div class="details-box-label">Часы (план / факт)</div>
+                  <div class="details-mini-value">${fmtHours(o.estimatedHours)} / ${fmtHours(getOrderDisplayHours(o))}</div>
+                </div>
+              </div>
+
+              <div class="details-sum-card">
+                <div class="details-sum-top">
+                  <div class="details-box-label">Сумма позиций</div>
+                  <div class="details-tax-label">${orderTaxLabel(o)}</div>
+                </div>
+                <div class="details-sum-value num-font">${fmtMoney(fullPrice)}</div>
+                <div class="details-sum-footer">
+                  <span>Из аванса <b>${fmtMoney(advUsed)}</b></span>
+                  <span>К доплате <b class="amber">${fmtMoney(remToPay)}</b></span>
+                </div>
+              </div>
+
+              <button type="button" class="details-edit-btn" onclick="event.stopPropagation();editOrder('${o.id}')">Редактировать заказ</button>
             </div>
           </div>
         </div>

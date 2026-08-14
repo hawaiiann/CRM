@@ -87,6 +87,19 @@ function fmtDeadline(dStr) {
   return `${day} ${month} ${year} г.`;
 }
 
+// Компактный диапазон дат для узких карточек — "1–6 авг 2026", без "г." и без дублирования года/месяца
+function fmtDateRangeCompact(startStr, endStr) {
+  if (!startStr || !endStr) return `${fmtDeadline(startStr)} — ${fmtDeadline(endStr)}`.replace(/ г\./g, '');
+  const s = startStr.split('-').map(Number);
+  const e = endStr.split('-').map(Number);
+  if (s.length < 3 || e.length < 3 || s.some(isNaN) || e.some(isNaN)) return `${startStr} — ${endStr}`;
+  const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const [sy, sm, sd] = s, [ey, em, ed] = e;
+  if (sy === ey && sm === em) return `${sd}–${ed} ${months[em - 1]} ${ey}`;
+  if (sy === ey) return `${sd} ${months[sm - 1]} – ${ed} ${months[em - 1]} ${ey}`;
+  return `${sd} ${months[sm - 1]} ${sy} – ${ed} ${months[em - 1]} ${ey}`;
+}
+
 /* Helpers */
 function parseNum(v){ const n = parseFloat(String(v||'').replace(',','.').replace(/[^\d.-]/g,'')); return isNaN(n) ? 0 : n; }
 function fmtMoney(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)) + ' ₽'; }
