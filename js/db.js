@@ -268,7 +268,18 @@ function syncPlanningWithOrders() {
                 let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
                 if (item) item.done = true;
               });
-              lesson.color = 'green-3';
+              // Заказ завершён, но у урока в чек-листе могли быть пункты, которых в этом
+              // заказе просто не было (другие позиции по базовому наполнению класса) — они
+              // так и остались незакрытыми. Цвет должен отражать реальную долю закрытых
+              // пунктов чек-листа, а не всегда быть "полностью готово".
+              const totalInL = lesson.items.length;
+              const doneInL = lesson.items.filter(i => i.done).length;
+              if (totalInL === 0 || doneInL === 0) {
+                lesson.color = 'gray';
+              } else {
+                const ratio = doneInL / totalInL;
+                lesson.color = ratio >= 0.99 ? 'green-3' : (ratio >= 0.5 ? 'green-2' : 'green-1');
+              }
               lessonsSyncedByOrder.add(lesson);
               lesson.orderLinked = true;
             } else if (['progress', 'review'].includes(o.status)) {
