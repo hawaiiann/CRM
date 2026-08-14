@@ -73,6 +73,9 @@ function updateDashboardMetricGoal(idx, val) {
 
 function removeDashboardMetric(idx) {
   if (appSettings.dashboardMetrics.length <= 1) return;
+  const m = appSettings.dashboardMetrics[idx];
+  const label = m && DASHBOARD_METRIC_TYPES[m.type] ? DASHBOARD_METRIC_TYPES[m.type].label : 'этот показатель';
+  if (!confirm(`Убрать показатель «${label}» с графика "Активность"?`)) return;
   appSettings.dashboardMetrics.splice(idx, 1);
   saveData();
   renderDashboardMetricsSettings();
@@ -88,7 +91,11 @@ function moveSetting(key, idx, dir){
   appSettings[key][newIdx] = temp;
   saveData(); fillSelects(); renderSettings();
 }
-function removeSetting(key, idx){ appSettings[key].splice(idx,1); saveData(); fillSelects(); renderSettings(); }
+function removeSetting(key, idx){
+  const val = appSettings[key][idx];
+  if (!confirm(`Удалить «${val}» из справочника?`)) return;
+  appSettings[key].splice(idx,1); saveData(); fillSelects(); renderSettings();
+}
 function addSetting(key){ appSettings[key].push('Новая запись'); saveData(); fillSelects(); renderSettings(); }
 
 function saveBackupSettings() {

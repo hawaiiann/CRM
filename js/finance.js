@@ -276,7 +276,10 @@ function handleDepositSubmit(e) {
 }
 
 function deleteAdvance(id) {
-  advances = advances.filter(a => a.id !== id);
+  const a = advances.find(x => x.id === id);
+  const label = a ? `${fmtMoney(a.amount)} от ${a.client} (${a.date})` : 'эту запись';
+  if (!confirm(`Удалить запись об авансе — ${label}?`)) return;
+  advances = advances.filter(x => x.id !== id);
   saveData();
   renderFinance();
 }
