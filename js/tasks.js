@@ -7,6 +7,12 @@ let editingContainerId = null; // в каком именно виджете (Д�
 // одна и та же задача (напр. период "Сегодня") может одновременно отрисовываться в нескольких виджетах,
 // и без этого id полей ввода совпадали бы, а сохранение читало бы значение из чужого (скрытого) виджета.
 
+// Задача из периода "Сегодня", не выполненная и добавленная в предыдущий день —
+// день сменился, а она так и осталась несделанной.
+function isTaskOverdue(t) {
+  return !t.done && (t.period || 'today') === 'today' && t.createdAt && t.createdAt < dateKey(new Date());
+}
+
 function renderTaskRow(t, containerId) {
   if (t.id === editingTaskId && containerId === editingContainerId) {
     return `
@@ -28,11 +34,12 @@ function renderTaskRow(t, containerId) {
     </div>`;
   }
 
+  const overdue = isTaskOverdue(t);
   return `
-    <div class="task-item ${t.done ? 'done' : ''}">
+    <div class="task-item ${t.done ? 'done' : ''} ${overdue ? 'overdue' : ''}">
       <div class="task-left">
         <div class="task-checkbox" onclick="toggleTaskStatus('${t.id}')">${t.done ? `<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}</div>
-        <span class="task-text" title="Нажмите, чтобы отредактировать" onclick="startEditTask('${t.id}', '${containerId}')">${escapeHtml(t.text)}</span>
+        <span class="task-text" title="${overdue ? 'Просрочено — добавлено ' + fmtDeadline(t.createdAt) : 'Нажмите, чтобы отредактировать'}" onclick="startEditTask('${t.id}', '${containerId}')">${overdue ? '⏰ ' : ''}${escapeHtml(t.text)}</span>
       </div>
       <div style="display:flex; align-items:center; gap:6px;">
         ${t.time ? `<span class="task-time" onclick="startEditTask('${t.id}', '${containerId}')" style="cursor:pointer;">${escapeHtml(t.time)}</span>` : ''}
@@ -175,7 +182,7 @@ function handleAddTask(e, containerId, targetPeriod) {
       timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     }
 
-    appTasks.push({ id: 't' + Date.now(), text: taskText, time: timeStr, done: false, period: targetPeriod || 'today' });
+    appTasks.push({ id: 't' + Date.now(), text: taskText, time: timeStr, done: false, period: targetPeriod || 'today', createdAt: dateKey(new Date()) });
     saveData();
     refreshAllTaskWidgets();
   }

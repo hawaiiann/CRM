@@ -32,7 +32,8 @@ function normalizeTask(t) {
     text: t.text || '',
     time: t.time || '',
     done: !!t.done,
-    period: t.period || 'today'
+    period: t.period || 'today',
+    createdAt: t.createdAt || ''
   };
 }
 

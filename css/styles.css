@@ -736,6 +736,9 @@
     text-decoration: line-through;
     color: var(--text-faint);
   }
+  .task-item.overdue { border-color: rgba(228,72,63,0.35); }
+  .task-item.overdue .task-text { color: var(--rose); }
+  .task-item.overdue .task-checkbox { border-color: var(--rose); }
   .task-time {
     font-size: 12px;
     font-weight: 600;
