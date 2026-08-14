@@ -662,6 +662,7 @@ document.getElementById('btnAdd').addEventListener('click', ()=>{
   currentLines = [{id:'l0', label: appSettings.types[0] || 'Презентация', type:(appSettings.units&&appSettings.units[0])||'Слайд', qty:10, pomoHours:0, rate:500, ignorePrice:false, ready:false}];
   renderLines();
   openModal(false);
+  populateLinkedLessonSelect('');
   syncModalStatusColor();
   syncModalPriorityTheme();
 });
@@ -704,6 +705,7 @@ function editOrder(id){
   renderLines();
   updateModalAdvanceInfo();
   warnIfAdvanceExceedsOrder();
+  populateLinkedLessonSelect(o.linkedLessonId || '');
   syncModalStatusColor();
   syncModalPriorityTheme();
 }
@@ -741,7 +743,8 @@ form.addEventListener('submit', (e)=>{
     actualHours: document.getElementById('f_act').value.trim(),
     lines: currentLines.filter(l=>l.label.trim()!=='' || parseNum(l.qty) || parseNum(l.pomoHours)),
     notes: document.getElementById('f_notes').value.trim(),
-    createdAt: id ? (orders.find(o=>o.id===id)||{}).createdAt || Date.now() : Date.now()
+    createdAt: id ? (orders.find(o=>o.id===id)||{}).createdAt || Date.now() : Date.now(),
+    linkedLessonId: document.getElementById('f_linkedLessonId').value || null
   };
 
   const oldOrder = id ? orders.find(o=>o.id===id) : null;

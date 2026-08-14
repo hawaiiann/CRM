@@ -2,6 +2,22 @@
  * planning.js — Планирование уроков: доски классов, модалка урока, чек-листы
  * ============================================================ */
 
+// Список уроков для явной привязки заказа (см. syncPlanningWithOrders в db.js) —
+// надёжнее нечёткого совпадения по тексту (предмет/класс/четверть/номер), которое
+// молча ломается при малейшем расхождении в написании.
+function populateLinkedLessonSelect(selectedId) {
+  const sel = document.getElementById('f_linkedLessonId');
+  if (!sel) return;
+  let html = '<option value="">— Не привязывать (искать по тексту) —</option>';
+  (planningBoards || []).forEach(board => {
+    (board.lessons || []).forEach(lesson => {
+      const label = `${board.subject ? board.subject + ' · ' : ''}${board.title}${board.quarter ? ' · ' + board.quarter : ''} — Урок ${lesson.num}`;
+      html += `<option value="${lesson.id}" ${lesson.id === selectedId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    });
+  });
+  sel.innerHTML = html;
+}
+
 function togglePlanningArchive() {
   archivedPlanningExpanded = !archivedPlanningExpanded;
   renderPlanning();

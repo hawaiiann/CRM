@@ -22,7 +22,8 @@ function normalizeOrder(o){
       ignorePrice: !!l.ignorePrice,
       ready: !!l.ready
     })) : [{id:'l0',label: appSettings.types[0] || 'Презентация',type:(appSettings.units && appSettings.units[0]) || 'Слайд',qty:10,pomoHours:0,rate:500,ignorePrice:false,ready:false}],
-    notes:o.notes||'', createdAt:o.createdAt||Date.now()
+    notes:o.notes||'', createdAt:o.createdAt||Date.now(),
+    linkedLessonId: o.linkedLessonId || null
   };
 }
 
@@ -120,6 +121,13 @@ function loadData(){
     const rawP = localStorage.getItem(PLANNING_KEY);
     if (rawP) {
       planningBoards = JSON.parse(rawP);
+      // Подстраховка для старых данных без id (нужен для явной привязки заказа к уроку)
+      planningBoards.forEach(board => {
+        if (!board.id) board.id = 'pb_' + Date.now() + Math.random().toString(36).slice(2, 7);
+        (board.lessons || []).forEach(lesson => {
+          if (!lesson.id) lesson.id = 'l_' + Date.now() + Math.random().toString(36).slice(2, 7);
+        });
+      });
     } else {
       planningBoards = [
         {
@@ -224,8 +232,83 @@ function syncPlanningWithOrders() {
     (board.lessons || []).forEach(lesson => { lesson.orderLinked = false; });
   });
 
+  // Применяет статус/наполнение заказа к конкретному, уже найденному уроку —
+  // общая часть для явной привязки (linkedLessonId) и для нечёткого поиска по тексту ниже.
+  function applyOrderToLesson(o, lesson, lessonsSyncedByOrder) {
+    if (!lesson.items) lesson.items = [];
+
+    (o.lines || []).forEach(line => {
+      const lineLabel = line.label || line.type || 'Работа';
+      if (!lineLabel.trim()) return;
+      let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
+      if (!item) {
+        item = { id: 'i_' + Date.now() + Math.random().toString(36).substr(2, 5), text: lineLabel, done: false };
+        lesson.items.push(item);
+      }
+    });
+
+    // Ручной ("принудительный") выбор цвета — если он стоит, авто-синхронизация с заказом
+    // его не трогает вообще, независимо от статуса заказа.
+    if (!lesson.colorLocked) {
+      if (o.status === 'done') {
+        (o.lines || []).forEach(line => {
+          const lineLabel = line.label || line.type || 'Работа';
+          let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
+          if (item) item.done = true;
+        });
+        // Заказ завершён, но у урока в чек-листе могли быть пункты, которых в этом
+        // заказе просто не было (другие позиции по базовому наполнению класса) — они
+        // так и остались незакрытыми. Цвет должен отражать реальную долю закрытых
+        // пунктов чек-листа, а не всегда быть "полностью готово".
+        const totalInL = lesson.items.length;
+        const doneInL = lesson.items.filter(i => i.done).length;
+        if (totalInL === 0 || doneInL === 0) {
+          lesson.color = 'gray';
+        } else {
+          const ratio = doneInL / totalInL;
+          lesson.color = ratio >= 0.99 ? 'green-3' : (ratio >= 0.5 ? 'green-2' : 'green-1');
+        }
+        lessonsSyncedByOrder.add(lesson);
+        lesson.orderLinked = true;
+      } else if (['progress', 'review'].includes(o.status)) {
+        // Реально идёт работа — "В работе"
+        lesson.color = 'yellow';
+        lessonsSyncedByOrder.add(lesson);
+        lesson.orderLinked = true;
+      } else if (o.status === 'queue') {
+        // Заказ ещё не взят в работу — "Неактив", а не "В работе"
+        lesson.color = 'gray';
+        lessonsSyncedByOrder.add(lesson);
+        lesson.orderLinked = true;
+      }
+    } else if (o.status === 'done') {
+      // Даже при ручном цвете чек-лист по факту завершённого заказа стоит закрыть
+      (o.lines || []).forEach(line => {
+        const lineLabel = line.label || line.type || 'Работа';
+        let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
+        if (item) item.done = true;
+      });
+    }
+  }
+
   orders.forEach(o => {
     if (o.status === 'cancelled') return;
+
+    // Явная привязка (выбрана в форме заказа) — надёжнее нечёткого совпадения по тексту,
+    // не ломается при малейшем расхождении в написании класса/предмета/четверти.
+    if (o.linkedLessonId) {
+      let linkedLesson = null;
+      for (const board of planningBoards) {
+        linkedLesson = (board.lessons || []).find(l => l.id === o.linkedLessonId);
+        if (linkedLesson) break;
+      }
+      if (linkedLesson) {
+        applyOrderToLesson(o, linkedLesson, lessonsSyncedByOrder);
+        return; // урок найден явно — нечёткий поиск по тексту не нужен
+      }
+      // привязанный урок не найден (удалён) — падаем в нечёткий поиск по тексту как раньше
+    }
+
     if (!o.grade || !o.lesson) return;
 
     const orderGrade = (o.grade || '').trim().toLowerCase();
@@ -248,60 +331,7 @@ function syncPlanningWithOrders() {
       if (isGradeMatch && isSubjectMatch && isQuarterMatch) {
         let lesson = (board.lessons || []).find(l => l.num === orderLessonNum);
         if (lesson) {
-          if (!lesson.items) lesson.items = [];
-
-          (o.lines || []).forEach(line => {
-            const lineLabel = line.label || line.type || 'Работа';
-            if (!lineLabel.trim()) return;
-            let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
-            if (!item) {
-              item = { id: 'i_' + Date.now() + Math.random().toString(36).substr(2, 5), text: lineLabel, done: false };
-              lesson.items.push(item);
-            }
-          });
-
-          // Ручной ("принудительный") выбор цвета — если он стоит, авто-синхронизация с заказом
-          // его не трогает вообще, независимо от статуса заказа.
-          if (!lesson.colorLocked) {
-            if (o.status === 'done') {
-              (o.lines || []).forEach(line => {
-                const lineLabel = line.label || line.type || 'Работа';
-                let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
-                if (item) item.done = true;
-              });
-              // Заказ завершён, но у урока в чек-листе могли быть пункты, которых в этом
-              // заказе просто не было (другие позиции по базовому наполнению класса) — они
-              // так и остались незакрытыми. Цвет должен отражать реальную долю закрытых
-              // пунктов чек-листа, а не всегда быть "полностью готово".
-              const totalInL = lesson.items.length;
-              const doneInL = lesson.items.filter(i => i.done).length;
-              if (totalInL === 0 || doneInL === 0) {
-                lesson.color = 'gray';
-              } else {
-                const ratio = doneInL / totalInL;
-                lesson.color = ratio >= 0.99 ? 'green-3' : (ratio >= 0.5 ? 'green-2' : 'green-1');
-              }
-              lessonsSyncedByOrder.add(lesson);
-              lesson.orderLinked = true;
-            } else if (['progress', 'review'].includes(o.status)) {
-              // Реально идёт работа — "В работе"
-              lesson.color = 'yellow';
-              lessonsSyncedByOrder.add(lesson);
-              lesson.orderLinked = true;
-            } else if (o.status === 'queue') {
-              // Заказ ещё не взят в работу — "Неактив", а не "В работе"
-              lesson.color = 'gray';
-              lessonsSyncedByOrder.add(lesson);
-              lesson.orderLinked = true;
-            }
-          } else if (o.status === 'done') {
-            // Даже при ручном цвете чек-лист по факту завершённого заказа стоит закрыть
-            (o.lines || []).forEach(line => {
-              const lineLabel = line.label || line.type || 'Работа';
-              let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
-              if (item) item.done = true;
-            });
-          }
+          applyOrderToLesson(o, lesson, lessonsSyncedByOrder);
         }
       }
     });
