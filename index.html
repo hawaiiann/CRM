@@ -347,6 +347,9 @@
             <button class="btn btn-accent" onclick="openBoardModal()">Добавить класс</button>
           </div>
         </div>
+        <div class="toolbar">
+          <input type="text" id="planningSearch" placeholder="Поиск по классам..." style="max-width:320px;" oninput="renderPlanning()">
+        </div>
         <div class="planning-container" id="planningContainer"></div>
         <div id="planCellTooltip" class="plan-cell-tooltip"></div>
       </section>

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "static-preview",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8743"],
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/serve.ps1"],
       "port": 8743
     }
   ]

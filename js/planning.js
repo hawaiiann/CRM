@@ -55,10 +55,40 @@ function renderPlanningBoardCard(board, bIdx) {
   // Главный процент рассчитывается из закрытых пунктов/материалов уроков
   const mainPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : (totalLessons > 0 ? Math.round((greenLessons / totalLessons) * 100) : 0);
 
-  const detailStatsStr = Object.keys(typeBreakdown).map(tName => {
+  const typeBoxesHtml = Object.keys(typeBreakdown).map(tName => {
     const stat = typeBreakdown[tName];
-    return `<b>${escapeHtml(tName)}</b>: ${stat.done}/${stat.total}`;
-  }).join(' · ');
+    const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+    return `
+      <div style="background:var(--subcard); border-radius:12px; padding:10px 12px;">
+        <div style="font-size:10px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em;">${escapeHtml(tName)}</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text); margin-top:3px;" class="num-font">${stat.done}/${stat.total}</div>
+        <div style="height:4px; border-radius:999px; background:var(--border); margin-top:7px; overflow:hidden;">
+          <div style="height:100%; width:${pct}%; background:var(--green); border-radius:999px;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const lessonsPct = totalLessons > 0 ? Math.round((greenLessons / totalLessons) * 100) : 0;
+  const statsGridHtml = `
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:8px; margin-top:12px;">
+      <div style="background:var(--surface); border:1.5px solid var(--rose); border-radius:12px; padding:10px 12px;">
+        <div style="font-size:10px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em;">Пункты</div>
+        <div style="font-size:13px; font-weight:700; color:var(--rose); margin-top:3px;" class="num-font">${doneItems}/${totalItems} · ${mainPct}%</div>
+        <div style="height:4px; border-radius:999px; background:var(--border); margin-top:7px; overflow:hidden;">
+          <div style="height:100%; width:${mainPct}%; background:var(--rose); border-radius:999px;"></div>
+        </div>
+      </div>
+      <div style="background:var(--subcard); border-radius:12px; padding:10px 12px;">
+        <div style="font-size:10px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em;">Уроки</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text); margin-top:3px;" class="num-font">${greenLessons}/${totalLessons}</div>
+        <div style="height:4px; border-radius:999px; background:var(--border); margin-top:7px; overflow:hidden;">
+          <div style="height:100%; width:${lessonsPct}%; background:var(--green); border-radius:999px;"></div>
+        </div>
+      </div>
+      ${typeBoxesHtml}
+    </div>
+  `;
 
   const cellsHtml = lessons.map((lesson, lIdx) => {
     const items = lesson.items || [];
@@ -156,13 +186,7 @@ function renderPlanningBoardCard(board, bIdx) {
 
       <div class="plan-collapsible-wrapper">
         <div class="plan-collapsible-inner">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; font-weight:700; color:var(--text-soft); flex-wrap:wrap; gap:6px;">
-            <span>Пункты: <b>${doneItems}/${totalItems}</b> (${mainPct}%) · Уроки: <b>${greenLessons}/${totalLessons}</b> ${detailStatsStr ? '· ' + detailStatsStr : ''}</span>
-            <span style="color:var(--green);">${mainPct}%</span>
-          </div>
-          <div class="plan-progress-bar-bg">
-            <div class="plan-progress-bar-fill" style="width: ${mainPct}%;"></div>
-          </div>
+          ${statsGridHtml}
 
           <div class="plan-cells-grid">
             ${cellsHtml}
@@ -190,6 +214,15 @@ function renderPlanning() {
 
   const sortVal = document.getElementById('planningSortBy') ? document.getElementById('planningSortBy').value : 'class';
   let boardsWithIdx = planningBoards.map((b, idx) => ({ board: b, originalIdx: idx }));
+
+  const searchVal = (document.getElementById('planningSearch')?.value || '').trim().toLowerCase();
+  if (searchVal) {
+    boardsWithIdx = boardsWithIdx.filter(item =>
+      (item.board.subject || '').toLowerCase().includes(searchVal) ||
+      (item.board.title || '').toLowerCase().includes(searchVal) ||
+      (item.board.quarter || '').toLowerCase().includes(searchVal)
+    );
+  }
 
   if (sortVal === 'class') {
     boardsWithIdx.sort((a, b) => (a.board.title || '').localeCompare(b.board.title || ''));
@@ -223,7 +256,8 @@ function renderPlanning() {
     `;
   }
 
-  container.innerHTML = (activeHtml || `<div style="font-size:13px; color:var(--text-soft); padding:12px 0;">Нет активных классов в планировании</div>`) + archiveSectionHtml;
+  const emptyMsg = searchVal ? 'По вашему запросу ничего не найдено' : 'Нет активных классов в планировании';
+  container.innerHTML = (activeHtml || `<div style="font-size:13px; color:var(--text-soft); padding:12px 0;">${emptyMsg}</div>`) + archiveSectionHtml;
 
   setTimeout(adjustAllAdaptiveInputs, 10);
 }
