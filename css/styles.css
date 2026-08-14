@@ -1160,6 +1160,8 @@
     background: rgba(245, 158, 11, 0.2);
     border-color: rgba(245, 158, 11, 0.4);
   }
+  .occ-deadline-badge.overdue { color: var(--rose); background: var(--rose-soft); border-color: rgba(228,72,63,0.35); }
+  body.dark-theme .occ-deadline-badge.overdue { color: #FF8079; background: rgba(255,98,89,0.18); border-color: rgba(255,98,89,0.4); }
 
   .occ-details {
     padding-top: 20px;

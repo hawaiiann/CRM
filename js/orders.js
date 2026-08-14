@@ -183,6 +183,9 @@ function renderOrderCard(o){
   const advUsed = parseNum(o.advanceUsed);
   const remToPay = Math.max(0, fullPrice - advUsed);
 
+  // Просрочен — дедлайн уже прошёл, а заказ не завершён и не отменён
+  const isOverdue = o.deadline && o.deadline < dateKey(new Date()) && !['done', 'cancelled'].includes(o.status);
+
   let advBadgeHtml = '';
   if (advUsed > 0) advBadgeHtml = `<span class="badge review">Аванс: ${fmtMoney(advUsed)} · Доплата: ${fmtMoney(remToPay)}</span>`;
 
@@ -217,6 +220,7 @@ function renderOrderCard(o){
             ${statusOptions}
           </select>
           ${o.isPaid ? `<span class="paid-badge" onclick="togglePaymentStatus('${o.id}', event)">Оплачено</span>` : `<span class="unpaid-badge" onclick="togglePaymentStatus('${o.id}', event)">Не оплачено</span>`}
+          ${isOverdue ? `<span class="badge" style="background:var(--rose-soft); color:var(--rose);">⏰ Просрочен</span>` : ''}
           ${advBadgeHtml}
         </div>
         <div class="occ-items-summary">${escapeHtml(o.client ? o.client + ' — ' : '')}${escapeHtml(itemsSummary)}</div>
@@ -224,7 +228,7 @@ function renderOrderCard(o){
       <div class="occ-right">
         <div>
           <div class="occ-price">${fmtMoney(fullPrice)}</div>
-          <div class="occ-deadline-badge">сдача: <b>${fmtDeadline(o.deadline)}</b></div>
+          <div class="occ-deadline-badge ${isOverdue ? 'overdue' : ''}">сдача: <b>${fmtDeadline(o.deadline)}</b></div>
         </div>
         <span class="occ-expand-icon">▼</span>
       </div>
