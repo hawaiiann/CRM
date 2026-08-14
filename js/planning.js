@@ -615,9 +615,29 @@ function openLessonModal(bIdx, lIdx) {
   document.getElementById('lmNotes').value = lesson.notes || '';
 
   updateColorPillButtons(lesson.color || 'gray');
+  updateResetColorLockBtn(lesson.colorLocked);
   renderLessonChecklist();
 
   document.getElementById('lessonModalOverlay').classList.add('show');
+}
+
+function updateResetColorLockBtn(isLocked) {
+  const btn = document.getElementById('lmResetColorLockBtn');
+  if (btn) btn.style.display = isLocked ? 'inline-flex' : 'none';
+}
+
+// Снимает принудительный (вручную выбранный) цвет ячейки — дальше он снова считается
+// сам, по чек-листу урока или по статусу связанного заказа (как до ручного выбора).
+function resetLessonColorLock() {
+  const { bIdx, lIdx } = activeLessonState;
+  if (bIdx === null || lIdx === null || !planningBoards[bIdx]) return;
+  const lesson = planningBoards[bIdx].lessons[lIdx];
+  lesson.colorLocked = false;
+  syncPlanningWithOrders();
+  saveData();
+  updateColorPillButtons(lesson.color || 'gray');
+  updateResetColorLockBtn(false);
+  renderPlanning();
 }
 
 function closeLessonModal() {
@@ -650,6 +670,7 @@ function setLessonColor(color) {
     planningBoards[bIdx].lessons[lIdx].color = color;
     planningBoards[bIdx].lessons[lIdx].colorLocked = true;
     updateColorPillButtons(color);
+    updateResetColorLockBtn(true);
     saveData();
   }
 }
