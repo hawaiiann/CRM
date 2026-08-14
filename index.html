@@ -473,10 +473,10 @@
           <label style="display:flex; justify-content:space-between; align-items:center;">
             <span>Статус</span>
             <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--rose); text-transform:none; cursor:pointer;">
-              <input type="checkbox" id="f_priority" style="width:auto;"> Приоритетный заказ
+              <input type="checkbox" id="f_priority" style="width:auto;" onchange="syncModalPriorityTheme()"> Приоритетный заказ
             </label>
           </label>
-          <select id="f_status">
+          <select id="f_status" onchange="syncModalStatusColor()">
             <option value="queue">В очереди</option>
             <option value="progress">В работе</option>
             <option value="review">На согласовании</option>
@@ -495,10 +495,12 @@
           <select id="f_class"></select>
         </div>
         <div class="field" style="margin-bottom:0;">
-          <input type="text" id="f_quarter" placeholder="Четверть">
+          <label class="field-mini-label">Четверть</label>
+          <input type="text" id="f_quarter" placeholder="Например: 1 четверть">
         </div>
         <div class="field" style="margin-bottom:0;">
-          <input type="text" id="f_lesson" placeholder="Номер урока">
+          <label class="field-mini-label">Номер урока</label>
+          <input type="text" id="f_lesson" placeholder="Например: 12">
         </div>
       </div>
       

@@ -629,6 +629,16 @@ document.getElementById('btnAddLine').addEventListener('click', addLine);
 const overlay = document.getElementById('overlay');
 const form = document.getElementById('orderForm');
 
+// Красит сам select "Статус" в форме заказа в цвет статуса — тем же набором цветов, что и бейдж в списке заказов
+function syncModalStatusColor(){
+  const sel = document.getElementById('f_status');
+  sel.className = 'status-' + sel.value;
+}
+// Приоритетный заказ — блок аванса в форме тоже уходит в красный монохром (см. .modal.priority-theme в styles.css)
+function syncModalPriorityTheme(){
+  document.querySelector('.modal').classList.toggle('priority-theme', document.getElementById('f_priority').checked);
+}
+
 function openModal(edit){
   fillSelects();
   document.getElementById('modalTitle').textContent = edit ? 'Изменить заказ' : 'Новый заказ';
@@ -648,6 +658,8 @@ document.getElementById('btnAdd').addEventListener('click', ()=>{
   currentLines = [{id:'l0', label: appSettings.types[0] || 'Презентация', type:(appSettings.units&&appSettings.units[0])||'Слайд', qty:10, pomoHours:0, rate:500, ignorePrice:false, ready:false}];
   renderLines();
   openModal(false);
+  syncModalStatusColor();
+  syncModalPriorityTheme();
 });
 document.getElementById('btnAdd2').addEventListener('click', ()=>{ document.getElementById('btnAdd').click(); });
 
@@ -688,6 +700,8 @@ function editOrder(id){
   renderLines();
   updateModalAdvanceInfo();
   warnIfAdvanceExceedsOrder();
+  syncModalStatusColor();
+  syncModalPriorityTheme();
 }
 
 form.addEventListener('submit', (e)=>{
