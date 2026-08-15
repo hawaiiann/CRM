@@ -220,6 +220,38 @@ function saveData(isAutoBackupTrigger = true){
   }
 }
 
+// Находит заказ, который сейчас управляет цветом конкретного урока — та же логика поиска,
+// что и в syncPlanningWithOrders(), но возвращает сам заказ (а не только красит ячейку).
+// Нужна для подсказки в модалке урока: "почему цвет именно такой".
+function findGoverningOrder(board, lesson) {
+  if (!orders) return null;
+
+  const explicit = orders.find(o => o.status !== 'cancelled' && o.linkedLessonId === lesson.id);
+  if (explicit) return explicit;
+
+  const boardTitle = (board.title || '').trim().toLowerCase();
+  const boardSubject = (board.subject || '').trim().toLowerCase();
+  const boardQuarter = (board.quarter || '').trim().toLowerCase();
+
+  return orders.find(o => {
+    if (o.status === 'cancelled') return false;
+    if (o.linkedLessonId) return false; // у этого заказа своя явная привязка — не к этому уроку, раз explicit не нашёлся
+    if (!o.grade || !o.lesson) return false;
+    const lessonNumMatch = String(o.lesson).match(/\d+/);
+    if (!lessonNumMatch || parseInt(lessonNumMatch[0], 10) !== lesson.num) return false;
+
+    const orderGrade = (o.grade || '').trim().toLowerCase();
+    const orderSubject = (o.subject || '').trim().toLowerCase();
+    const orderQuarter = (o.quarter || '').trim().toLowerCase();
+
+    const isGradeMatch = boardTitle === orderGrade || boardTitle.includes(orderGrade) || orderGrade.includes(boardTitle);
+    const isSubjectMatch = !boardSubject || !orderSubject || boardSubject === orderSubject || boardSubject.includes(orderSubject) || orderSubject.includes(boardSubject);
+    const isQuarterMatch = !boardQuarter || !orderQuarter || boardQuarter === orderQuarter || boardQuarter.includes(orderQuarter) || orderQuarter.includes(boardQuarter);
+
+    return isGradeMatch && isSubjectMatch && isQuarterMatch;
+  }) || null;
+}
+
 /* АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ЗАКАЗОВ И ПЛАНИРОВАНИЯ */
 function syncPlanningWithOrders() {
   if (!orders || !planningBoards) return;

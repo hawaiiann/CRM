@@ -632,6 +632,7 @@ function openLessonModal(bIdx, lIdx) {
 
   updateColorPillButtons(lesson.color || 'gray');
   updateResetColorLockBtn(lesson.colorLocked);
+  updateColorReasonHint();
   renderLessonChecklist();
 
   document.getElementById('lessonModalOverlay').classList.add('show');
@@ -640,6 +641,33 @@ function openLessonModal(bIdx, lIdx) {
 function updateResetColorLockBtn(isLocked) {
   const btn = document.getElementById('lmResetColorLockBtn');
   if (btn) btn.style.display = isLocked ? 'inline-flex' : 'none';
+}
+
+// Поясняет, почему у ячейки именно такой цвет — закреплён вручную, следует статусу
+// связанного заказа, или считается по проценту отмеченных пунктов чек-листа.
+function updateColorReasonHint() {
+  const { bIdx, lIdx } = activeLessonState;
+  const hint = document.getElementById('lmColorReasonHint');
+  if (!hint || bIdx === null || lIdx === null || !planningBoards[bIdx]) return;
+  const board = planningBoards[bIdx];
+  const lesson = board.lessons[lIdx];
+  if (!lesson) return;
+
+  if (lesson.colorLocked) {
+    hint.textContent = 'Цвет закреплён вручную — не пересчитывается автоматически.';
+    return;
+  }
+
+  const order = findGoverningOrder(board, lesson);
+  if (order) {
+    const orderTitle = order.title || [order.subject, order.grade, order.quarter, order.lesson ? 'Урок ' + order.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
+    hint.textContent = `Цвет по статусу заказа «${orderTitle}» — ${statusLabels[order.status] || order.status}.`;
+  } else {
+    const items = lesson.items || [];
+    const done = items.filter(i => i.done).length;
+    const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+    hint.textContent = `Цвет по чек-листу: ${done} из ${items.length} (${pct}%).`;
+  }
 }
 
 // Снимает принудительный (вручную выбранный) цвет ячейки — дальше он снова считается
@@ -653,6 +681,7 @@ function resetLessonColorLock() {
   saveData();
   updateColorPillButtons(lesson.color || 'gray');
   updateResetColorLockBtn(false);
+  updateColorReasonHint();
   renderPlanning();
 }
 
@@ -687,6 +716,7 @@ function setLessonColor(color) {
     planningBoards[bIdx].lessons[lIdx].colorLocked = true;
     updateColorPillButtons(color);
     updateResetColorLockBtn(true);
+    updateColorReasonHint();
     saveData();
   }
 }
@@ -712,6 +742,8 @@ function saveLessonNotes(val) {
 function renderLessonChecklist() {
   const { bIdx, lIdx } = activeLessonState;
   if (bIdx === null || lIdx === null || !planningBoards[bIdx]) return;
+
+  updateColorReasonHint();
 
   const lesson = planningBoards[bIdx].lessons[lIdx];
   const items = lesson.items || [];
