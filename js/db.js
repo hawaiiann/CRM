@@ -269,6 +269,9 @@ function syncPlanningWithOrders() {
   function applyOrderToLesson(o, lesson, lessonsSyncedByOrder) {
     if (!lesson.items) lesson.items = [];
 
+    // Чекбокс "Готов" у позиции заказа сразу отражается в чек-листе урока — не нужно
+    // ждать, пока весь заказ станет "Завершён". Работает в обе стороны по мере
+    // отметки позиций, при любом сохранении заказа (toggleLineReady тоже вызывает saveData).
     (o.lines || []).forEach(line => {
       const lineLabel = line.label || line.type || 'Работа';
       if (!lineLabel.trim()) return;
@@ -277,21 +280,27 @@ function syncPlanningWithOrders() {
         item = { id: 'i_' + Date.now() + Math.random().toString(36).substr(2, 5), text: lineLabel, done: false };
         lesson.items.push(item);
       }
+      item.done = !!line.ready;
     });
 
-    // Ручной ("принудительный") выбор цвета — если он стоит, авто-синхронизация с заказом
-    // его не трогает вообще, независимо от статуса заказа.
+    // Заказ завершён целиком (в т.ч. если статус переключили вручную, минуя чекбоксы
+    // "Готов" по каждой позиции) — подчищаем как завершённые все пункты, что совпадают
+    // с позициями этого заказа, даже если конкретный line.ready почему-то не стоял.
+    if (o.status === 'done') {
+      (o.lines || []).forEach(line => {
+        const lineLabel = line.label || line.type || 'Работа';
+        let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
+        if (item) item.done = true;
+      });
+    }
+
+    // Ручной ("принудительный") выбор цвета — если он стоит, статус заказа цвет ячейки
+    // не трогает (но чек-лист выше синхронизируется в любом случае).
     if (!lesson.colorLocked) {
       if (o.status === 'done') {
-        (o.lines || []).forEach(line => {
-          const lineLabel = line.label || line.type || 'Работа';
-          let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
-          if (item) item.done = true;
-        });
-        // Заказ завершён, но у урока в чек-листе могли быть пункты, которых в этом
-        // заказе просто не было (другие позиции по базовому наполнению класса) — они
-        // так и остались незакрытыми. Цвет должен отражать реальную долю закрытых
-        // пунктов чек-листа, а не всегда быть "полностью готово".
+        // У урока в чек-листе могли быть пункты, которых в этом заказе просто не было
+        // (другие позиции по базовому наполнению класса) — они остались незакрытыми.
+        // Цвет должен отражать реальную долю закрытых пунктов, а не всегда быть "готово".
         const totalInL = lesson.items.length;
         const doneInL = lesson.items.filter(i => i.done).length;
         if (totalInL === 0 || doneInL === 0) {
@@ -313,13 +322,6 @@ function syncPlanningWithOrders() {
         lessonsSyncedByOrder.add(lesson);
         lesson.orderLinked = true;
       }
-    } else if (o.status === 'done') {
-      // Даже при ручном цвете чек-лист по факту завершённого заказа стоит закрыть
-      (o.lines || []).forEach(line => {
-        const lineLabel = line.label || line.type || 'Работа';
-        let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
-        if (item) item.done = true;
-      });
     }
   }
 
