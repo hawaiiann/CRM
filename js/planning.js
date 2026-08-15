@@ -813,9 +813,19 @@ function handleLessonAddItem(e) {
 function toggleLessonItemDone(iIdx) {
   const { bIdx, lIdx } = activeLessonState;
   if (bIdx !== null && lIdx !== null && planningBoards[bIdx]) {
-    const item = planningBoards[bIdx].lessons[lIdx].items[iIdx];
+    const board = planningBoards[bIdx];
+    const lesson = board.lessons[lIdx];
+    const item = lesson.items[iIdx];
     if (item) {
       item.done = !item.done;
+      // Если пункт соответствует позиции связанного заказа — сразу подтягиваем и её
+      // чекбокс "Готов", иначе следующая же синхронизация (внутри saveData) тут же
+      // отменит ручную отметку обратно, и клик выглядел бы так, будто ничего не делает.
+      const order = findGoverningOrder(board, lesson);
+      if (order) {
+        const line = (order.lines || []).find(l => (l.label || l.type || 'Работа').toLowerCase() === item.text.toLowerCase());
+        if (line) line.ready = item.done;
+      }
       saveData();
       renderLessonChecklist();
     }
