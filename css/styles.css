@@ -1059,6 +1059,36 @@
     border-top: 2px dashed var(--border);
     padding-top: 20px;
   }
+  /* Тумблер "Показать/скрыть выполненное" — Планирование и виджет недели на Дашборде */
+  .plan-completed-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 10px;
+    padding: 7px 16px;
+    border-radius: var(--radius-pill);
+    background: var(--subcard);
+    border: 1px dashed var(--border);
+    color: var(--text-faint);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .plan-completed-toggle:hover { background: var(--border); color: var(--text-soft); border-color: var(--border-dark); }
+  .plan-completed-toggle svg { transition: transform 0.2s ease; flex-shrink: 0; }
+  .plan-completed-toggle.expanded svg { transform: rotate(180deg); }
+  .plan-completed-count {
+    background: var(--green-soft);
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 800;
+    padding: 1px 7px;
+    border-radius: 999px;
+  }
+
   .archive-header {
     display: flex;
     align-items: center;

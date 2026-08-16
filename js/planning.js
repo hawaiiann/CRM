@@ -166,13 +166,16 @@ function renderPlanningBoardCard(board, bIdx) {
     `;
   }).join('');
 
-  const hiddenCompletedToggleHtml = hiddenCompletedCount > 0 ? `
-    <div class="btn secondary small" style="display:inline-flex; margin-top:8px; cursor:pointer;" onclick="toggleBoardCompletedExpanded('${board.id}')">
-      ${showCompleted ? 'Скрыть выполненные ▲' : `Показать выполненные (${hiddenCompletedCount}) ▼`}
+  const completedChevronSvg = `<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const hiddenCompletedToggleHtml = (hiddenCompletedCount > 0 || showCompleted) ? `
+    <div style="text-align:center;">
+      <div class="plan-completed-toggle ${showCompleted ? 'expanded' : ''}" onclick="toggleBoardCompletedExpanded('${board.id}')">
+        <span>${showCompleted ? 'Скрыть выполненные' : 'Показать выполненные'}</span>
+        ${hiddenCompletedCount > 0 && !showCompleted ? `<span class="plan-completed-count">${hiddenCompletedCount}</span>` : ''}
+        ${completedChevronSvg}
+      </div>
     </div>
-  ` : (showCompleted ? `
-    <div class="btn secondary small" style="display:inline-flex; margin-top:8px; cursor:pointer;" onclick="toggleBoardCompletedExpanded('${board.id}')">Скрыть выполненные ▲</div>
-  ` : '');
+  ` : '';
 
   const subjectOptsHtml = catalogWithCurrent('subjects', board.subject).map(s =>
     `<option value="${escapeHtml(s)}" ${board.subject === s ? 'selected' : ''}>${escapeHtml(s)}</option>`

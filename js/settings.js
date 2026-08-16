@@ -44,25 +44,33 @@ function renderDashboardMetricsSettings() {
   const el = document.getElementById('dashboardMetricsList');
   if (!el) return;
   const usedTypes = appSettings.dashboardMetrics.map(m => m.type);
-  el.innerHTML = appSettings.dashboardMetrics.map((m, idx) => `
-    <div class="settings-row" style="gap:10px;">
-      <select style="flex:1.4;" onchange="updateDashboardMetricType(${idx}, this.value)">
-        ${Object.entries(DASHBOARD_METRIC_TYPES).map(([key, info]) => `
-          <option value="${key}" ${m.type === key ? 'selected' : ''} ${usedTypes.includes(key) && m.type !== key ? 'disabled' : ''}>${info.label}${info.secondary ? ' + ' + info.secondary.pairLabel : ''}</option>
+  el.innerHTML = appSettings.dashboardMetrics.map((m, idx) => {
+    const info = DASHBOARD_METRIC_TYPES[m.type] || DASHBOARD_METRIC_TYPES.hours;
+    const isHidden = !!m.hidden;
+    return `
+    <div class="settings-row" style="gap:10px; flex-wrap:wrap; ${isHidden ? 'opacity:0.5;' : ''}">
+      <select style="flex:1.4; min-width:150px;" onchange="updateDashboardMetricType(${idx}, this.value)">
+        ${Object.entries(DASHBOARD_METRIC_TYPES).map(([key, i2]) => `
+          <option value="${key}" ${m.type === key ? 'selected' : ''} ${usedTypes.includes(key) && m.type !== key ? 'disabled' : ''}>${i2.label}${i2.secondary ? ' + ' + i2.secondary.pairLabel : ''}</option>
         `).join('')}
       </select>
-      <input type="number" min="0" step="any" value="${m.goal}" placeholder="Цель на день" style="flex:1;" oninput="updateDashboardMetricGoal(${idx}, this.value)">
+      <input type="number" min="0" step="any" value="${m.goal}" placeholder="Цель: ${escapeHtml(info.label)}" title="Цель: ${escapeHtml(info.label)}" style="flex:1; min-width:110px;" oninput="updateDashboardMetricGoal(${idx}, this.value)">
+      ${info.secondary ? `<input type="number" min="0" step="any" value="${m.secondaryGoal || 0}" placeholder="Цель: ${escapeHtml(info.secondary.pairLabel)}" title="Цель: ${escapeHtml(info.secondary.pairLabel)}" style="flex:1; min-width:110px;" oninput="updateDashboardMetricSecondaryGoal(${idx}, this.value)">` : ''}
+      <button class="btn secondary small" style="padding:6px 8px;" title="${isHidden ? 'Показать на дашборде' : 'Скрыть с дашборда (настройки и цель сохранятся)'}" onclick="toggleDashboardMetricHidden(${idx})">
+        ${isHidden ? EYE_CLOSED_SVG : EYE_OPEN_SVG}
+      </button>
       <button class="btn danger small" style="padding:6px 8px;" onclick="removeDashboardMetric(${idx})" ${appSettings.dashboardMetrics.length <= 1 ? 'disabled style="opacity:0.3;"' : ''}>
         <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
       </button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function addDashboardMetric() {
   const usedTypes = appSettings.dashboardMetrics.map(m => m.type);
   const freeType = Object.keys(DASHBOARD_METRIC_TYPES).find(k => !usedTypes.includes(k)) || Object.keys(DASHBOARD_METRIC_TYPES)[0];
-  appSettings.dashboardMetrics.push({ id: 'dm' + Date.now(), type: freeType, goal: 0 });
+  appSettings.dashboardMetrics.push({ id: 'dm' + Date.now(), type: freeType, goal: 0, secondaryGoal: 0, hidden: false });
   saveData();
   renderDashboardMetricsSettings();
   renderCurrent();
@@ -79,6 +87,21 @@ function updateDashboardMetricGoal(idx, val) {
   if (appSettings.dashboardMetrics[idx]) appSettings.dashboardMetrics[idx].goal = parseNum(val);
   saveData();
   renderDashboardMetricsGrid(); // обновляем сам дашборд, но НЕ список настроек — иначе поле теряет фокус после каждой цифры
+}
+
+function updateDashboardMetricSecondaryGoal(idx, val) {
+  if (appSettings.dashboardMetrics[idx]) appSettings.dashboardMetrics[idx].secondaryGoal = parseNum(val);
+  saveData();
+  renderDashboardMetricsGrid();
+}
+
+// Скрыть показатель с дашборда, не удаляя настройку (цель, доп. цель) — можно вернуть обратно.
+function toggleDashboardMetricHidden(idx) {
+  if (!appSettings.dashboardMetrics[idx]) return;
+  appSettings.dashboardMetrics[idx].hidden = !appSettings.dashboardMetrics[idx].hidden;
+  saveData();
+  renderDashboardMetricsSettings();
+  renderCurrent();
 }
 
 function removeDashboardMetric(idx) {

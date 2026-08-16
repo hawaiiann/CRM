@@ -183,12 +183,13 @@ function splitLineUnits(lines) {
 
 // Считает КОЛИЧЕСТВО позиций (не сумму qty) по типу работы — для показателей
 // "Презентации" и "Рабочие листы" на дашборде (отдельно от штук слайдов/страниц).
+// Карточки с вопросами по сути тот же класс материала, что и рабочий лист — считаются вместе.
 function splitLineTypes(lines) {
   let presentations = 0, worksheets = 0;
   (lines || []).forEach(l => {
     const label = (l.label || '').toLowerCase();
     if (label.includes('презентац')) presentations++;
-    else if (label.includes('рабочий лист')) worksheets++;
+    else if (label.includes('рабочий лист') || label.includes('карточ')) worksheets++;
   });
   return { presentations, worksheets };
 }

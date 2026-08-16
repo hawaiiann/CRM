@@ -69,11 +69,14 @@ function renderWeekPlanningWidget() {
     `;
   }).join('');
 
+  const weekChevronSvg = `<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const doneToggleHtml = doneCount > 0 ? `
-    <div style="text-align:right; margin-top:6px;">
-      <span style="font-size:11px; font-weight:700; color:var(--feature-blue); cursor:pointer;" onclick="toggleWeekWidgetShowDone()">
-        ${weekWidgetShowDone ? 'Скрыть завершённые ▲' : `Показать завершённые (${doneCount}) ▼`}
-      </span>
+    <div style="text-align:center;">
+      <div class="plan-completed-toggle ${weekWidgetShowDone ? 'expanded' : ''}" style="margin-top:8px; padding:5px 12px; font-size:11px;" onclick="toggleWeekWidgetShowDone()">
+        <span>${weekWidgetShowDone ? 'Скрыть завершённые' : 'Показать завершённые'}</span>
+        ${!weekWidgetShowDone ? `<span class="plan-completed-count">${doneCount}</span>` : ''}
+        ${weekChevronSvg}
+      </div>
     </div>
   ` : '';
 
@@ -485,7 +488,7 @@ function formatBucketLabel(range, period) {
 function renderDashboardMetricsGrid() {
   const grid = document.getElementById('dashboardMetricsGrid');
   if (!grid) return;
-  const metrics = appSettings.dashboardMetrics || [];
+  const metrics = (appSettings.dashboardMetrics || []).filter(m => !m.hidden);
   const isDark = document.body.classList.contains('dark-theme');
   const colors = isDark ? DASHBOARD_METRIC_COLORS_DARK : DASHBOARD_METRIC_COLORS_LIGHT;
   const goalMultiplier = { day: 1, week: 7, month: 30, year: 365 }[dashboardMetricsPeriod] || 1;
@@ -518,6 +521,8 @@ function renderDashboardMetricsGrid() {
     // один из графиков выглядел бы плоской линией) и вторым числом рядом с основным.
     const secSeries = info.secondary ? getMetricSeriesForPeriod(info.secondary.activityField, dashboardMetricsPeriod, info.secondary.cumulative) : null;
     const secCurVal = secSeries ? secSeries[secSeries.length - 1] : null;
+    const secAvgVal = secSeries ? secSeries.reduce((s,v)=>s+v,0) / secSeries.length : null;
+    const secGoalVal = info.secondary ? (m.secondaryGoal || 0) * (info.secondary.cumulative ? 1 : goalMultiplier) : null;
 
     // Геометрия: верхняя зона (0–24) под плашку-подсказку, график — ниже (28–74).
     // Нижний отступ (74, не 80) — чтобы обводка линии и точка на нулевой отметке не обрезались краем SVG.
@@ -585,10 +590,12 @@ function renderDashboardMetricsGrid() {
           ${info.secondary ? `<span class="num-font" style="color:var(--text-faint); font-size:13px; font-weight:600;">· ${escapeHtml(formatSecondaryValue(info.secondary, secCurVal))}</span>` : ''}
         </div>
         <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-faint); margin-top:14px;">
-          <span>Цель</span><span style="color:var(--text-soft);">${escapeHtml(formatMetricValue(info, goalVal))}</span>
+          <span>Цель</span>
+          <span style="color:var(--text-soft); text-align:right;">${escapeHtml(formatMetricValue(info, goalVal))}${info.secondary && secGoalVal ? ` <span style="color:var(--text-faint);">· ${escapeHtml(formatSecondaryValue(info.secondary, secGoalVal))}</span>` : ''}</span>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-faint); margin-top:4px;">
-          <span>Среднее</span><span style="color:var(--text-soft);">${escapeHtml(formatMetricValue(info, avgVal))}</span>
+          <span>Среднее</span>
+          <span style="color:var(--text-soft); text-align:right;">${escapeHtml(formatMetricValue(info, avgVal))}${info.secondary ? ` <span style="color:var(--text-faint);">· ${escapeHtml(formatSecondaryValue(info.secondary, secAvgVal))}</span>` : ''}</span>
         </div>
       </div>
     `;
