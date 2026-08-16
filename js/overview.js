@@ -10,6 +10,12 @@ function getOrderWeekLabel(o) {
   return o.title || 'Заказ';
 }
 
+let weekWidgetShowDone = false;
+function toggleWeekWidgetShowDone() {
+  weekWidgetShowDone = !weekWidgetShowDone;
+  renderWeekPlanningWidget();
+}
+
 function renderWeekPlanningWidget() {
   const el = document.getElementById('ovWeekPlanning');
   if (!el) return;
@@ -34,14 +40,17 @@ function renderWeekPlanningWidget() {
     `;
   }).join('');
 
-  // Заказы, чей диапазон (начало—сдача) пересекается с этой неделей
-  const weekOrders = orders.filter(o => {
+  // Заказы, чей диапазон (начало—сдача) пересекается с этой неделей.
+  // Завершённые по умолчанию скрыты — они больше не требуют внимания на этой неделе.
+  const allWeekOrders = orders.filter(o => {
     if (o.status === 'cancelled') return false;
     const startStr = o.start || o.deadline;
     const endStr = o.deadline || o.start;
     if (!startStr && !endStr) return false;
     return startStr <= weekEndKey && endStr >= weekStartKey;
   }).sort((a, b) => (a.start || a.deadline || '').localeCompare(b.start || b.deadline || ''));
+  const doneCount = allWeekOrders.filter(o => o.status === 'done').length;
+  const weekOrders = weekWidgetShowDone ? allWeekOrders : allWeekOrders.filter(o => o.status !== 'done');
 
   const rowsHtml = weekOrders.map(o => {
     const startStr = o.start || o.deadline;
@@ -60,11 +69,20 @@ function renderWeekPlanningWidget() {
     `;
   }).join('');
 
+  const doneToggleHtml = doneCount > 0 ? `
+    <div style="text-align:right; margin-top:6px;">
+      <span style="font-size:11px; font-weight:700; color:var(--feature-blue); cursor:pointer;" onclick="toggleWeekWidgetShowDone()">
+        ${weekWidgetShowDone ? 'Скрыть завершённые ▲' : `Показать завершённые (${doneCount}) ▼`}
+      </span>
+    </div>
+  ` : '';
+
   el.innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:10px;">${headerHtml}</div>
     <div style="display:flex; flex-direction:column; gap:5px; max-height:150px; overflow-y:auto;">
       ${rowsHtml || '<div style="font-size:12.5px; color:var(--text-faint); padding:8px 0;">На этой неделе заказов нет</div>'}
     </div>
+    ${doneToggleHtml}
   `;
 }
 
@@ -270,7 +288,7 @@ function renderActiveDaysCalendar(monthValue) {
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    cells.push({ num: d, outside: false, isToday: ds === todayStr, isActive: activeDatesSet.has(ds) });
+    cells.push({ num: d, outside: false, dateStr: ds, isToday: ds === todayStr, isActive: activeDatesSet.has(ds) });
   }
   // Всегда 6 полных недель (42 ячейки) — если месяц короче, свободное место
   // заполняется днями следующего месяца, а не остаётся пустым.
@@ -286,26 +304,70 @@ function renderActiveDaysCalendar(monthValue) {
     if (c.outside) cls.push('outside');
     if (c.isToday) cls.push('today');
     if (c.isActive && !c.outside && !c.isToday) cls.push('active');
-    return `<div class="${cls.join(' ')}">${c.num}</div>`;
+    if (!c.outside && c.isActive) cls.push('clickable');
+    const clickAttr = (!c.outside && c.isActive) ? `onclick="showActiveDayDetail('${c.dateStr}')"` : '';
+    return `<div class="${cls.join(' ')}" ${clickAttr}>${c.num}</div>`;
   }).join('');
 
-  // Сводка по месяцу — чем заполнить пустое место под сеткой, если карточка выше, чем нужно
+  // Сводка по месяцу — по всем показателям, не только по часам, чтобы можно было
+  // посмотреть прошлые периоды не переключаясь в другой раздел.
   const monthPrefix = `${year}-${String(month+1).padStart(2,'0')}-`;
-  const activeDaysInMonth = new Set(activityLog.filter(e => e.date.startsWith(monthPrefix)).map(e => e.date)).size;
-  const hoursInMonth = activityLog.filter(e => e.field === 'hours' && e.date.startsWith(monthPrefix)).reduce((s,e)=>s+e.delta, 0);
+  const monthEntries = activityLog.filter(e => e.date.startsWith(monthPrefix));
+  const activeDaysInMonth = new Set(monthEntries.map(e => e.date)).size;
+  const sumField = (field) => monthEntries.filter(e => e.field === field).reduce((s,e)=>s+e.delta, 0);
+  const monthSummaryItems = [
+    { num: activeDaysInMonth, lbl: 'активных дней' },
+    { num: fmtHours(sumField('hours')), lbl: 'часов' },
+    { num: Math.round(sumField('slides')) + ' шт.', lbl: 'слайдов' },
+    { num: Math.round(sumField('presentations')) + ' шт.', lbl: 'презентаций добавлено' },
+    { num: Math.round(sumField('worksheets')) + ' шт.', lbl: 'раб. листов добавлено' },
+    { num: fmtMoney(sumField('netRevenue')), lbl: 'чистого дохода' }
+  ];
 
   grid.innerHTML = `
     <div class="adc-weekdays">${weekdaysHtml}</div>
     <div class="adc-days-grid">${daysHtml}</div>
     <div class="adc-summary">
-      <div class="adc-summary-item">
-        <span class="adc-summary-num">${activeDaysInMonth}</span>
-        <span class="adc-summary-lbl">активных дней</span>
+      ${monthSummaryItems.map(it => `
+        <div class="adc-summary-item">
+          <span class="adc-summary-num">${it.num}</span>
+          <span class="adc-summary-lbl">${it.lbl}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div id="adcDayDetail"></div>
+  `;
+}
+
+// Клик по активному дню в календаре — показывает разбивку записей активности
+// именно за этот день (по факту записи в журнале, а не пересчитанные заново).
+function showActiveDayDetail(dateStr) {
+  const dayEntries = activityLog.filter(e => e.date === dateStr);
+  const detailEl = document.getElementById('adcDayDetail');
+  if (!detailEl) return;
+  if (!dayEntries.length) { detailEl.innerHTML = ''; return; }
+
+  const byField = {};
+  dayEntries.forEach(e => { byField[e.field] = (byField[e.field] || 0) + e.delta; });
+
+  const fieldOrder = ['hours', 'slides', 'pages', 'presentations', 'worksheets', 'revenue', 'netRevenue'];
+  const fieldLabels = { hours: 'Часы', slides: 'Слайды', pages: 'Страницы', presentations: 'Презентации', worksheets: 'Рабочие листы', revenue: 'Выручка', netRevenue: 'Чистый доход' };
+  const rowsHtml = fieldOrder.filter(f => byField[f]).map(f => {
+    const info = Object.values(DASHBOARD_METRIC_TYPES).find(i => i.activityField === f) || { unit: '' };
+    const valText = f === 'hours' ? fmtHours(byField[f]) : (info.unit === '₽' ? fmtMoney(byField[f]) : Math.round(byField[f] * 100) / 100 + ' ' + (info.unit || ''));
+    return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span style="color:var(--text-faint);">${fieldLabels[f] || f}</span><b style="color:var(--text);">${valText}</b></div>`;
+  }).join('');
+
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dateLabel = `${d} ${MONTH_SHORT_RU[m - 1]} ${y}`;
+
+  detailEl.innerHTML = `
+    <div style="margin-top:12px; padding:12px 14px; background:var(--subcard); border-radius:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <b style="font-size:12.5px;">${dateLabel}</b>
+        <span style="font-size:11px; color:var(--text-faint); cursor:pointer;" onclick="document.getElementById('adcDayDetail').innerHTML=''">Закрыть ✕</span>
       </div>
-      <div class="adc-summary-item">
-        <span class="adc-summary-num">${fmtHours(hoursInMonth)}</span>
-        <span class="adc-summary-lbl">за месяц</span>
-      </div>
+      ${rowsHtml || '<div style="font-size:12px; color:var(--text-faint);">Нет записей</div>'}
     </div>
   `;
 }
@@ -380,6 +442,30 @@ function formatMetricValue(info, value) {
   return Math.round(v) + ' ' + info.unit;
 }
 
+// Границы (даты начала/конца) тех же "корзин", что строит getMetricSeriesForPeriod —
+// нужны только для подписи в тултипе при наведении на график, не для самих сумм.
+function getPeriodBucketRanges(period) {
+  const counts = { day: 14, week: 10, month: 8, year: 5 };
+  const N = counts[period] || 14;
+  const curStart = getPeriodStart(new Date(), period);
+  const ranges = [];
+  for (let i = N - 1; i >= 0; i--) {
+    const bStart = addPeriod(curStart, period, -i);
+    const bEndInclusive = addDays(addPeriod(bStart, period, 1), -1);
+    ranges.push({ start: bStart, end: bEndInclusive });
+  }
+  return ranges;
+}
+
+const MONTH_SHORT_RU = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+function formatBucketLabel(range, period) {
+  if (period === 'day') return `${range.start.getDate()} ${MONTH_SHORT_RU[range.start.getMonth()]}`;
+  if (period === 'week') return `${range.start.getDate()}–${range.end.getDate()} ${MONTH_SHORT_RU[range.end.getMonth()]}`;
+  if (period === 'year') return `${range.start.getFullYear()}`;
+  return `${MONTH_SHORT_RU[range.start.getMonth()]} ${range.start.getFullYear()}`;
+}
+
 function renderDashboardMetricsGrid() {
   const grid = document.getElementById('dashboardMetricsGrid');
   if (!grid) return;
@@ -396,10 +482,15 @@ function renderDashboardMetricsGrid() {
   const colGap = 40; // суммарные боковые паддинги одной колонки (20px + 20px)
   const colWidth = Math.max(80, Math.round(gridWidth / Math.max(1, metrics.length) - colGap));
 
+  // Контекст по каждой колонке (точки графика, подписи корзин) — нужен после вставки
+  // innerHTML, чтобы навесить обработчики наведения мышью без пере-парсинга разметки.
+  const colContexts = [];
+
   grid.innerHTML = metrics.map((m, idx) => {
     const info = DASHBOARD_METRIC_TYPES[m.type] || DASHBOARD_METRIC_TYPES.hours;
     const color = colors[idx % colors.length];
     const series = getMetricSeriesForPeriod(info.activityField, dashboardMetricsPeriod, info.cumulative);
+    const ranges = getPeriodBucketRanges(dashboardMetricsPeriod);
     const curVal = series[series.length - 1];
     const avgVal = series.reduce((s,v)=>s+v,0) / series.length;
     // Для накопительных показателей цель — это абсолютное число (напр. "10 презентаций
@@ -427,9 +518,11 @@ function renderDashboardMetricsGrid() {
     const isFirst = idx === 0, isLast = idx === metrics.length - 1;
     const padStyle = (isFirst ? 'padding-right:20px;' : isLast ? 'padding-left:20px;' : 'padding:0 20px;') + (!isFirst ? 'border-left:1px solid var(--border);' : '');
 
+    colContexts.push({ pts, series, ranges, info, color, w, chartBottom });
+
     return `
       <div class="dm-col" style="${padStyle}">
-        <svg width="100%" height="80" viewBox="0 0 ${w} 80">
+        <svg width="100%" height="80" viewBox="0 0 ${w} 80" style="overflow:visible;">
           <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="${color}" stop-opacity="0.26"/>
             <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
@@ -442,6 +535,13 @@ function renderDashboardMetricsGrid() {
             <rect x="${bubbleX}" y="2" width="${bubbleW}" height="22" rx="11" fill="${color}"/>
             <text x="${bubbleX + bubbleW/2}" y="16.5" text-anchor="middle" font-size="11" fill="#17190A" font-weight="700" font-family="'Space Grotesk', sans-serif">${escapeHtml(bubbleText)}</text>
           </g>
+          <g class="dm-hover" style="display:none;">
+            <line class="dm-hover-line" x1="0" y1="0" x2="0" y2="${chartBottom}" stroke="var(--text-faint)" stroke-width="1" stroke-dasharray="2,3"/>
+            <circle class="dm-hover-dot" cx="0" cy="0" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="1.5"/>
+            <rect class="dm-hover-bubble-rect" x="0" y="2" width="50" height="22" rx="11" fill="var(--text)"/>
+            <text class="dm-hover-bubble-text" x="0" y="16.5" text-anchor="middle" font-size="11" fill="var(--surface)" font-weight="700" font-family="'Space Grotesk', sans-serif"></text>
+          </g>
+          <rect class="dm-hover-capture" x="0" y="0" width="${w}" height="80" fill="transparent" style="cursor:crosshair;"/>
         </svg>
         <div style="color:var(--text-faint); font-size:13px; margin-top:6px;">${escapeHtml(info.label)}</div>
         <div class="num-font" style="color:var(--text); font-size:26px; font-weight:600; margin-top:2px;">${escapeHtml(formatMetricValue(info, curVal))}</div>
@@ -457,6 +557,53 @@ function renderDashboardMetricsGrid() {
 
   const periodSelect = document.getElementById('dashboardMetricsPeriodSelect');
   if (periodSelect) { periodSelect.value = dashboardMetricsPeriod; adjustSelectWidth(periodSelect); }
+
+  grid.querySelectorAll('.dm-col svg').forEach((svg, idx) => attachMetricChartHover(svg, colContexts[idx]));
+}
+
+// Наведение мышью на график "Активности" — двигает точку/бабл по ближайшей корзине
+// под курсором вместо статичного значения последней точки (которое остаётся, пока
+// мышь не над графиком). Работает одинаково для дня/недели/месяца/года — просто
+// корзины и подписи разного масштаба (см. getPeriodBucketRanges).
+function attachMetricChartHover(svg, ctx) {
+  if (!ctx) return;
+  const { pts, series, ranges, info, color, w, chartBottom } = ctx;
+  const staticTooltip = svg.querySelector('.dm-tooltip');
+  const hoverGroup = svg.querySelector('.dm-hover');
+  const hoverLine = svg.querySelector('.dm-hover-line');
+  const hoverDot = svg.querySelector('.dm-hover-dot');
+  const hoverRect = svg.querySelector('.dm-hover-bubble-rect');
+  const hoverText = svg.querySelector('.dm-hover-bubble-text');
+  const capture = svg.querySelector('.dm-hover-capture');
+  if (!capture) return;
+
+  function showAt(i) {
+    const p = pts[i];
+    const text = `${formatMetricValue(info, series[i])} · ${formatBucketLabel(ranges[i], dashboardMetricsPeriod)}`;
+    const bw = Math.max(60, text.length * 6.2 + 20);
+    const bx = Math.min(Math.max(p.x - bw / 2, 0), w - bw);
+    hoverLine.setAttribute('x1', p.x); hoverLine.setAttribute('x2', p.x); hoverLine.setAttribute('y2', chartBottom);
+    hoverDot.setAttribute('cx', p.x); hoverDot.setAttribute('cy', p.y);
+    hoverRect.setAttribute('x', bx); hoverRect.setAttribute('width', bw);
+    hoverText.setAttribute('x', bx + bw / 2);
+    hoverText.textContent = text;
+    hoverGroup.style.display = '';
+    staticTooltip.style.display = 'none';
+  }
+  function hide() {
+    hoverGroup.style.display = 'none';
+    staticTooltip.style.display = '';
+  }
+
+  capture.addEventListener('mousemove', (e) => {
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    const mx = (e.clientX - rect.left) * (w / rect.width);
+    let nearest = 0, minDist = Infinity;
+    pts.forEach((p, i) => { const d = Math.abs(p.x - mx); if (d < minDist) { minDist = d; nearest = i; } });
+    showAt(nearest);
+  });
+  capture.addEventListener('mouseleave', hide);
 }
 
 let _dmResizeTimer = null;

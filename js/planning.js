@@ -2,6 +2,16 @@
  * planning.js — Планирование уроков: доски классов, модалка урока, чек-листы
  * ============================================================ */
 
+// Урок с полностью зелёным цветом (100% чек-листа или заказ "Завершён") по умолчанию
+// прячется из сетки доски — не в архиве, а сам заказ/урок закрыт и не требует внимания.
+// Не персистится — сбрасывается при перезагрузке, как и разворот архива классов.
+let planningCompletedExpanded = {};
+
+function toggleBoardCompletedExpanded(boardId) {
+  planningCompletedExpanded[boardId] = !planningCompletedExpanded[boardId];
+  renderPlanning();
+}
+
 // Список уроков для явной привязки заказа (см. syncPlanningWithOrders в db.js) —
 // надёжнее нечёткого совпадения по тексту (предмет/класс/четверть/номер), которое
 // молча ломается при малейшем расхождении в написании.
@@ -106,6 +116,9 @@ function renderPlanningBoardCard(board, bIdx) {
     </div>
   `;
 
+  const showCompleted = !!planningCompletedExpanded[board.id];
+  let hiddenCompletedCount = 0;
+
   const cellsHtml = lessons.map((lesson, lIdx) => {
     const items = lesson.items || [];
     const totalInL = items.length;
@@ -131,20 +144,35 @@ function renderPlanningBoardCard(board, bIdx) {
       }
     }
 
+    // Полностью выполненный урок (заказ завершён или закрыт весь чек-лист) — по умолчанию
+    // скрываем из сетки, чтобы не мешал текущей работе. Показывается по кнопке ниже.
+    if (colorClass === 'green-3' && !showCompleted) {
+      hiddenCompletedCount++;
+      return '';
+    }
+
     const cellKey = `${bIdx}_${lIdx}`;
     const isPendingDel = cellPendingDeleteKey === cellKey;
     const displayNum = lesson.num ?? (lIdx + 1);
 
     return `
-      <div class="plan-cell ${colorClass}" 
+      <div class="plan-cell ${colorClass}"
            onmouseenter="showPlanCellTooltip(event, '${escapeHtml(lesson.title || ('Урок ' + displayNum))}')"
            onmouseleave="hidePlanCellTooltip()"
-           onclick="handleCellClick(event, ${bIdx}, ${lIdx})" 
+           onclick="handleCellClick(event, ${bIdx}, ${lIdx})"
            oncontextmenu="handleCellContextMenu(event, ${bIdx}, ${lIdx})">
         ${isPendingDel ? `<div class="plan-cell-del-overlay" onclick="confirmCellDelete(event, ${bIdx}, ${lIdx})">✕</div>` : displayNum}
       </div>
     `;
   }).join('');
+
+  const hiddenCompletedToggleHtml = hiddenCompletedCount > 0 ? `
+    <div class="btn secondary small" style="display:inline-flex; margin-top:8px; cursor:pointer;" onclick="toggleBoardCompletedExpanded('${board.id}')">
+      ${showCompleted ? 'Скрыть выполненные ▲' : `Показать выполненные (${hiddenCompletedCount}) ▼`}
+    </div>
+  ` : (showCompleted ? `
+    <div class="btn secondary small" style="display:inline-flex; margin-top:8px; cursor:pointer;" onclick="toggleBoardCompletedExpanded('${board.id}')">Скрыть выполненные ▲</div>
+  ` : '');
 
   const subjectOptsHtml = (appSettings.subjects || []).map(s =>
     `<option value="${escapeHtml(s)}" ${board.subject === s ? 'selected' : ''}>${escapeHtml(s)}</option>`
@@ -207,6 +235,7 @@ function renderPlanningBoardCard(board, bIdx) {
           <div class="plan-cells-grid">
             ${cellsHtml}
           </div>
+          ${hiddenCompletedToggleHtml}
         </div>
       </div>
     </div>
@@ -659,15 +688,27 @@ function updateColorReasonHint() {
   }
 
   const order = findGoverningOrder(board, lesson);
+  const goToOrderBtn = document.getElementById('lmGoToOrderBtn');
   if (order) {
     const orderTitle = order.title || [order.subject, order.grade, order.quarter, order.lesson ? 'Урок ' + order.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
     hint.textContent = `Цвет по статусу заказа «${orderTitle}» — ${statusLabels[order.status] || order.status}.`;
+    if (goToOrderBtn) { goToOrderBtn.style.display = 'inline-flex'; goToOrderBtn.dataset.orderId = order.id; }
   } else {
     const items = lesson.items || [];
     const done = items.filter(i => i.done).length;
     const pct = items.length ? Math.round((done / items.length) * 100) : 0;
     hint.textContent = `Цвет по чек-листу: ${done} из ${items.length} (${pct}%).`;
+    if (goToOrderBtn) goToOrderBtn.style.display = 'none';
   }
+}
+
+// Переход из карточки урока сразу к связанной карточке заказа (аналогично переходу из Финансов)
+function goToOrderFromLesson() {
+  const btn = document.getElementById('lmGoToOrderBtn');
+  const orderId = btn && btn.dataset.orderId;
+  if (!orderId) return;
+  closeLessonModal();
+  goToOrderCard(orderId);
 }
 
 // Снимает принудительный (вручную выбранный) цвет ячейки — дальше он снова считается
@@ -777,12 +818,38 @@ function renderLessonChecklist() {
   }
 }
 
+// Позицию, добавленную в состав урока, зеркалим и в связанный заказ (если он уже
+// есть) — отдельной строкой с тем же названием. Без этого пункт чек-листа урока
+// существовал бы только "на бумаге", не попадая ни в состав заказа, ни в статистику.
+function syncNewLessonItemToOrder(board, lesson, text) {
+  const order = findGoverningOrder(board, lesson);
+  if (!order) return;
+  const already = (order.lines || []).some(l => (l.label || l.type || 'Работа').toLowerCase() === text.toLowerCase());
+  if (already) return;
+  const before = JSON.parse(JSON.stringify(order));
+  if (!order.lines) order.lines = [];
+  order.lines.push({
+    id: 'l' + Date.now() + Math.random().toString(36).substr(2, 5),
+    label: text,
+    type: (appSettings.units && appSettings.units[0]) || 'Слайд',
+    qty: 1,
+    pomoHours: 0,
+    rate: 0,
+    ignorePrice: false,
+    ready: false
+  });
+  recordActivityChanges(before, order);
+}
+
 // Клик по варианту из справочника — сразу добавляет позицию в состав урока (не просто заполняет поле)
 function pickLessonItemFromCatalog(value) {
   const { bIdx, lIdx } = activeLessonState;
   if (bIdx !== null && lIdx !== null && planningBoards[bIdx]) {
-    if (!planningBoards[bIdx].lessons[lIdx].items) planningBoards[bIdx].lessons[lIdx].items = [];
-    planningBoards[bIdx].lessons[lIdx].items.push({ id: 'i_' + Date.now(), text: value, done: false });
+    const board = planningBoards[bIdx];
+    const lesson = board.lessons[lIdx];
+    if (!lesson.items) lesson.items = [];
+    lesson.items.push({ id: 'i_' + Date.now(), text: value, done: false });
+    syncNewLessonItemToOrder(board, lesson, value);
     saveData();
     closeAllCombos();
     const input = document.getElementById('lmNewItemInput');
@@ -797,12 +864,15 @@ function handleLessonAddItem(e) {
     if (!val) return;
     const { bIdx, lIdx } = activeLessonState;
     if (bIdx !== null && lIdx !== null && planningBoards[bIdx]) {
-      if (!planningBoards[bIdx].lessons[lIdx].items) planningBoards[bIdx].lessons[lIdx].items = [];
-      planningBoards[bIdx].lessons[lIdx].items.push({
+      const board = planningBoards[bIdx];
+      const lesson = board.lessons[lIdx];
+      if (!lesson.items) lesson.items = [];
+      lesson.items.push({
         id: 'i_' + Date.now(),
         text: val,
         done: false
       });
+      syncNewLessonItemToOrder(board, lesson, val);
       e.target.value = '';
       saveData();
       renderLessonChecklist();

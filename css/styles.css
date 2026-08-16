@@ -532,6 +532,13 @@
     color: #fff;
     font-weight: 700;
   }
+  .adc-day.clickable {
+    cursor: pointer;
+  }
+  .adc-day.clickable:hover {
+    outline: 2px solid var(--green);
+    outline-offset: 1px;
+  }
 
   .adc-summary {
     display: flex;

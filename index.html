@@ -765,7 +765,13 @@
       <button class="color-pill-btn green" id="cpBtnGreen" onclick="setLessonColor('green-3')">Готово</button>
       <button class="color-pill-btn red" id="cpBtnRed" onclick="setLessonColor('red')">Срочно</button>
     </div>
-    <div id="lmColorReasonHint" style="font-size:11px; color:var(--text-faint); margin-top:6px; margin-bottom:2px;"></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; margin-bottom:2px;">
+      <div id="lmColorReasonHint" style="font-size:11px; color:var(--text-faint);"></div>
+      <button type="button" id="lmGoToOrderBtn" onclick="goToOrderFromLesson()"
+        style="display:none; flex-shrink:0; align-items:center; gap:4px; background:none; border:none; padding:0; font-size:11px; font-weight:700; color:var(--feature-blue); cursor:pointer; white-space:nowrap;">
+        Перейти к заказу →
+      </button>
+    </div>
 
     <!-- Настройка точечного номера урока -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; background:var(--subcard); padding:8px 12px; border-radius:var(--radius-pill); border:1px solid var(--border);">
