@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.14.7';
+const APP_VERSION = '1.14.8';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -71,11 +71,14 @@ let appSettings = {
 
 // Реестр доступных типов показателей для графика "Активность" — источник значения и подпись.
 // Цвета назначаются по порядку (позиции), а не хранятся тут — задавать их вручную нельзя специально.
+// cumulative: true — показывать не "сколько добавлено за период" (как часы/слайды),
+// а бегущий итог "сколько таких позиций сейчас существует в системе" (по факту записи,
+// не завязано на статус заказа или чекбокс "Готов" — они и так не участвуют в подсчёте).
 const DASHBOARD_METRIC_TYPES = {
   hours:         { label: 'Часы',            unit: 'ч',   activityField: 'hours' },
-  presentations: { label: 'Презентации',     unit: 'шт.', activityField: 'presentations' },
+  presentations: { label: 'Презентации',     unit: 'шт.', activityField: 'presentations', cumulative: true },
   slides:        { label: 'Слайды',          unit: 'шт.', activityField: 'slides' },
-  worksheets:    { label: 'Рабочие листы',   unit: 'шт.', activityField: 'worksheets' },
+  worksheets:    { label: 'Рабочие листы',   unit: 'шт.', activityField: 'worksheets', cumulative: true },
   revenue:       { label: 'Выручка',         unit: '₽',   activityField: 'revenue' },
   netIncome:     { label: 'Чистый доход',    unit: '₽',   activityField: 'netRevenue' }
 };

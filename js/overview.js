@@ -341,11 +341,21 @@ function addPeriod(d, period, n) {
 }
 
 // Возвращает массив сумм показателя по "корзинам" выбранного периода — последняя корзина текущая (сегодня/эта неделя/этот месяц/этот год)
-function getMetricSeriesForPeriod(activityField, period) {
+function getMetricSeriesForPeriod(activityField, period, cumulative) {
   const counts = { day: 14, week: 10, month: 8, year: 5 };
   const N = counts[period] || 14;
   const curStart = getPeriodStart(new Date(), period);
   const buckets = [];
+  // Для "накопительных" показателей (кол-во позиций, реально существующих в системе)
+  // бегущий итог должен стартовать не с нуля, а с суммы всех записей ДО первой корзины.
+  let runningTotal = 0;
+  if (cumulative) {
+    const firstBucketStart = addPeriod(curStart, period, -(N - 1));
+    const beforeStr = dateKey(firstBucketStart);
+    runningTotal = activityLog
+      .filter(e => e.field === activityField && e.date < beforeStr)
+      .reduce((s, e) => s + e.delta, 0);
+  }
   for (let i = N - 1; i >= 0; i--) {
     const bStart = addPeriod(curStart, period, -i);
     const bEndInclusive = addDays(addPeriod(bStart, period, 1), -1);
@@ -353,7 +363,12 @@ function getMetricSeriesForPeriod(activityField, period) {
     const sum = activityLog
       .filter(e => e.field === activityField && e.date >= startStr && e.date <= endStr)
       .reduce((s, e) => s + e.delta, 0);
-    buckets.push(Math.max(0, sum));
+    if (cumulative) {
+      runningTotal += sum;
+      buckets.push(Math.max(0, runningTotal));
+    } else {
+      buckets.push(Math.max(0, sum));
+    }
   }
   return buckets;
 }
@@ -384,10 +399,12 @@ function renderDashboardMetricsGrid() {
   grid.innerHTML = metrics.map((m, idx) => {
     const info = DASHBOARD_METRIC_TYPES[m.type] || DASHBOARD_METRIC_TYPES.hours;
     const color = colors[idx % colors.length];
-    const series = getMetricSeriesForPeriod(info.activityField, dashboardMetricsPeriod);
+    const series = getMetricSeriesForPeriod(info.activityField, dashboardMetricsPeriod, info.cumulative);
     const curVal = series[series.length - 1];
     const avgVal = series.reduce((s,v)=>s+v,0) / series.length;
-    const goalVal = (m.goal || 0) * goalMultiplier;
+    // Для накопительных показателей цель — это абсолютное число (напр. "10 презентаций
+    // всего"), а не дневная норма, поэтому множитель периода к ней не применяется.
+    const goalVal = (m.goal || 0) * (info.cumulative ? 1 : goalMultiplier);
 
     // Геометрия: верхняя зона (0–24) под плашку-подсказку, график — ниже (28–74).
     // Нижний отступ (74, не 80) — чтобы обводка линии и точка на нулевой отметке не обрезались краем SVG.
