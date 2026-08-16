@@ -42,9 +42,21 @@ function toggleTimelineExpand(id, event) {
   renderTimeline();
 }
 
+let tlHideDone = false;
+function toggleTlHideDone() {
+  tlHideDone = !tlHideDone;
+  renderTimeline();
+}
+
 function renderTimeline(){
   const days = getTlDays();
   const container = document.getElementById('tlContainerMain');
+
+  const hideDoneBtn = document.getElementById('tlHideDoneBtn');
+  if (hideDoneBtn) {
+    hideDoneBtn.textContent = tlHideDone ? 'Показать завершённые' : 'Скрыть завершённые';
+    hideDoneBtn.classList.toggle('active', tlHideDone);
+  }
 
   document.getElementById('tlRangeLabel').textContent = `${days[0].getDate()} ${days[0].toLocaleString('ru',{month:'short'})} — ${days[days.length-1].getDate()} ${days[days.length-1].toLocaleString('ru',{month:'short'})}`;
 
@@ -75,7 +87,7 @@ function renderTimelineSubBoard(subDays, fixedColWidth) {
     `;
   }).join('') + `</div>`;
 
-  const activeOrders = orders.filter(o=>o.status!=='cancelled' && o.start && o.deadline);
+  const activeOrders = orders.filter(o=>o.status!=='cancelled' && (!tlHideDone || o.status!=='done') && o.start && o.deadline);
   activeOrders.sort((a,b) => {
     // Базовая хронология — по дате начала (приоритет здесь не участвует,
     // он применяется отдельным шагом ниже, только среди пересекающихся по датам заказов).

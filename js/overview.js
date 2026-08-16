@@ -309,31 +309,24 @@ function renderActiveDaysCalendar(monthValue) {
     return `<div class="${cls.join(' ')}" ${clickAttr}>${c.num}</div>`;
   }).join('');
 
-  // Сводка по месяцу — по всем показателям, не только по часам, чтобы можно было
-  // посмотреть прошлые периоды не переключаясь в другой раздел.
+  // Сводка по месяцу — как и раньше, коротко: активных дней + часов. Разбивку по
+  // остальным показателям смотрим по клику на конкретный день (см. showActiveDayDetail).
   const monthPrefix = `${year}-${String(month+1).padStart(2,'0')}-`;
-  const monthEntries = activityLog.filter(e => e.date.startsWith(monthPrefix));
-  const activeDaysInMonth = new Set(monthEntries.map(e => e.date)).size;
-  const sumField = (field) => monthEntries.filter(e => e.field === field).reduce((s,e)=>s+e.delta, 0);
-  const monthSummaryItems = [
-    { num: activeDaysInMonth, lbl: 'активных дней' },
-    { num: fmtHours(sumField('hours')), lbl: 'часов' },
-    { num: Math.round(sumField('slides')) + ' шт.', lbl: 'слайдов' },
-    { num: Math.round(sumField('presentations')) + ' шт.', lbl: 'презентаций добавлено' },
-    { num: Math.round(sumField('worksheets')) + ' шт.', lbl: 'раб. листов добавлено' },
-    { num: fmtMoney(sumField('netRevenue')), lbl: 'чистого дохода' }
-  ];
+  const activeDaysInMonth = new Set(activityLog.filter(e => e.date.startsWith(monthPrefix)).map(e => e.date)).size;
+  const hoursInMonth = activityLog.filter(e => e.field === 'hours' && e.date.startsWith(monthPrefix)).reduce((s,e)=>s+e.delta, 0);
 
   grid.innerHTML = `
     <div class="adc-weekdays">${weekdaysHtml}</div>
     <div class="adc-days-grid">${daysHtml}</div>
     <div class="adc-summary">
-      ${monthSummaryItems.map(it => `
-        <div class="adc-summary-item">
-          <span class="adc-summary-num">${it.num}</span>
-          <span class="adc-summary-lbl">${it.lbl}</span>
-        </div>
-      `).join('')}
+      <div class="adc-summary-item">
+        <span class="adc-summary-num">${activeDaysInMonth}</span>
+        <span class="adc-summary-lbl">активных дней</span>
+      </div>
+      <div class="adc-summary-item">
+        <span class="adc-summary-num">${fmtHours(hoursInMonth)}</span>
+        <span class="adc-summary-lbl">за месяц</span>
+      </div>
     </div>
     <div id="adcDayDetail"></div>
   `;
