@@ -14,14 +14,14 @@ function normalizeOrder(o){
     estimatedHours: o.estimatedHours ?? '', actualHours: o.actualHours ?? '',
     lines: (o.lines && o.lines.length) ? o.lines.map(l => ({
       id: l.id || ('l'+Math.random().toString(36).substr(2,9)),
-      label: l.label || (appSettings.types[0] || 'Презентация'),
-      type: l.type || (appSettings.units && appSettings.units[0]) || 'Слайд',
+      label: l.label || (getVisibleCatalog('types')[0] || 'Презентация'),
+      type: l.type || getVisibleCatalog('units')[0] || 'Слайд',
       qty: l.qty ?? 1,
       pomoHours: l.pomoHours ?? 0,
       rate: l.rate ?? 0,
       ignorePrice: !!l.ignorePrice,
       ready: !!l.ready
-    })) : [{id:'l0',label: appSettings.types[0] || 'Презентация',type:(appSettings.units && appSettings.units[0]) || 'Слайд',qty:10,pomoHours:0,rate:500,ignorePrice:false,ready:false}],
+    })) : [{id:'l0',label: getVisibleCatalog('types')[0] || 'Презентация',type:getVisibleCatalog('units')[0] || 'Слайд',qty:10,pomoHours:0,rate:500,ignorePrice:false,ready:false}],
     notes:o.notes||'', createdAt:o.createdAt||Date.now(),
     linkedLessonId: o.linkedLessonId || null
   };
@@ -101,12 +101,27 @@ function loadData(){
       if(!appSettings.units) appSettings.units = ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'];
       if(!appSettings.dashboardMetrics) appSettings.dashboardMetrics = [
         { id: 'dm1', type: 'hours', goal: 4 },
-        { id: 'dm2', type: 'slides', goal: 15 },
-        { id: 'dm3', type: 'netIncome', goal: 4000 },
-        { id: 'dm4', type: 'presentations', goal: 0 }
+        { id: 'dm2', type: 'presentations', goal: 0 },
+        { id: 'dm3', type: 'worksheets', goal: 0 },
+        { id: 'dm4', type: 'revenue', goal: 4000 }
       ];
       if(!appSettings.subjects) appSettings.subjects = ['Математика', 'Русский язык', 'Литература', 'Дизайн'];
       if(!appSettings.classes) appSettings.classes = ['5 класс', '6 класс', '7 класс', 'Без класса'];
+      if(!appSettings.hiddenEntries) appSettings.hiddenEntries = { clients: [], types: [], units: [], subjects: [], classes: [] };
+      ['clients','types','units','subjects','classes'].forEach(k => { if (!appSettings.hiddenEntries[k]) appSettings.hiddenEntries[k] = []; });
+
+      // Миграция: "Слайды" и "Чистый доход" стали доп. показателями внутри "Презентации"
+      // и "Доход" (двойные графики) — старые отдельные плитки таких типов больше не существуют
+      // как самостоятельный выбор, переносим их на объединяющую метрику (без дублей).
+      const metricRemap = { slides: 'presentations', netIncome: 'revenue' };
+      const seenMetricTypes = new Set();
+      appSettings.dashboardMetrics = appSettings.dashboardMetrics
+        .map(m => metricRemap[m.type] ? { ...m, type: metricRemap[m.type] } : m)
+        .filter(m => {
+          if (seenMetricTypes.has(m.type)) return false;
+          seenMetricTypes.add(m.type);
+          return true;
+        });
     }
     
     const raw = localStorage.getItem(STORAGE_KEY);

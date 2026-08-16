@@ -597,9 +597,9 @@ function renderComboField(inputId, value, placeholder, options, onInputExtra){
 function renderLines(){
   document.getElementById('linesBody').innerHTML = currentLines.map(l=>`
     <div class="line-row" data-id="${l.id}">
-      ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', appSettings.types, `updateLineDirect('${l.id}','label',this.value);`)}
+      ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateLineDirect('${l.id}','label',this.value);`)}
 
-      ${renderComboField(`lineUnit-${l.id}`, l.type, 'Ед. изм...', appSettings.units, `updateLineDirect('${l.id}','type',this.value); updateLinesCalcUI('${l.id}');`)}
+      ${renderComboField(`lineUnit-${l.id}`, l.type, 'Ед. изм...', catalogWithCurrent('units', l.type), `updateLineDirect('${l.id}','type',this.value); updateLinesCalcUI('${l.id}');`)}
 
       <input type="text" inputmode="decimal" value="${l.qty}" placeholder="1" oninput="updateLineDirect('${l.id}','qty',this.value); updateLinesCalcUI('${l.id}');">
       
@@ -657,7 +657,7 @@ function updateLinesTotalSum() {
 }
 
 function addLine(){
-  currentLines.push({id:'l'+Date.now(), label: appSettings.types[0] || 'Презентация', type:(appSettings.units&&appSettings.units[0])||'Слайд', qty:1, pomoHours:0, rate:0, ignorePrice:false, ready:false});
+  currentLines.push({id:'l'+Date.now(), label: getVisibleCatalog('types')[0] || 'Презентация', type: getVisibleCatalog('units')[0] || 'Слайд', qty:1, pomoHours:0, rate:0, ignorePrice:false, ready:false});
   renderLines();
 }
 function removeLine(id){ currentLines = currentLines.filter(l=>l.id!==id); renderLines(); }
@@ -693,7 +693,7 @@ document.getElementById('btnAdd').addEventListener('click', ()=>{
   document.getElementById('f_taxType').value = 'none';
   document.getElementById('f_advanceUsed').value = '';
   document.getElementById('f_quarter').value = '';
-  currentLines = [{id:'l0', label: appSettings.types[0] || 'Презентация', type:(appSettings.units&&appSettings.units[0])||'Слайд', qty:10, pomoHours:0, rate:500, ignorePrice:false, ready:false}];
+  currentLines = [{id:'l0', label: getVisibleCatalog('types')[0] || 'Презентация', type: getVisibleCatalog('units')[0] || 'Слайд', qty:10, pomoHours:0, rate:500, ignorePrice:false, ready:false}];
   renderLines();
   openModal(false);
   populateLinkedLessonSelect('');

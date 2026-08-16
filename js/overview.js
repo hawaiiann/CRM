@@ -92,7 +92,7 @@ function renderOverview(){
   const now = new Date();
   
   const typeStats = {};
-  (appSettings.types || []).forEach(t => {
+  getVisibleCatalog('types').forEach(t => {
     typeStats[t] = { itemsCount: 0, totalUnits: 0 };
   });
 
@@ -265,6 +265,7 @@ function populateActiveDaysMonthSelect() {
 function renderActiveDaysCalendar(monthValue) {
   const grid = document.getElementById('activeDaysGrid');
   if (!grid) return;
+  adcOpenDayDetail = null; // сетка перерисовывается с нуля — открытая деталь всё равно исчезает
   const sel = document.getElementById('activeDaysMonthSelect');
   const val = monthValue || (sel ? sel.value : `${new Date().getFullYear()}-${new Date().getMonth()}`);
   const [yearStr, monthStr] = val.split('-');
@@ -334,21 +335,35 @@ function renderActiveDaysCalendar(monthValue) {
 
 // Клик по активному дню в календаре — показывает разбивку записей активности
 // именно за этот день (по факту записи в журнале, а не пересчитанные заново).
+let adcOpenDayDetail = null;
+
 function showActiveDayDetail(dateStr) {
-  const dayEntries = activityLog.filter(e => e.date === dateStr);
   const detailEl = document.getElementById('adcDayDetail');
   if (!detailEl) return;
+
+  // Повторный клик по уже открытой дате — закрывает панель, а не перерисовывает её же
+  if (adcOpenDayDetail === dateStr) {
+    adcOpenDayDetail = null;
+    detailEl.innerHTML = '';
+    return;
+  }
+  adcOpenDayDetail = dateStr;
+
+  const dayEntries = activityLog.filter(e => e.date === dateStr);
   if (!dayEntries.length) { detailEl.innerHTML = ''; return; }
 
   const byField = {};
   dayEntries.forEach(e => { byField[e.field] = (byField[e.field] || 0) + e.delta; });
 
   const fieldOrder = ['hours', 'slides', 'pages', 'presentations', 'worksheets', 'revenue', 'netRevenue'];
-  const fieldLabels = { hours: 'Часы', slides: 'Слайды', pages: 'Страницы', presentations: 'Презентации', worksheets: 'Рабочие листы', revenue: 'Выручка', netRevenue: 'Чистый доход' };
+  const fieldMeta = {
+    hours: { label: 'Часы', unit: 'ч' }, slides: { label: 'Слайды', unit: 'шт.' }, pages: { label: 'Страницы', unit: 'шт.' },
+    presentations: { label: 'Презентации', unit: 'шт.' }, worksheets: { label: 'Рабочие листы', unit: 'шт.' },
+    revenue: { label: 'Выручка', unit: '₽' }, netRevenue: { label: 'Чистый доход', unit: '₽' }
+  };
   const rowsHtml = fieldOrder.filter(f => byField[f]).map(f => {
-    const info = Object.values(DASHBOARD_METRIC_TYPES).find(i => i.activityField === f) || { unit: '' };
-    const valText = f === 'hours' ? fmtHours(byField[f]) : (info.unit === '₽' ? fmtMoney(byField[f]) : Math.round(byField[f] * 100) / 100 + ' ' + (info.unit || ''));
-    return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span style="color:var(--text-faint);">${fieldLabels[f] || f}</span><b style="color:var(--text);">${valText}</b></div>`;
+    const valText = formatMetricValue(fieldMeta[f], byField[f]);
+    return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span style="color:var(--text-faint);">${fieldMeta[f].label}</span><b style="color:var(--text);">${valText}</b></div>`;
   }).join('');
 
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -358,7 +373,7 @@ function showActiveDayDetail(dateStr) {
     <div style="margin-top:12px; padding:12px 14px; background:var(--subcard); border-radius:12px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
         <b style="font-size:12.5px;">${dateLabel}</b>
-        <span style="font-size:11px; color:var(--text-faint); cursor:pointer;" onclick="document.getElementById('adcDayDetail').innerHTML=''">Закрыть ✕</span>
+        <span style="font-size:11px; color:var(--text-faint); cursor:pointer;" onclick="adcOpenDayDetail=null; document.getElementById('adcDayDetail').innerHTML=''">Закрыть ✕</span>
       </div>
       ${rowsHtml || '<div style="font-size:12px; color:var(--text-faint);">Нет записей</div>'}
     </div>
@@ -435,6 +450,14 @@ function formatMetricValue(info, value) {
   return Math.round(v) + ' ' + info.unit;
 }
 
+// Доп. показатель ("двойной" график) подписывается словом, а не единицей — "106 слайдов",
+// а не "106 шт. слайдов": слово само по себе уже понятная единица измерения.
+function formatSecondaryValue(sec, value) {
+  const v = Math.round(value * 100) / 100;
+  if (sec.unit === '₽') return fmtMoney(v) + ' ' + sec.label;
+  return Math.round(v) + ' ' + sec.label;
+}
+
 // Границы (даты начала/конца) тех же "корзин", что строит getMetricSeriesForPeriod —
 // нужны только для подписи в тултипе при наведении на график, не для самих сумм.
 function getPeriodBucketRanges(period) {
@@ -490,6 +513,12 @@ function renderDashboardMetricsGrid() {
     // всего"), а не дневная норма, поэтому множитель периода к ней не применяется.
     const goalVal = (m.goal || 0) * (info.cumulative ? 1 : goalMultiplier);
 
+    // Показатель "двойного назначения" — доп. серия рисуется вторым, более бледным графиком
+    // (своя, независимая от основной, вертикальная шкала — иначе при разных порядках величин
+    // один из графиков выглядел бы плоской линией) и вторым числом рядом с основным.
+    const secSeries = info.secondary ? getMetricSeriesForPeriod(info.secondary.activityField, dashboardMetricsPeriod, info.secondary.cumulative) : null;
+    const secCurVal = secSeries ? secSeries[secSeries.length - 1] : null;
+
     // Геометрия: верхняя зона (0–24) под плашку-подсказку, график — ниже (28–74).
     // Нижний отступ (74, не 80) — чтобы обводка линии и точка на нулевой отметке не обрезались краем SVG.
     const w = colWidth, chartTop = 28, chartBottom = 74;
@@ -503,6 +532,19 @@ function renderDashboardMetricsGrid() {
     }
     const areaPath = `${path} L${w} ${chartBottom} L0 ${chartBottom} Z`;
     const lastPt = pts[pts.length-1];
+
+    let secPts = null, secPath = '';
+    if (secSeries) {
+      const maxSec = Math.max(...secSeries, 1);
+      secPts = secSeries.map((v, i) => ({ x: (i/(secSeries.length-1)) * w, y: chartBottom - (v/maxSec) * (chartBottom-chartTop-8) }));
+      secPath = `M${secPts[0].x} ${secPts[0].y}`;
+      for (let i = 1; i < secPts.length; i++) {
+        const prev = secPts[i-1], cur = secPts[i];
+        const midX = (prev.x + cur.x) / 2;
+        secPath += ` C ${midX} ${prev.y}, ${midX} ${cur.y}, ${cur.x} ${cur.y}`;
+      }
+    }
+
     const bubbleText = formatMetricValue(info, curVal);
     const bubbleW = Math.max(50, bubbleText.length * 7 + 20);
     const bubbleX = Math.min(Math.max(lastPt.x - bubbleW/2, 0), w - bubbleW);
@@ -511,7 +553,7 @@ function renderDashboardMetricsGrid() {
     const isFirst = idx === 0, isLast = idx === metrics.length - 1;
     const padStyle = (isFirst ? 'padding-right:20px;' : isLast ? 'padding-left:20px;' : 'padding:0 20px;') + (!isFirst ? 'border-left:1px solid var(--border);' : '');
 
-    colContexts.push({ pts, series, ranges, info, color, w, chartBottom });
+    colContexts.push({ pts, series, secSeries, secInfo: info.secondary, ranges, info, color, w, chartBottom });
 
     return `
       <div class="dm-col" style="${padStyle}">
@@ -521,6 +563,7 @@ function renderDashboardMetricsGrid() {
             <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
           </linearGradient></defs>
           <path d="${areaPath}" fill="url(#${gradId})"/>
+          ${secPath ? `<path d="${secPath}" fill="none" stroke="var(--text-faint)" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.75"/>` : ''}
           <path d="${path}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
           <g class="dm-tooltip">
             <line x1="${lastPt.x}" y1="${lastPt.y}" x2="${lastPt.x}" y2="${chartBottom}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3"/>
@@ -537,7 +580,10 @@ function renderDashboardMetricsGrid() {
           <rect class="dm-hover-capture" x="0" y="0" width="${w}" height="80" fill="transparent" style="cursor:crosshair;"/>
         </svg>
         <div style="color:var(--text-faint); font-size:13px; margin-top:6px;">${escapeHtml(info.label)}</div>
-        <div class="num-font" style="color:var(--text); font-size:26px; font-weight:600; margin-top:2px;">${escapeHtml(formatMetricValue(info, curVal))}</div>
+        <div style="display:flex; align-items:baseline; gap:6px; margin-top:2px; flex-wrap:wrap;">
+          <span class="num-font" style="color:${color}; font-size:26px; font-weight:700;">${escapeHtml(formatMetricValue(info, curVal))}</span>
+          ${info.secondary ? `<span class="num-font" style="color:var(--text-faint); font-size:13px; font-weight:600;">· ${escapeHtml(formatSecondaryValue(info.secondary, secCurVal))}</span>` : ''}
+        </div>
         <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-faint); margin-top:14px;">
           <span>Цель</span><span style="color:var(--text-soft);">${escapeHtml(formatMetricValue(info, goalVal))}</span>
         </div>
@@ -560,7 +606,7 @@ function renderDashboardMetricsGrid() {
 // корзины и подписи разного масштаба (см. getPeriodBucketRanges).
 function attachMetricChartHover(svg, ctx) {
   if (!ctx) return;
-  const { pts, series, ranges, info, color, w, chartBottom } = ctx;
+  const { pts, series, secSeries, secInfo, ranges, info, color, w, chartBottom } = ctx;
   const staticTooltip = svg.querySelector('.dm-tooltip');
   const hoverGroup = svg.querySelector('.dm-hover');
   const hoverLine = svg.querySelector('.dm-hover-line');
@@ -572,7 +618,8 @@ function attachMetricChartHover(svg, ctx) {
 
   function showAt(i) {
     const p = pts[i];
-    const text = `${formatMetricValue(info, series[i])} · ${formatBucketLabel(ranges[i], dashboardMetricsPeriod)}`;
+    const secPart = secSeries ? ` · ${formatSecondaryValue(secInfo, secSeries[i])}` : '';
+    const text = `${formatMetricValue(info, series[i])}${secPart} · ${formatBucketLabel(ranges[i], dashboardMetricsPeriod)}`;
     const bw = Math.max(60, text.length * 6.2 + 20);
     const bx = Math.min(Math.max(p.x - bw / 2, 0), w - bw);
     hoverLine.setAttribute('x1', p.x); hoverLine.setAttribute('x2', p.x); hoverLine.setAttribute('y2', chartBottom);

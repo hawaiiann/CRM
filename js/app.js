@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.15.1';
+const APP_VERSION = '1.16.0';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -61,11 +61,12 @@ let appSettings = {
   clients: ['Школа №1', 'Издательство "Просвещение"', 'Частный заказчик'],
   types: ['Презентация', 'Рабочий лист', 'Карточка'],
   units: ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'],
+  hiddenEntries: { clients: [], types: [], units: [], subjects: [], classes: [] },
   dashboardMetrics: [
     { id: 'dm1', type: 'hours', goal: 4 },
-    { id: 'dm2', type: 'slides', goal: 15 },
-    { id: 'dm3', type: 'netIncome', goal: 4000 },
-    { id: 'dm4', type: 'presentations', goal: 0 }
+    { id: 'dm2', type: 'presentations', goal: 0 },
+    { id: 'dm3', type: 'worksheets', goal: 0 },
+    { id: 'dm4', type: 'revenue', goal: 4000 }
   ]
 };
 
@@ -74,13 +75,18 @@ let appSettings = {
 // cumulative: true — показывать не "сколько добавлено за период" (как часы/слайды),
 // а бегущий итог "сколько таких позиций сейчас существует в системе" (по факту записи,
 // не завязано на статус заказа или чекбокс "Готов" — они и так не участвуют в подсчёте).
+// secondary — показатель "двойного назначения": рисуется вторым, более бледным графиком
+// и вторым числом рядом с основным (напр. "6 шт. · 106 слайдов"), без своей цели/настройки.
+// pairLabel — краткая форма для выпадающего списка в Справочниках ("Презентации + слайды"),
+// отдельно от label ("слайдов" — родительный падеж, нужен в числовом контексте "106 слайдов").
 const DASHBOARD_METRIC_TYPES = {
   hours:         { label: 'Часы',            unit: 'ч',   activityField: 'hours' },
-  presentations: { label: 'Презентации',     unit: 'шт.', activityField: 'presentations', cumulative: true },
-  slides:        { label: 'Слайды',          unit: 'шт.', activityField: 'slides' },
-  worksheets:    { label: 'Рабочие листы',   unit: 'шт.', activityField: 'worksheets', cumulative: true },
-  revenue:       { label: 'Выручка',         unit: '₽',   activityField: 'revenue' },
-  netIncome:     { label: 'Чистый доход',    unit: '₽',   activityField: 'netRevenue' }
+  presentations: { label: 'Презентации',     unit: 'шт.', activityField: 'presentations', cumulative: true,
+                    secondary: { label: 'слайдов', pairLabel: 'слайды', unit: 'шт.', activityField: 'slides' } },
+  worksheets:    { label: 'Рабочие листы',   unit: 'шт.', activityField: 'worksheets', cumulative: true,
+                    secondary: { label: 'страниц', pairLabel: 'страницы', unit: 'шт.', activityField: 'pages' } },
+  revenue:       { label: 'Выручка',         unit: '₽',   activityField: 'revenue',
+                    secondary: { label: 'чистыми', pairLabel: 'чистый доход', unit: '₽', activityField: 'netRevenue' } }
 };
 const DASHBOARD_METRIC_COLORS_LIGHT = ['#7CB518', '#F5A623', '#6C63FF', '#E4483F', '#0E9AA7'];
 const DASHBOARD_METRIC_COLORS_DARK  = ['#A8E10C', '#F2B84D', '#8C84FF', '#FF6259', '#3BC9DB'];

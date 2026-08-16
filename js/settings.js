@@ -2,24 +2,34 @@
  * settings.js — Настройки: справочники (клиенты/предметы/классы), автобэкап
  * ============================================================ */
 
+const EYE_OPEN_SVG = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="10" cy="10" r="2.5"/></svg>`;
+const EYE_CLOSED_SVG = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2.5l15 15M6.2 6.5C3.7 8 1 10 1 10s3.5 6 9 6c1.7 0 3.2-.5 4.5-1.2M9 4.1c.3 0 .7 0 1-0 5.5 0 9 6 9 6-.4.7-1.3 2-2.6 3.2M8.2 8.3a2.5 2.5 0 0 0 3.5 3.5" stroke-linecap="round"/></svg>`;
+
 function renderSettings(){
   ['clients','types','units','subjects','classes'].forEach(key=>{
     const el = document.getElementById(`set-${key}`);
     if(!el) return;
-    el.innerHTML = appSettings[key].map((val, idx) => `
-      <div class="settings-row">
+    const hiddenList = (appSettings.hiddenEntries && appSettings.hiddenEntries[key]) || [];
+    el.innerHTML = appSettings[key].map((val, idx) => {
+      const isHidden = hiddenList.includes(val);
+      return `
+      <div class="settings-row" style="${isHidden ? 'opacity:0.5;' : ''}">
         <button class="btn-move" title="Вверх" onclick="moveSetting('${key}', ${idx}, -1)" ${idx===0?'disabled style="opacity:0.3"':''}>
           <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12l-5-5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="btn-move" title="Вниз" onclick="moveSetting('${key}', ${idx}, 1)" ${idx===appSettings[key].length-1?'disabled style="opacity:0.3"':''}>
           <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <input type="text" value="${escapeHtml(val)}" title="${escapeHtml(val)}" oninput="this.title=this.value; updateSettingSilent('${key}', ${idx}, this.value)">
+        <input type="text" value="${escapeHtml(val)}" title="${escapeHtml(val)}" style="${isHidden ? 'text-decoration:line-through;' : ''}" oninput="this.title=this.value; updateSettingSilent('${key}', ${idx}, this.value)">
+        <button class="btn secondary small" style="padding:6px 8px;" title="${isHidden ? 'Показать в списках выбора' : 'Скрыть из списков выбора (без удаления)'}" onclick="toggleSettingHidden('${key}', ${idx})">
+          ${isHidden ? EYE_CLOSED_SVG : EYE_OPEN_SVG}
+        </button>
         <button class="btn danger small" style="padding:6px 8px;" onclick="removeSetting('${key}', ${idx})">
           <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
         </button>
       </div>
-    `).join('');
+    `;
+    }).join('');
   });
 
   document.getElementById('cfg_backupEnabled').value = String(backupSettings.enabled);
@@ -38,7 +48,7 @@ function renderDashboardMetricsSettings() {
     <div class="settings-row" style="gap:10px;">
       <select style="flex:1.4;" onchange="updateDashboardMetricType(${idx}, this.value)">
         ${Object.entries(DASHBOARD_METRIC_TYPES).map(([key, info]) => `
-          <option value="${key}" ${m.type === key ? 'selected' : ''} ${usedTypes.includes(key) && m.type !== key ? 'disabled' : ''}>${info.label}</option>
+          <option value="${key}" ${m.type === key ? 'selected' : ''} ${usedTypes.includes(key) && m.type !== key ? 'disabled' : ''}>${info.label}${info.secondary ? ' + ' + info.secondary.pairLabel : ''}</option>
         `).join('')}
       </select>
       <input type="number" min="0" step="any" value="${m.goal}" placeholder="Цель на день" style="flex:1;" oninput="updateDashboardMetricGoal(${idx}, this.value)">
@@ -82,7 +92,16 @@ function removeDashboardMetric(idx) {
   renderCurrent();
 }
 
-function updateSettingSilent(key, idx, val){ appSettings[key][idx] = val; saveData(); fillSelects(); }
+function updateSettingSilent(key, idx, val){
+  // Скрытая запись отслеживается по тексту — при переименовании переносим её
+  // в hiddenEntries на новый текст, иначе скрытие молча слетит.
+  const oldVal = appSettings[key][idx];
+  const hiddenList = appSettings.hiddenEntries[key];
+  const hiddenIdx = hiddenList.indexOf(oldVal);
+  if (hiddenIdx !== -1) hiddenList[hiddenIdx] = val;
+  appSettings[key][idx] = val;
+  saveData(); fillSelects();
+}
 function moveSetting(key, idx, dir){
   const newIdx = idx + dir;
   if(newIdx < 0 || newIdx >= appSettings[key].length) return;
@@ -91,10 +110,23 @@ function moveSetting(key, idx, dir){
   appSettings[key][newIdx] = temp;
   saveData(); fillSelects(); renderSettings();
 }
+// Скрыть/показать позицию в списках выбора вместо удаления — старые заказы/уроки,
+// где значение уже использовано, продолжают ссылаться на тот же текст без изменений.
+function toggleSettingHidden(key, idx){
+  const val = appSettings[key][idx];
+  const hiddenList = appSettings.hiddenEntries[key];
+  const pos = hiddenList.indexOf(val);
+  if (pos === -1) hiddenList.push(val); else hiddenList.splice(pos, 1);
+  saveData(); fillSelects(); renderSettings();
+}
 function removeSetting(key, idx){
   const val = appSettings[key][idx];
-  if (!confirm(`Удалить «${val}» из справочника?`)) return;
-  appSettings[key].splice(idx,1); saveData(); fillSelects(); renderSettings();
+  if (!confirm(`Удалить «${val}» из справочника? Если позиция где-то ещё используется — лучше скрыть её глазком, а не удалять.`)) return;
+  appSettings[key].splice(idx,1);
+  const hiddenList = appSettings.hiddenEntries[key];
+  const hiddenIdx = hiddenList.indexOf(val);
+  if (hiddenIdx !== -1) hiddenList.splice(hiddenIdx, 1);
+  saveData(); fillSelects(); renderSettings();
 }
 function addSetting(key){ appSettings[key].push('Новая запись'); saveData(); fillSelects(); renderSettings(); }
 
@@ -256,8 +288,8 @@ function fillSelects(){
   const curSubj = subjEl ? subjEl.value : '';
   const curClass = classEl ? classEl.value : '';
 
-  if(subjEl) subjEl.innerHTML = `<option value="">- Выбрать -</option>` + makeOpts(appSettings.subjects);
-  if(classEl) classEl.innerHTML = `<option value="">- Выбрать -</option>` + makeOpts(appSettings.classes);
+  if(subjEl) subjEl.innerHTML = `<option value="">- Выбрать -</option>` + makeOpts(getVisibleCatalog('subjects'));
+  if(classEl) classEl.innerHTML = `<option value="">- Выбрать -</option>` + makeOpts(getVisibleCatalog('classes'));
   
   if(curSubj) {
     ensureSelectOption('f_subject', curSubj);
@@ -268,7 +300,7 @@ function fillSelects(){
     classEl.value = curClass;
   }
 
-  document.getElementById('clientsDatalist').innerHTML = (appSettings.clients||[]).map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  document.getElementById('clientsDatalist').innerHTML = getVisibleCatalog('clients').map(c=>`<option value="${escapeHtml(c)}">`).join('');
 }
 
 /* ORDERS LIST WITH ARCHIVE SECTION */

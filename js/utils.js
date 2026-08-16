@@ -107,6 +107,23 @@ function dateKey(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(
 function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 // Просрочен — дедлайн уже прошёл, а заказ не завершён и не отменён
 function isOrderOverdue(o){ return !!(o.deadline && o.deadline < dateKey(new Date()) && !['done','cancelled'].includes(o.status)); }
+
+// Справочник без скрытых глазком позиций — для выпадающих списков/автокомплитов при
+// выборе НОВОГО значения. Уже проставленные старые значения (в заказах/уроках) — просто
+// текст, скрытие каталога на них не влияет.
+function getVisibleCatalog(key) {
+  const list = appSettings[key] || [];
+  const hidden = (appSettings.hiddenEntries && appSettings.hiddenEntries[key]) || [];
+  return list.filter(v => !hidden.includes(v));
+}
+
+// Как getVisibleCatalog, но гарантированно включает текущее значение поля, даже если
+// оно скрыто — иначе выпадающий список молча "потерял" бы уже выбранное значение.
+function catalogWithCurrent(key, current) {
+  const visible = getVisibleCatalog(key);
+  if (current && !visible.includes(current)) return [...visible, current];
+  return visible;
+}
 // Разница в днях между двумя датами-строками "YYYY-MM-DD" (b - a)
 function dateDiffDays(aStr, bStr){
   const a = parseLocalDate(aStr), b = parseLocalDate(bStr);

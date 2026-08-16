@@ -174,11 +174,11 @@ function renderPlanningBoardCard(board, bIdx) {
     <div class="btn secondary small" style="display:inline-flex; margin-top:8px; cursor:pointer;" onclick="toggleBoardCompletedExpanded('${board.id}')">Скрыть выполненные ▲</div>
   ` : '');
 
-  const subjectOptsHtml = (appSettings.subjects || []).map(s =>
+  const subjectOptsHtml = catalogWithCurrent('subjects', board.subject).map(s =>
     `<option value="${escapeHtml(s)}" ${board.subject === s ? 'selected' : ''}>${escapeHtml(s)}</option>`
   ).join('');
 
-  const classOptsHtml = (appSettings.classes || []).map(c =>
+  const classOptsHtml = catalogWithCurrent('classes', board.title).map(c =>
     `<option value="${escapeHtml(c)}" ${board.title === c ? 'selected' : ''}>${escapeHtml(c)}</option>`
   ).join('');
 
@@ -394,7 +394,7 @@ function renderBmTemplateItems() {
   if (!container) return;
   container.innerHTML = currentBmTemplate.map((itemVal, idx) => `
     <div class="settings-row" style="margin-bottom:0;">
-      ${renderComboField(`bmTplItem-${idx}`, itemVal, 'Выберите тип работы или введите...', appSettings.types, `currentBmTemplate[${idx}] = this.value;`)}
+      ${renderComboField(`bmTplItem-${idx}`, itemVal, 'Выберите тип работы или введите...', getVisibleCatalog('types'), `currentBmTemplate[${idx}] = this.value;`)}
       <button type="button" class="btn danger small" style="padding:6px 8px;" onclick="removeBmTemplateItem(${idx})">✕</button>
     </div>
   `).join('');
@@ -414,8 +414,8 @@ function openBoardModal(bIdx = null) {
   document.getElementById('boardForm').reset();
   document.getElementById('bmBoardIdx').value = bIdx !== null ? bIdx : '';
 
-  document.getElementById('subjectsDatalist').innerHTML = (appSettings.subjects || []).map(s => `<option value="${escapeHtml(s)}">`).join('');
-  document.getElementById('classesDatalist').innerHTML = (appSettings.classes || []).map(c => `<option value="${escapeHtml(c)}">`).join('');
+  document.getElementById('subjectsDatalist').innerHTML = getVisibleCatalog('subjects').map(s => `<option value="${escapeHtml(s)}">`).join('');
+  document.getElementById('classesDatalist').innerHTML = getVisibleCatalog('classes').map(c => `<option value="${escapeHtml(c)}">`).join('');
 
   if (bIdx !== null && planningBoards[bIdx]) {
     const board = planningBoards[bIdx];
@@ -429,8 +429,8 @@ function openBoardModal(bIdx = null) {
     currentBmTemplate = board.baseTemplate && board.baseTemplate.length ? [...board.baseTemplate] : ['Презентация', 'Рабочий лист'];
   } else {
     document.getElementById('boardModalTitle').textContent = 'Добавить новый класс';
-    document.getElementById('bm_subject').value = appSettings.subjects[0] || 'Математика';
-    document.getElementById('bm_title').value = appSettings.classes[0] || '5 класс';
+    document.getElementById('bm_subject').value = getVisibleCatalog('subjects')[0] || 'Математика';
+    document.getElementById('bm_title').value = getVisibleCatalog('classes')[0] || '5 класс';
     document.getElementById('bm_quarter').value = '1 четверть';
     document.getElementById('bm_deadline').value = '';
     document.getElementById('bm_startNum').value = 1;
@@ -810,7 +810,7 @@ function renderLessonChecklist() {
   // Заполняем список из справочника "Типы работ" — те же значения, что и в позициях заказа
   const catalogList = document.getElementById('lmNewItemCatalogList');
   if (catalogList) {
-    const types = appSettings.types || [];
+    const types = getVisibleCatalog('types');
     catalogList.innerHTML = types.length
       ? types.map(t => `<div class="combo-option" onclick="pickLessonItemFromCatalog('${escapeHtml(t)}')">${escapeHtml(t)}</div>`).join('')
         + `<div class="combo-empty" style="display:none;">Ничего не найдено</div>`
@@ -831,7 +831,7 @@ function syncNewLessonItemToOrder(board, lesson, text) {
   order.lines.push({
     id: 'l' + Date.now() + Math.random().toString(36).substr(2, 5),
     label: text,
-    type: (appSettings.units && appSettings.units[0]) || 'Слайд',
+    type: getVisibleCatalog('units')[0] || 'Слайд',
     qty: 1,
     pomoHours: 0,
     rate: 0,
