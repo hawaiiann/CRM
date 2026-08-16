@@ -348,6 +348,15 @@ function updateSidebarTimerUI() {
   // Секундомер считает СНАЧАЛА (с нуля вверх), без ограничения по времени.
   const elapsedSec = Math.floor(activeTimer.elapsed / 1000);
 
+  // Раз в минуту подстраховочно списываем накопленное время в часы активной позиции —
+  // без этого всё время, накопленное с последнего "Готов"/"Завершить", жило только в
+  // памяти вкладки и терялось бесследно при перезагрузке/случайном закрытии страницы,
+  // пока заказ ещё "не завершён".
+  if (activeTimer.running && activeTimer.id !== 'standalone' && elapsedSec > 0 && elapsedSec % 60 === 0) {
+    flushTimerSegment(activeTimer.id);
+    saveData();
+  }
+
   const disp = document.getElementById('spcDisplay');
   if (disp) disp.textContent = spcFormatTime(elapsedSec);
 
@@ -412,8 +421,12 @@ function flushTimerSegment(orderId) {
   const line = getActiveLineForTimer(order);
   if (!line) return;
   const before = JSON.parse(JSON.stringify(order));
-  const addHours = Math.round((segmentMs / 1000 / 3600) * 100) / 100;
-  line.pomoHours = String(Math.round((parseHours(line.pomoHours) + addHours) * 100) / 100);
+  // Точность храним высокую (4 знака — чистим только "хвосты" float, не сами часы) —
+  // раньше округление до 2 знаков применялось на КАЖДОМ списании, а не к итогу, и при
+  // частых списаниях (в т.ч. новом периодическом автосписании раз в минуту) устойчиво
+  // завышало сумму: 60 секунд = 0.01667ч, округлённые до 0.02ч на каждом шаге.
+  const addHours = segmentMs / 1000 / 3600;
+  line.pomoHours = String(Math.round((parseHours(line.pomoHours) + addHours) * 10000) / 10000);
   recordActivityChanges(before, order);
 }
 

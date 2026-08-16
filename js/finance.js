@@ -293,12 +293,11 @@ function updateModalAdvanceInfo() {
     return;
   }
   const stats = getClientAdvanceStats(clientName);
-  const currentOrderId = document.getElementById('orderId').value;
-  const curOrder = orders.find(o => o.id === currentOrderId);
-  const curOrderUsed = curOrder ? parseNum(curOrder.advanceUsed) : 0;
-
-  const trueAvail = stats.available + curOrderUsed;
-  badge.textContent = fmtMoney(trueAvail);
+  // Показываем ЧЕСТНЫЙ общий остаток по клиенту (как и в реестре авансов на Финансах) —
+  // а не "остаток + то, что уже списано на этот заказ". Раньше при редактировании заказа
+  // с уже выделенным авансом бейдж показывал ложно доступную сумму, даже если у клиента
+  // по факту 0 свободного (то, что видите здесь — уже целиком закреплено за этим заказом).
+  badge.textContent = fmtMoney(stats.available);
   calculateModalAdvanceDiff();
 }
 
