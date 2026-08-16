@@ -492,7 +492,15 @@ function toggleLineReady(lineId) {
       const orderLine = order.lines.find(l => l.id === lineId);
       if (orderLine) orderLine.ready = makingReady;
       saveData();
-      currentLines = JSON.parse(JSON.stringify(order.lines));
+      // Переносим в черновик формы только то, что реально могло измениться от флаша
+      // (pomoHours активной позиции) и сам ready — НЕ весь массив целиком, чтобы не
+      // затереть несохранённые правки количества/ставки/новых строк, которые ещё не
+      // ушли в orders через "Сохранить".
+      draftLine.ready = makingReady;
+      order.lines.forEach(ol => {
+        const dl = currentLines.find(l => l.id === ol.id);
+        if (dl) dl.pomoHours = ol.pomoHours;
+      });
       renderLines();
       return;
     }
