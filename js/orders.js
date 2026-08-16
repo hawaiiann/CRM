@@ -181,7 +181,9 @@ function renderOrderCard(o){
 
   const fullPrice = orderTotal(o);
   const advUsed = parseNum(o.advanceUsed);
-  const remToPay = Math.max(0, fullPrice - advUsed);
+  // Заказ отмечен "Оплачено" (в т.ч. напрямую, минуя аванс) — доплаты по нему больше нет,
+  // даже если списанный аванс формально меньше полной цены (та же логика, что в Финансах).
+  const remToPay = o.isPaid ? 0 : Math.max(0, fullPrice - advUsed);
 
   const isOverdue = isOrderOverdue(o);
 
@@ -439,6 +441,13 @@ function startSidebarTimer(orderId, title) {
   if (activeTimer.id === orderId) {
     toggleSidebarTimer();
     return;
+  }
+  // Переключение на другой заказ, пока таймер уже шёл (по прошлому заказу или
+  // "Свободному замеру") — сначала списываем накопленное время в текущую активную
+  // позицию ПРЕЖНЕГО заказа, иначе resetSidebarTimer() ниже стёр бы его молча, без следа.
+  if (activeTimer.id !== 'standalone') {
+    flushTimerSegment(activeTimer.id);
+    saveData();
   }
   resetSidebarTimer();
   activeTimer.id = orderId;
