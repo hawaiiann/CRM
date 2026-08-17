@@ -111,6 +111,7 @@
         </button>
       </div>
       <div style="text-align:center; font-size:10px; color:var(--text-faint); margin-top:6px; font-weight:700;" id="appVersionDisplay"></div>
+      <button class="theme-btn" id="btnSignOut" style="margin-top:6px; width:100%;" onclick="signOutCloud()">Выйти</button>
       <input type="file" id="fileInput" accept="application/json">
     </div>
   </aside>
@@ -810,10 +811,35 @@
   </div>
 </div>
 
+<!-- MODAL: ВХОД (обязателен — без close-x и без закрытия по клику на фон) -->
+<div class="overlay" id="authOverlay">
+  <div class="modal" style="max-width:400px;">
+    <h2>Вход в CRM</h2>
+    <p style="color:var(--text-soft); font-size:13px; margin-top:-8px; margin-bottom:18px;">Данные у каждого пользователя свои и не пересекаются.</p>
+    <form id="authForm" onsubmit="handleAuthSubmit(event)">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth_email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="auth_password" autocomplete="current-password" required>
+      </div>
+      <div id="authError" style="color:var(--rose); font-size:12.5px; font-weight:700; display:none; margin-bottom:4px;"></div>
+      <div class="modal-actions" style="justify-content:stretch;">
+        <button type="submit" class="btn btn-accent" style="width:100%;" id="authSubmitBtn">Войти</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Тост-попапы вех таймера (30/60/90 мин), правый нижний угол -->
 <div class="timer-toast-root" id="timerToastRoot"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabaseConfig.js"></script>
 <script src="js/utils.js"></script>
+<script src="js/cloudSync.js"></script>
 <script src="js/db.js"></script>
 <script src="js/tasks.js"></script>
 <script src="js/planning.js"></script>

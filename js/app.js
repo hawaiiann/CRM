@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.17.0';
+const APP_VERSION = '1.18.0';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -123,6 +123,7 @@ function renderCurrent(){
 /* TASKS WIDGET */
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.overlay').forEach(ov => {
+    if (ov.id === 'authOverlay') return; // вход обязателен — не закрывается кликом по фону
     ov.addEventListener('click', (e) => {
       if (e.target === ov) {
         ov.classList.remove('show');
@@ -139,10 +140,17 @@ document.addEventListener('DOMContentLoaded', () => {
 /* EXPORT / IMPORT */
 
 /* INIT — запуск приложения. Обязательно должен быть в самом конце,
-   после того как загружены все остальные js-файлы. */
-loadData();
-renderCurrent();
-restoreBackupDirectoryHandle();
+   после того как загружены все остальные js-файлы.
+   Сначала ждём вход (экран логина, если сессии ещё нет) — данные у каждого
+   пользователя свои, поэтому загружать их до входа просто нечем. */
+async function initApp() {
+  await ensureAuthenticated();
+  await loadData();
+  renderCurrent();
+  restoreBackupDirectoryHandle();
+  subscribeRealtime();
 
-const versionEl = document.getElementById('appVersionDisplay');
-if (versionEl) versionEl.textContent = `v${APP_VERSION}`;
+  const versionEl = document.getElementById('appVersionDisplay');
+  if (versionEl) versionEl.textContent = `v${APP_VERSION}`;
+}
+initApp();

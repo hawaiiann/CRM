@@ -89,135 +89,140 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
   if (netDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'netRevenue', delta: netDelta });
 }
 
-/* Data Loading & Saving */
-function loadData(){
+/* Data Loading & Saving — источник истины теперь Supabase (см. cloudSync.js),
+ * localStorage остаётся быстрым локальным кэшем и офлайн-подстраховкой на случай,
+ * если облако недоступно (см. loadFromLocalStorageFallback ниже). */
+
+function applySettingsMigrations(parsed) {
+  appSettings = { ...appSettings, ...parsed };
+  if(!appSettings.clients) appSettings.clients = ['Школа №1', 'Издательство "Просвещение"', 'Частный заказчик'];
+  if(!appSettings.types) appSettings.types = ['Презентация', 'Рабочий лист', 'Карточка'];
+  if(!appSettings.units) appSettings.units = ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'];
+  if(!appSettings.dashboardMetrics) appSettings.dashboardMetrics = [
+    { id: 'dm1', type: 'hours', goal: 4 },
+    { id: 'dm2', type: 'presentations', goal: 0 },
+    { id: 'dm3', type: 'worksheets', goal: 0 },
+    { id: 'dm4', type: 'revenue', goal: 4000 }
+  ];
+  if(!appSettings.subjects) appSettings.subjects = ['Математика', 'Русский язык', 'Литература', 'Дизайн'];
+  if(!appSettings.classes) appSettings.classes = ['5 класс', '6 класс', '7 класс', 'Без класса'];
+  if(!appSettings.hiddenEntries) appSettings.hiddenEntries = { clients: [], types: [], units: [], subjects: [], classes: [] };
+  ['clients','types','units','subjects','classes'].forEach(k => { if (!appSettings.hiddenEntries[k]) appSettings.hiddenEntries[k] = []; });
+
+  // Миграция: "Слайды" и "Чистый доход" стали доп. показателями внутри "Презентации"
+  // и "Доход" (двойные графики) — старые отдельные плитки таких типов больше не существуют
+  // как самостоятельный выбор, переносим их на объединяющую метрику (без дублей).
+  const metricRemap = { slides: 'presentations', netIncome: 'revenue' };
+  const seenMetricTypes = new Set();
+  appSettings.dashboardMetrics = appSettings.dashboardMetrics
+    .map(m => metricRemap[m.type] ? { ...m, type: metricRemap[m.type] } : m)
+    .filter(m => {
+      if (seenMetricTypes.has(m.type)) return false;
+      seenMetricTypes.add(m.type);
+      return true;
+    });
+}
+
+const DEFAULT_PLANNING_BOARDS = () => [
+  {
+    id: 'pb_1', subject: 'Математика', title: '5 класс', quarter: '1 четверть', deadline: '2026-09-01',
+    baseTemplate: ['Презентация', 'Рабочий лист'], collapsed: false, archived: false,
+    lessons: Array.from({length: 24}, (_, i) => ({
+      id: 'l_' + (i + 1), num: i + 1, title: `Урок ${i + 1}`, color: 'gray',
+      items: [{ id: 'i1', text: 'Презентация', done: false }, { id: 'i2', text: 'Рабочий лист', done: false }]
+    }))
+  },
+  {
+    id: 'pb_2', subject: 'Русский язык', title: '6 класс', quarter: '1 четверть', deadline: '2026-10-15',
+    baseTemplate: ['Презентация', 'Рабочий лист'], collapsed: false, archived: false,
+    lessons: Array.from({length: 24}, (_, i) => ({ id: 'l_' + (i + 1), num: i + 1, title: `Урок ${i + 1}`, color: 'gray', items: [] }))
+  }
+];
+
+// Досчитывает журнал активности "с нуля" по текущим заказам — используется и при
+// облачной загрузке, и в локальном фолбэке, когда журнал пуст, а заказы уже есть.
+function seedActivityLogIfEmpty() {
+  if (activityLog.length) return;
+  const seedToday = dateKey(new Date());
+  orders.forEach(o => recordActivityChanges(null, o, seedToday));
+}
+
+// Разовая довставка: журнал уже существовал (создан до того, как в него добавили
+// учёт выручки), но в нём совсем нет записей о выручке — досчитываем её по всем заказам.
+function backfillRevenueInActivityLog() {
+  if (!activityLog.length || activityLog.some(e => e.field === 'revenue')) return;
+  const seedToday = dateKey(new Date());
+  orders.forEach(o => {
+    const rec = orderRecognizedRevenue(o);
+    if (rec.revenue) activityLog.push({ date: seedToday, orderId: o.id, field: 'revenue', delta: rec.revenue });
+    if (rec.net) activityLog.push({ date: seedToday, orderId: o.id, field: 'netRevenue', delta: rec.net });
+  });
+}
+
+// Старая логика чтения из localStorage — теперь только аварийный фолбэк на случай,
+// если Supabase недоступен (нет сети и т.п.), чтобы приложением можно было пользоваться офлайн.
+function loadFromLocalStorageFallback() {
+  const rawS = localStorage.getItem(SETTINGS_KEY);
+  if (rawS) applySettingsMigrations(JSON.parse(rawS));
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+  orders = raw ? JSON.parse(raw).map(normalizeOrder) : [];
+
+  const rawT = localStorage.getItem(TASKS_KEY);
+  if (rawT) appTasks = JSON.parse(rawT).map(normalizeTask);
+
+  const rawAdv = localStorage.getItem(ADVANCES_KEY);
+  if (rawAdv) advances = JSON.parse(rawAdv).map(normalizeAdvance);
+
+  const rawP = localStorage.getItem(PLANNING_KEY);
+  planningBoards = rawP ? JSON.parse(rawP) : DEFAULT_PLANNING_BOARDS();
+  planningBoards.forEach(board => {
+    if (!board.id) board.id = 'pb_' + Date.now() + Math.random().toString(36).slice(2, 7);
+    (board.lessons || []).forEach(lesson => { if (!lesson.id) lesson.id = 'l_' + Date.now() + Math.random().toString(36).slice(2, 7); });
+  });
+
+  const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
+  activityLog = rawLog ? JSON.parse(rawLog) : [];
+  seedActivityLogIfEmpty();
+  backfillRevenueInActivityLog();
+
+  syncPlanningWithOrders();
+}
+
+async function loadData(){
   try{
-    const rawS = localStorage.getItem(SETTINGS_KEY);
-    if(rawS) {
-      const parsed = JSON.parse(rawS);
-      appSettings = { ...appSettings, ...parsed };
-      if(!appSettings.clients) appSettings.clients = ['Школа №1', 'Издательство "Просвещение"', 'Частный заказчик'];
-      if(!appSettings.types) appSettings.types = ['Презентация', 'Рабочий лист', 'Карточка'];
-      if(!appSettings.units) appSettings.units = ['Слайд', 'Страница', 'Урок', 'Час', 'Другое'];
-      if(!appSettings.dashboardMetrics) appSettings.dashboardMetrics = [
-        { id: 'dm1', type: 'hours', goal: 4 },
-        { id: 'dm2', type: 'presentations', goal: 0 },
-        { id: 'dm3', type: 'worksheets', goal: 0 },
-        { id: 'dm4', type: 'revenue', goal: 4000 }
-      ];
-      if(!appSettings.subjects) appSettings.subjects = ['Математика', 'Русский язык', 'Литература', 'Дизайн'];
-      if(!appSettings.classes) appSettings.classes = ['5 класс', '6 класс', '7 класс', 'Без класса'];
-      if(!appSettings.hiddenEntries) appSettings.hiddenEntries = { clients: [], types: [], units: [], subjects: [], classes: [] };
-      ['clients','types','units','subjects','classes'].forEach(k => { if (!appSettings.hiddenEntries[k]) appSettings.hiddenEntries[k] = []; });
+    const cloud = await cloudLoadData();
 
-      // Миграция: "Слайды" и "Чистый доход" стали доп. показателями внутри "Презентации"
-      // и "Доход" (двойные графики) — старые отдельные плитки таких типов больше не существуют
-      // как самостоятельный выбор, переносим их на объединяющую метрику (без дублей).
-      const metricRemap = { slides: 'presentations', netIncome: 'revenue' };
-      const seenMetricTypes = new Set();
-      appSettings.dashboardMetrics = appSettings.dashboardMetrics
-        .map(m => metricRemap[m.type] ? { ...m, type: metricRemap[m.type] } : m)
-        .filter(m => {
-          if (seenMetricTypes.has(m.type)) return false;
-          seenMetricTypes.add(m.type);
-          return true;
-        });
-    }
-    
-    const raw = localStorage.getItem(STORAGE_KEY);
-    orders = raw ? JSON.parse(raw).map(normalizeOrder) : [];
+    if (cloud.appSettings) applySettingsMigrations(cloud.appSettings);
 
-    const rawT = localStorage.getItem(TASKS_KEY);
-    if (rawT) appTasks = JSON.parse(rawT).map(normalizeTask);
-
-    const rawAdv = localStorage.getItem(ADVANCES_KEY);
-    if (rawAdv) advances = JSON.parse(rawAdv).map(normalizeAdvance);
-
-    const rawP = localStorage.getItem(PLANNING_KEY);
-    if (rawP) {
-      planningBoards = JSON.parse(rawP);
-      // Подстраховка для старых данных без id (нужен для явной привязки заказа к уроку)
-      planningBoards.forEach(board => {
-        if (!board.id) board.id = 'pb_' + Date.now() + Math.random().toString(36).slice(2, 7);
-        (board.lessons || []).forEach(lesson => {
-          if (!lesson.id) lesson.id = 'l_' + Date.now() + Math.random().toString(36).slice(2, 7);
-        });
-      });
-    } else {
-      planningBoards = [
-        {
-          id: 'pb_1',
-          subject: 'Математика',
-          title: '5 класс',
-          quarter: '1 четверть',
-          deadline: '2026-09-01',
-          baseTemplate: ['Презентация', 'Рабочий лист'],
-          collapsed: false,
-          archived: false,
-          lessons: Array.from({length: 24}, (_, i) => ({
-            id: 'l_' + (i + 1),
-            num: i + 1,
-            title: `Урок ${i + 1}`,
-            color: 'gray',
-            items: [
-              { id: 'i1', text: 'Презентация', done: false },
-              { id: 'i2', text: 'Рабочий лист', done: false }
-            ]
-          }))
-        },
-        {
-          id: 'pb_2',
-          subject: 'Русский язык',
-          title: '6 класс',
-          quarter: '1 четверть',
-          deadline: '2026-10-15',
-          baseTemplate: ['Презентация', 'Рабочий лист'],
-          collapsed: false,
-          archived: false,
-          lessons: Array.from({length: 24}, (_, i) => ({
-            id: 'l_' + (i + 1),
-            num: i + 1,
-            title: `Урок ${i + 1}`,
-            color: 'gray',
-            items: []
-          }))
-        }
-      ];
-    }
+    orders = (cloud.orders || []).map(normalizeOrder);
+    appTasks = (cloud.tasks || []).map(normalizeTask);
+    advances = (cloud.advances || []).map(normalizeAdvance);
+    planningBoards = (cloud.planningBoards && cloud.planningBoards.length) ? cloud.planningBoards : DEFAULT_PLANNING_BOARDS();
 
     const rawBcfg = localStorage.getItem(BACKUP_CFG_KEY);
     if (rawBcfg) backupSettings = { ...backupSettings, ...JSON.parse(rawBcfg) };
 
-    const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
-    if (rawLog) {
-      activityLog = JSON.parse(rawLog);
-    } else {
-      // Журнал ещё ни разу не создавался — считаем текущие часы/слайды/страницы
-      // по всем заказам "внесёнными сегодня", чтобы статистика не начиналась с пустоты.
-      activityLog = [];
-      const seedToday = dateKey(new Date());
-      orders.forEach(o => {
-        recordActivityChanges(null, o, seedToday);
-      });
-      localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activityLog));
-    }
-
-    // Отдельная разовая довставка: если журнал уже существовал (создан до того,
-    // как в него добавили учёт выручки), но в нём совсем нет записей о выручке —
-    // досчитываем текущую признанную выручку по всем заказам, тоже сегодняшним днём.
-    if (activityLog.length && !activityLog.some(e => e.field === 'revenue')) {
-      const seedToday = dateKey(new Date());
-      orders.forEach(o => {
-        const rec = orderRecognizedRevenue(o);
-        if (rec.revenue) activityLog.push({ date: seedToday, orderId: o.id, field: 'revenue', delta: rec.revenue });
-        if (rec.net) activityLog.push({ date: seedToday, orderId: o.id, field: 'netRevenue', delta: rec.net });
-      });
-      localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activityLog));
-    }
+    activityLog = cloud.activityLog || [];
+    const beforeSeedLen = activityLog.length;
+    seedActivityLogIfEmpty();
+    backfillRevenueInActivityLog();
+    if (activityLog.length !== beforeSeedLen) scheduleCloudSync(); // досчитанное сразу же отправляем в облако
 
     syncPlanningWithOrders();
 
-  }catch(e){ console.error(e); orders=[]; appTasks=[]; advances=[]; planningBoards=[]; activityLog=[]; }
+    // Локальный кэш — на случай, если в следующий раз облако будет недоступно.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(appSettings));
+    localStorage.setItem(TASKS_KEY, JSON.stringify(appTasks));
+    localStorage.setItem(ADVANCES_KEY, JSON.stringify(advances));
+    localStorage.setItem(PLANNING_KEY, JSON.stringify(planningBoards));
+    localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activityLog));
+  }catch(e){
+    console.error('Не удалось загрузить данные из облака, работаем из локального кэша:', e);
+    try { loadFromLocalStorageFallback(); }
+    catch(e2){ console.error(e2); orders=[]; appTasks=[]; advances=[]; planningBoards=[]; activityLog=[]; }
+  }
 }
 
 function saveData(isAutoBackupTrigger = true){
@@ -229,6 +234,8 @@ function saveData(isAutoBackupTrigger = true){
   localStorage.setItem(ADVANCES_KEY, JSON.stringify(advances));
   localStorage.setItem(PLANNING_KEY, JSON.stringify(planningBoards));
   localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activityLog));
+
+  scheduleCloudSync();
 
   if (isAutoBackupTrigger && backupSettings.enabled && backupSettings.interval === 'change') {
     triggerAutoBackupProcess();
