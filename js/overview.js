@@ -2,6 +2,14 @@
  * overview.js — Дашборд (Обзор): статистика и графики
  * ============================================================ */
 
+// Графики считают ширину контейнера через getBoundingClientRect() в момент рендера —
+// при повороте экрана/изменении окна пересчитываем, иначе останутся "заточены" под старую ширину.
+let overviewResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(overviewResizeTimer);
+  overviewResizeTimer = setTimeout(() => { if (currentView === 'overview') renderOverview(); }, 200);
+});
+
 /* ПЛАНИРОВАНИЕ НЕДЕЛИ — мини-Гант на 7 дней текущей недели, на Дашборде */
 function getOrderWeekLabel(o) {
   if (o.subject && o.grade && o.lesson) {

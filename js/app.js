@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.18.0';
+const APP_VERSION = '1.19.0';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -102,7 +102,30 @@ function switchView(view){
   document.getElementById('view-'+view).classList.add('active');
   document.querySelectorAll('.navitem').forEach(n=>n.dataset.view===view ? n.classList.add('active') : n.classList.remove('active'));
   renderCurrent();
+  closeMobileSidebar(); // тап по пункту меню на телефоне должен закрывать выезжающую панель
 }
+
+/* Мобильная выезжающая панель сайдбара (виден гамбургер только под брейкпоинтом 760px) */
+function openMobileSidebar() {
+  document.querySelector('.sidebar').classList.add('mobile-open');
+  document.getElementById('sidebarBackdrop').classList.add('show');
+}
+function closeMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const wasOpen = sidebar.classList.contains('mobile-open');
+  sidebar.classList.remove('mobile-open');
+  document.getElementById('sidebarBackdrop').classList.remove('show');
+  // Открытие/закрытие панели меняет доступную ширину контента без события resize —
+  // графики на Дашборде посчитаны под старую ширину, пересчитываем после анимации.
+  if (wasOpen && currentView === 'overview') setTimeout(renderOverview, 260);
+}
+function toggleMobileSidebar() {
+  if (document.querySelector('.sidebar').classList.contains('mobile-open')) closeMobileSidebar();
+  else openMobileSidebar();
+}
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 760) closeMobileSidebar();
+});
 
 function renderCurrent(){
   fillSelects();

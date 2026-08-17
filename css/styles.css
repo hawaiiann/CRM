@@ -2205,3 +2205,107 @@
   .timer-toast-body { min-width: 0; }
   .timer-toast-title { font-size: 13.5px; font-weight: 800; color: var(--text); }
   .timer-toast-sub { font-size: 12px; font-weight: 600; color: var(--text-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ============================================================
+   * МОБИЛЬНАЯ АДАПТАЦИЯ — единый брейкпоинт 760px (то же число,
+   * что уже использовалось для .settings-bottom-grid).
+   * ============================================================ */
+
+  .mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 14px; left: 14px;
+    z-index: 400;
+    width: 40px; height: 40px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    align-items: center; justify-content: center;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+  }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(13,14,17,0.5);
+    z-index: 450;
+  }
+  .sidebar-backdrop.show { display: block; }
+
+  /* Обёртка вокруг каждого поля позиции заказа — на десктопе "прозрачна" для грида
+     (сама 8-колоночная раскладка .line-row не меняется), подпись скрыта. На мобильном
+     (см. медиа-запрос ниже) обёртка становится настоящим блоком с видимой подписью. */
+  .line-field-wrap { display: contents; }
+  /* Специфичность выше, чем у .field label (строка ~2048) — эта подпись внутри .field
+     (форма позиций заказа), и без этого общее правило форм перебивало бы display:none. */
+  .line-row .line-field-label { display: none; }
+
+  @media (max-width: 760px) {
+    .mobile-menu-btn { display: flex; }
+
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 100vh;
+      z-index: 500;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: var(--shadow-hover);
+    }
+    .sidebar.mobile-open { transform: translateX(0); }
+
+    main { padding: 64px 14px 50px; }
+    .content { padding: 0; max-width: 100%; margin: 0; }
+
+    /* Общий collapse фиксированных многоколоночных сеток в один столбец */
+    .dashboard-top-grid,
+    .stat-grid-2x2,
+    .grid-2,
+    .tasks-2col-grid,
+    .row2, .row3, .row4,
+    .advance-row3,
+    .details-mini-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* Таймлайн — гант-диаграмма шире экрана в любом режиме (не только "месяц"),
+       поэтому скролл по горизонтали включаем безусловно, не дожидаясь JS-класса. */
+    .tl-container { overflow-x: auto !important; overflow-y: visible !important; }
+
+    /* Тулбар "Заказы" — инпут поиска не должен упираться в фиксированный min-width */
+    #searchOrders { min-width: 0 !important; width: 100%; }
+
+    /* Позиции заказа — карточки-строки вместо 8-колоночной сетки (см. renderLines() в orders.js) */
+    .lines-head { display: none; }
+    .line-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "type   type"
+        "unit   qty"
+        "hours  rate"
+        "sum    sum"
+        "ready  remove";
+      gap: 8px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+    .line-field-wrap { display: block !important; }
+    .line-row .line-field-label { display: block; font-size: 10px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 4px; }
+    .lf-type  { grid-area: type; }
+    .lf-unit  { grid-area: unit; }
+    .lf-qty   { grid-area: qty; }
+    .lf-hours { grid-area: hours; }
+    .lf-rate  { grid-area: rate; }
+    .lf-sum   { grid-area: sum; padding-top: 8px; border-top: 1px dashed var(--border); }
+    .lf-sum .line-calc-val { font-size: 16px; }
+    .lf-ready, .lf-remove { display: flex !important; align-items: center; gap: 8px; }
+    .lf-ready { grid-area: ready; }
+    .lf-remove { grid-area: remove; }
+    .lf-ready .line-field-label, .lf-remove .line-field-label { display: inline; margin: 0; text-transform: none; font-size: 12px; font-weight: 700; color: var(--text-soft); }
+  }

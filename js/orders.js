@@ -669,28 +669,55 @@ function renderComboField(inputId, value, placeholder, options, onInputExtra){
   `;
 }
 
+// Каждое поле обёрнуто в .line-field-wrap с подписью .line-field-label — на десктопе
+// обёртка "прозрачна" (display:contents), сетка/колонки как были; на мобильном экране
+// (см. @media в styles.css) превращается в карточку-строку с явными подписями полей.
 function renderLines(){
   document.getElementById('linesBody').innerHTML = currentLines.map(l=>`
     <div class="line-row" data-id="${l.id}">
-      ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateLineDirect('${l.id}','label',this.value);`)}
+      <div class="line-field-wrap lf-type">
+        <label class="line-field-label">Тип</label>
+        ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateLineDirect('${l.id}','label',this.value);`)}
+      </div>
 
-      ${renderComboField(`lineUnit-${l.id}`, l.type, 'Ед. изм...', catalogWithCurrent('units', l.type), `updateLineDirect('${l.id}','type',this.value); updateLinesCalcUI('${l.id}');`)}
+      <div class="line-field-wrap lf-unit">
+        <label class="line-field-label">Ед. изм.</label>
+        ${renderComboField(`lineUnit-${l.id}`, l.type, 'Ед. изм...', catalogWithCurrent('units', l.type), `updateLineDirect('${l.id}','type',this.value); updateLinesCalcUI('${l.id}');`)}
+      </div>
 
-      <input type="text" inputmode="decimal" value="${l.qty}" placeholder="1" oninput="updateLineDirect('${l.id}','qty',this.value); updateLinesCalcUI('${l.id}');">
-      
-      <input type="text" inputmode="text" value="${l.pomoHours}" placeholder="0 ч, или 1:30" oninput="updateLineDirect('${l.id}','pomoHours',this.value); updateLinesCalcUI('${l.id}');" onchange="normalizeLineHours('${l.id}');">
-      
-      <input type="text" inputmode="decimal" value="${l.rate}" placeholder="0 ₽" oninput="updateLineDirect('${l.id}','rate',this.value); updateLinesCalcUI('${l.id}');">
-      
-      <div class="line-calc-val" id="calcVal-${l.id}">${l.ignorePrice ? '0 ₽' : fmtMoney(calculateLineTotal(l))}</div>
+      <div class="line-field-wrap lf-qty">
+        <label class="line-field-label">Кол-во</label>
+        <input type="text" inputmode="decimal" value="${l.qty}" placeholder="1" oninput="updateLineDirect('${l.id}','qty',this.value); updateLinesCalcUI('${l.id}');">
+      </div>
 
-      <input type="checkbox" ${l.ready ? 'checked' : ''} onchange="toggleLineReady('${l.id}');" title="Готово — таймер переключится на следующую позицию">
-      
-      <button type="button" class="line-rm" onclick="removeLine('${l.id}')">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
-      </button>
+      <div class="line-field-wrap lf-hours">
+        <label class="line-field-label">Часы</label>
+        <input type="text" inputmode="text" value="${l.pomoHours}" placeholder="0 ч, или 1:30" oninput="updateLineDirect('${l.id}','pomoHours',this.value); updateLinesCalcUI('${l.id}');" onchange="normalizeLineHours('${l.id}');">
+      </div>
+
+      <div class="line-field-wrap lf-rate">
+        <label class="line-field-label">Ставка</label>
+        <input type="text" inputmode="decimal" value="${l.rate}" placeholder="0 ₽" oninput="updateLineDirect('${l.id}','rate',this.value); updateLinesCalcUI('${l.id}');">
+      </div>
+
+      <div class="line-field-wrap lf-sum">
+        <label class="line-field-label">Сумма</label>
+        <div class="line-calc-val" id="calcVal-${l.id}">${l.ignorePrice ? '0 ₽' : fmtMoney(calculateLineTotal(l))}</div>
+      </div>
+
+      <div class="line-field-wrap lf-ready">
+        <input type="checkbox" ${l.ready ? 'checked' : ''} onchange="toggleLineReady('${l.id}');" title="Готово — таймер переключится на следующую позицию">
+        <label class="line-field-label">Готово</label>
+      </div>
+
+      <div class="line-field-wrap lf-remove">
+        <button type="button" class="line-rm" onclick="removeLine('${l.id}')">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+        </button>
+        <label class="line-field-label">Удалить</label>
+      </div>
     </div>`).join('');
-    
+
   updateLinesTotalSum();
 }
 
