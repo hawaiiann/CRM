@@ -197,17 +197,17 @@ function renderFinance() {
 
     return `
       <tr>
-        <td>
+        <td data-label="Проект">
           <a class="project-link" href="javascript:void(0)" onclick="goToOrderCard('${o.id}')">
             ${escapeHtml(o.title || 'Без названия')}
           </a>
         </td>
-        <td>${o.client ? `<a class="project-link" href="javascript:void(0)" onclick="openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</a>` : '—'}</td>
-        <td><b class="num-font">${fmtMoney(full)}</b></td>
-        <td class="num-font" style="color:var(--text-soft);">${fmtMoney(tax)}</td>
-        <td class="num-font" style="color:var(--amber); font-weight:700;">${advUsed > 0 ? fmtMoney(advUsed) : '—'}</td>
-        <td class="num-font" style="color:var(--rose); font-weight:700;">${remToPay > 0 ? fmtMoney(remToPay) : '0 ₽'}</td>
-        <td>${statusHtml}</td>
+        <td data-label="Заказчик">${o.client ? `<a class="project-link" href="javascript:void(0)" onclick="openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</a>` : '—'}</td>
+        <td data-label="Выручка (с налогом)"><b class="num-font">${fmtMoney(full)}</b></td>
+        <td data-label="Налог" class="num-font" style="color:var(--text-soft);">${fmtMoney(tax)}</td>
+        <td data-label="Оплачено из аванса" class="num-font" style="color:var(--amber); font-weight:700;">${advUsed > 0 ? fmtMoney(advUsed) : '—'}</td>
+        <td data-label="К доплате" class="num-font" style="color:var(--rose); font-weight:700;">${remToPay > 0 ? fmtMoney(remToPay) : '0 ₽'}</td>
+        <td data-label="Статус оплаты">${statusHtml}</td>
       </tr>
     `;
   }).join('') || `<tr><td colspan="7" style="text-align:center; color:var(--text-faint);">Нет данных</td></tr>`;
@@ -217,13 +217,13 @@ function renderFinance() {
     const stats = getClientAdvanceStats(a.client);
     return `
       <tr>
-        <td>${a.date}</td>
-        <td><b>${escapeHtml(a.client)}</b></td>
-        <td><b>${fmtMoney(a.amount)}</b></td>
-        <td style="color:var(--text-soft);">${fmtMoney(stats.used)}</td>
-        <td style="color:var(--green); font-weight:800;">${fmtMoney(stats.available)}</td>
-        <td>${escapeHtml(a.note || '—')}</td>
-        <td>
+        <td data-label="Дата">${a.date}</td>
+        <td data-label="Заказчик"><b>${escapeHtml(a.client)}</b></td>
+        <td data-label="Внесённая сумма"><b>${fmtMoney(a.amount)}</b></td>
+        <td data-label="Списано на заказы" style="color:var(--text-soft);">${fmtMoney(stats.used)}</td>
+        <td data-label="Доступный остаток" style="color:var(--green); font-weight:800;">${fmtMoney(stats.available)}</td>
+        <td data-label="Примечание">${escapeHtml(a.note || '—')}</td>
+        <td data-label="Действие">
           <button class="btn danger small" style="padding:4px 8px;" onclick="deleteAdvance('${a.id}')">Удалить</button>
         </td>
       </tr>

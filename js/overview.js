@@ -501,13 +501,17 @@ function renderDashboardMetricsGrid() {
   const colors = isDark ? DASHBOARD_METRIC_COLORS_DARK : DASHBOARD_METRIC_COLORS_LIGHT;
   const goalMultiplier = { day: 1, week: 7, month: 30, year: 365 }[dashboardMetricsPeriod] || 1;
 
-  grid.style.cssText = 'display:grid; grid-template-columns:' + metrics.map(()=>'1fr').join(' ') + ';';
+  // На узких экранах графики друг рядом с другом становятся ~90px и превращаются в кашу —
+  // схлопываем в один столбец (друг под другом), каждый на всю ширину контейнера.
+  const isMobileLayout = window.matchMedia('(max-width: 760px)').matches;
+  const colCount = isMobileLayout ? 1 : metrics.length;
+  grid.style.cssText = 'display:grid; grid-template-columns:' + Array(colCount).fill('1fr').join(' ') + ';';
 
   // Меряем реальную ширину контейнера, чтобы viewBox графика точно совпадал с пикселями —
   // тогда не нужно искажать пропорции (что превратило бы точки в овалы, а текст растянуло).
   const gridWidth = grid.getBoundingClientRect().width || 600;
   const colGap = 40; // суммарные боковые паддинги одной колонки (20px + 20px)
-  const colWidth = Math.max(80, Math.round(gridWidth / Math.max(1, metrics.length) - colGap));
+  const colWidth = Math.max(80, Math.round(gridWidth / Math.max(1, colCount) - colGap));
 
   // Контекст по каждой колонке (точки графика, подписи корзин) — нужен после вставки
   // innerHTML, чтобы навесить обработчики наведения мышью без пере-парсинга разметки.
@@ -564,7 +568,11 @@ function renderDashboardMetricsGrid() {
     const gradId = 'dmGrad' + idx;
 
     const isFirst = idx === 0, isLast = idx === metrics.length - 1;
-    const padStyle = (isFirst ? 'padding-right:20px;' : isLast ? 'padding-left:20px;' : 'padding:0 20px;') + (!isFirst ? 'border-left:1px solid var(--border);' : '');
+    // На мобильном столбцы идут друг под другом — разделитель сверху, а не слева, и без
+    // "срезающего" паддинга по бокам (там и так уже вся ширина экрана).
+    const padStyle = isMobileLayout
+      ? (isFirst ? '' : 'padding-top:16px; margin-top:16px; border-top:1px solid var(--border);')
+      : (isFirst ? 'padding-right:20px;' : isLast ? 'padding-left:20px;' : 'padding:0 20px;') + (!isFirst ? 'border-left:1px solid var(--border);' : '');
 
     colContexts.push({ pts, series, secSeries, secInfo: info.secondary, ranges, info, color, w, chartBottom });
 

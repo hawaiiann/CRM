@@ -47,7 +47,9 @@ function adjustSelectWidth(el) {
 }
 
 function adjustAllBadgeSelects() {
-  document.querySelectorAll('select.badge').forEach(adjustSelectWidth);
+  // .plan-class-subject/.plan-class-title — те же стилизованные select с appearance:none,
+  // без явного расчёта ширины схлопываются до паддингов (особенно заметно на мобильном).
+  document.querySelectorAll('select.badge, .plan-class-subject, .plan-class-title').forEach(adjustSelectWidth);
 }
 
 /* Helper for adaptive text input width */

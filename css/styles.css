@@ -1374,6 +1374,7 @@
     box-sizing: border-box;
     transition: all 0.2s ease;
     cursor: pointer;
+    flex-shrink: 0; /* иначе в flex-wrap ряду сжимается до паддингов вместо переноса на новую строку */
   }
   body.dark-theme .plan-class-subject {
     color: #B4E62B;
@@ -1391,6 +1392,7 @@
     padding: 6px 14px;
     outline: none;
     cursor: pointer;
+    flex-shrink: 0;
   }
   body.dark-theme .plan-class-title {
     background: var(--subcard);
@@ -1404,6 +1406,7 @@
     font-weight: 800;
     padding: 6px 14px;
     margin-top: 0;
+    flex-shrink: 0;
   }
 
   .dm-tooltip {
@@ -1437,6 +1440,7 @@
     border-radius: var(--radius-pill);
     padding: 6px 14px;
     outline: none;
+    flex-shrink: 0;
     box-sizing: content-box;
     text-align: center;
     cursor: text;
@@ -2265,13 +2269,65 @@
     .tasks-2col-grid,
     .row2, .row3, .row4,
     .advance-row3,
-    .details-mini-grid {
+    .details-mini-grid,
+    .details-grid {
       grid-template-columns: 1fr !important;
     }
 
     /* Таймлайн — гант-диаграмма шире экрана в любом режиме (не только "месяц"),
-       поэтому скролл по горизонтали включаем безусловно, не дожидаясь JS-класса. */
-    .tl-container { overflow-x: auto !important; overflow-y: visible !important; }
+       поэтому скролл по горизонтали включаем безусловно, не дожидаясь JS-класса.
+       min-width:750px на САМОМ .tl-container (десктопное правило) не давал ему сжаться
+       до ширины экрана — скролл срабатывал не внутри контейнера, а уезжала вся страница. */
+    .tl-container { overflow-x: auto !important; overflow-y: visible !important; min-width: 0 !important; width: 100%; }
+    /* Тулбар навигации по датам (← дата → Сегодня Скрыть завершённые) не переносился
+       на новую строку и вместе с фиксированным min-width подписи диапазона выталкивал всю страницу вширь. */
+    .tl-nav { flex-wrap: wrap; }
+    .tl-range-label { min-width: 0; }
+
+    /* Финансы — таблицы (заказы + реестр авансов) в карточки-строки вместо
+       горизонтального скролла мелкого текста в обе стороны (см. data-label в finance.js). */
+    .finance-table thead { display: none; }
+    .finance-table, .finance-table tbody, .finance-table tr, .finance-table td { display: block; width: 100%; }
+    .finance-table tr { margin-bottom: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; background: var(--surface); }
+    .finance-table td { border: none; padding: 6px 0; }
+    .finance-table td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 10px; font-weight: 700; color: var(--text-faint);
+      text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 2px;
+    }
+
+    /* Планирование — шапка доски класса: .plan-class-controls (5 кнопок, nowrap) жёстко
+       забирала большую часть ширины строки, а .plan-title-group (min-width:0) выдавливалась
+       до нескольких пикселей вместо переноса на новую строку. Ставим шапку в колонку. */
+    .plan-class-header { flex-direction: column; align-items: stretch; }
+    .plan-class-controls { justify-content: flex-end; }
+
+    /* Справочники — строка показателя дашборда (тип+цель+глазок+удаление) заворачивается
+       в 2 внутренние строки на узком экране — без своей рамки было не разобрать, где
+       кончается один показатель и начинается следующий. */
+    #dashboardMetricsList .settings-row {
+      background: var(--subcard);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+    }
+
+    /* Таймлайн — поповер с деталями заказа (появляется по тапу на полосу, десктопный
+       hover-паттерн) позиционировался абсолютно относительно самой полосы внутри
+       прокручиваемой гант-области — на телефоне обрезался о край экрана. На мобильном
+       превращаем в "нижний лист", позиция которого не зависит от полосы/скролла. */
+    .timeline-expanded-card {
+      position: fixed !important;
+      left: 12px !important; right: 12px !important; top: auto !important; bottom: 12px !important;
+      width: auto !important; max-width: none !important;
+      max-height: 75vh; overflow-y: auto;
+    }
+
+    /* Плашка "Сумма позиций"/"Конечная цена" в форме заказа — подпись и пилюля-сумма
+       не переносились, из-за чего сумма переносилась ВНУТРИ самой пилюли на 2 строки. */
+    .lines-total-box { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .lines-total-amount { align-self: flex-start; }
 
     /* Тулбар "Заказы" — инпут поиска не должен упираться в фиксированный min-width */
     #searchOrders { min-width: 0 !important; width: 100%; }

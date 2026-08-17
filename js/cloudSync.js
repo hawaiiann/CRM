@@ -12,7 +12,23 @@
  * а не один большой JSON-блок целиком при каждом сохранении.
  * ============================================================ */
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Чекбокс "Запомнить меня" переключает, куда supabase-js пишет сессию: localStorage
+// (переживает закрытие браузера) при включённой галочке, sessionStorage (только пока
+// открыта вкладка) — при выключенной. getItem проверяет оба места, чтобы найти сессию
+// независимо от того, куда её в прошлый раз записали.
+let rememberMeOnNextSignIn = true;
+const authStorageAdapter = {
+  getItem: (key) => localStorage.getItem(key) ?? sessionStorage.getItem(key),
+  setItem: (key, value) => {
+    if (rememberMeOnNextSignIn) { localStorage.setItem(key, value); sessionStorage.removeItem(key); }
+    else { sessionStorage.setItem(key, value); localStorage.removeItem(key); }
+  },
+  removeItem: (key) => { localStorage.removeItem(key); sessionStorage.removeItem(key); }
+};
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: { storage: authStorageAdapter }
+});
 
 let cloudUserId = null;
 let cloudSyncInFlight = false;
@@ -52,6 +68,7 @@ async function handleAuthSubmit(event) {
   errEl.style.display = 'none';
   btn.disabled = true;
   btn.textContent = 'Вход...';
+  rememberMeOnNextSignIn = document.getElementById('auth_remember').checked;
   try {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
