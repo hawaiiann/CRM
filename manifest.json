@@ -1,0 +1,12 @@
+{
+  "name": "Дизайн CRM",
+  "short_name": "CRM",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#FAFAF8",
+  "theme_color": "#A8E10C",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
