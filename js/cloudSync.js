@@ -41,7 +41,10 @@ let resolveAuthWait = null;
 // каждой отправкой, чтобы посылать только реально изменившиеся записи.
 let cloudSnapshot = {
   orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {},
-  appSettings: null, activityLogSyncedCount: 0
+  appSettings: null, activityLogSyncedCount: 0,
+  // updated_at последней ИЗВЕСТНОЙ НАМ версии каждой записи — основа для защиты от гонки
+  // при записи (см. upsertWithConflictCheck ниже).
+  updatedAt: { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} }
 };
 
 /* ---------- Вход ---------- */
@@ -185,6 +188,52 @@ async function deleteFromCloud(table, id) {
   }
 }
 
+// Защита от гонки при ОБНОВЛЕНИИ (не только удалении — см. v1.19.3 для удаления): если
+// одновременно открыты 2 сессии одного аккаунта (телефон + компьютер), устаревшая копия
+// не должна молча перезаписать полями то, что сервер уже получил от свежей сессии.
+//
+// updated_at генерируем на клиенте при каждой записи (без правок схемы БД — не нужен
+// доп. SQL/триггер) и используем его же как условие для следующей записи: если запись уже
+// существовала — UPDATE идёт с WHERE updated_at = <последнее известное нам значение>.
+// Если сервер её с тех пор изменил кто-то другой, 0 строк совпадёт — вместо слепой
+// перезаписи забираем актуальную версию с сервера и подставляем её локально.
+async function upsertWithConflictCheck(table, items, toRowFn, cloudSnapshotMap, updatedAtMap, mergeServerRow) {
+  for (const item of items) {
+    const id = item.id;
+    const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
+    const known = updatedAtMap[id];
+    try {
+      if (known) {
+        const { data, error } = await supabaseClient.from(table)
+          .update(payload).eq('id', id).eq('updated_at', known)
+          .select('updated_at');
+        if (error) throw error;
+        if (!data || !data.length) {
+          await resolveSyncConflict(table, id, updatedAtMap, mergeServerRow);
+          continue;
+        }
+        updatedAtMap[id] = data[0].updated_at;
+      } else {
+        const { data, error } = await supabaseClient.from(table).insert(payload).select('updated_at').single();
+        if (error) throw error;
+        updatedAtMap[id] = data.updated_at;
+      }
+      cloudSnapshotMap[id] = item;
+    } catch (err) {
+      console.error(`Ошибка синхронизации записи (${table}/${id}):`, err);
+    }
+  }
+}
+
+// Конфликт обнаружен — сервер новее нашей последней известной версии. Сервер прав
+// (там правки другой, более свежей сессии), забираем его версию и применяем локально.
+async function resolveSyncConflict(table, id, updatedAtMap, mergeServerRow) {
+  const { data } = await supabaseClient.from(table).select('*').eq('id', id).maybeSingle();
+  if (!data) { delete updatedAtMap[id]; mergeServerRow(null, id); return; } // тем временем удалена кем-то другим
+  updatedAtMap[id] = data.updated_at;
+  mergeServerRow(data, id);
+}
+
 /* ---------- Отправка изменений в облако ---------- */
 
 async function performCloudSync() {
@@ -194,30 +243,96 @@ async function performCloudSync() {
   try {
     const { currentMap: ordersMap } = diffById(orders);
     const ordersDiff = collectionChanged(ordersMap, cloudSnapshot.orders);
-    if (ordersDiff.toUpsert.length) await supabaseClient.from('orders').upsert(ordersDiff.toUpsert.map(orderToRow));
-    cloudSnapshot.orders = ordersMap;
+    if (ordersDiff.toUpsert.length) {
+      await upsertWithConflictCheck('orders', ordersDiff.toUpsert, orderToRow, cloudSnapshot.orders, cloudSnapshot.updatedAt.orders, (row, id) => {
+        if (row) {
+          const o = normalizeOrder(rowToOrder(row));
+          const idx = orders.findIndex(x => x.id === o.id);
+          if (idx >= 0) orders[idx] = o; else orders.push(o);
+          cloudSnapshot.orders[o.id] = o;
+        } else {
+          orders = orders.filter(x => x.id !== id); // сервер: запись удалена другой сессией тем временем
+          delete cloudSnapshot.orders[id];
+        }
+        syncPlanningWithOrders();
+        renderCurrent();
+      });
+    }
 
     const { currentMap: tasksMap } = diffById(appTasks);
     const tasksDiff = collectionChanged(tasksMap, cloudSnapshot.tasks);
-    if (tasksDiff.toUpsert.length) await supabaseClient.from('tasks').upsert(tasksDiff.toUpsert.map(taskToRow));
-    cloudSnapshot.tasks = tasksMap;
+    if (tasksDiff.toUpsert.length) {
+      await upsertWithConflictCheck('tasks', tasksDiff.toUpsert, taskToRow, cloudSnapshot.tasks, cloudSnapshot.updatedAt.tasks, (row, id) => {
+        if (row) {
+          const t = normalizeTask(rowToTask(row));
+          const idx = appTasks.findIndex(x => x.id === t.id);
+          if (idx >= 0) appTasks[idx] = t; else appTasks.push(t);
+          cloudSnapshot.tasks[t.id] = t;
+        } else {
+          appTasks = appTasks.filter(x => x.id !== id);
+          delete cloudSnapshot.tasks[id];
+        }
+        renderCurrent();
+      });
+    }
 
     const { currentMap: advMap } = diffById(advances);
     const advDiff = collectionChanged(advMap, cloudSnapshot.advances);
-    if (advDiff.toUpsert.length) await supabaseClient.from('advances').upsert(advDiff.toUpsert.map(advanceToRow));
-    cloudSnapshot.advances = advMap;
+    if (advDiff.toUpsert.length) {
+      await upsertWithConflictCheck('advances', advDiff.toUpsert, advanceToRow, cloudSnapshot.advances, cloudSnapshot.updatedAt.advances, (row, id) => {
+        if (row) {
+          const a = normalizeAdvance(rowToAdvance(row));
+          const idx = advances.findIndex(x => x.id === a.id);
+          if (idx >= 0) advances[idx] = a; else advances.push(a);
+          cloudSnapshot.advances[a.id] = a;
+        } else {
+          advances = advances.filter(x => x.id !== id);
+          delete cloudSnapshot.advances[id];
+        }
+        renderCurrent();
+      });
+    }
 
     const { currentMap: boardsMap } = diffById(planningBoards.map(boardSnapshotShape));
     const boardsDiff = collectionChanged(boardsMap, cloudSnapshot.planningBoards);
-    if (boardsDiff.toUpsert.length) await supabaseClient.from('planning_boards').upsert(boardsDiff.toUpsert.map(boardToRow));
-    cloudSnapshot.planningBoards = boardsMap;
+    if (boardsDiff.toUpsert.length) {
+      await upsertWithConflictCheck('planning_boards', boardsDiff.toUpsert, boardToRow, cloudSnapshot.planningBoards, cloudSnapshot.updatedAt.planningBoards, (row, id) => {
+        if (row) {
+          const rowBoard = rowToBoard(row);
+          const existing = planningBoards.find(b => b.id === rowBoard.id);
+          if (existing) Object.assign(existing, rowBoard, { lessons: existing.lessons || [] });
+          else planningBoards.push(rowBoard);
+          cloudSnapshot.planningBoards[rowBoard.id] = boardSnapshotShape(rowBoard);
+        } else {
+          planningBoards = planningBoards.filter(b => b.id !== id);
+          delete cloudSnapshot.planningBoards[id];
+        }
+        renderCurrent();
+      });
+    }
 
     const allLessons = [];
     planningBoards.forEach(b => (b.lessons || []).forEach(l => allLessons.push({ ...l, boardId: b.id })));
     const { currentMap: lessonsMap } = diffById(allLessons);
     const lessonsDiff = collectionChanged(lessonsMap, cloudSnapshot.planningLessons);
-    if (lessonsDiff.toUpsert.length) await supabaseClient.from('planning_lessons').upsert(lessonsDiff.toUpsert.map(lessonToRow));
-    cloudSnapshot.planningLessons = lessonsMap;
+    if (lessonsDiff.toUpsert.length) {
+      await upsertWithConflictCheck('planning_lessons', lessonsDiff.toUpsert, lessonToRow, cloudSnapshot.planningLessons, cloudSnapshot.updatedAt.planningLessons, (row, id) => {
+        if (row) {
+          const lesson = rowToLesson(row);
+          const board = planningBoards.find(b => b.id === row.board_id);
+          if (board) {
+            if (!board.lessons) board.lessons = [];
+            const idx = board.lessons.findIndex(l => l.id === lesson.id);
+            if (idx >= 0) board.lessons[idx] = lesson; else board.lessons.push(lesson);
+          }
+          cloudSnapshot.planningLessons[lesson.id] = { ...lesson, boardId: row.board_id };
+        } else {
+          planningBoards.forEach(b => { b.lessons = (b.lessons || []).filter(l => l.id !== id); });
+          delete cloudSnapshot.planningLessons[id];
+        }
+        renderCurrent();
+      });
+    }
 
     if (JSON.stringify(appSettings) !== JSON.stringify(cloudSnapshot.appSettings)) {
       await supabaseClient.from('app_settings').upsert({ user_id: cloudUserId, data: appSettings });
@@ -280,6 +395,16 @@ async function cloudLoadData() {
   cloudSnapshot.appSettings = pulledSettings ? JSON.parse(JSON.stringify(pulledSettings)) : null;
   cloudSnapshot.activityLogSyncedCount = pulledLog.length;
 
+  // updated_at каждой записи — точка отсчёта для защиты от гонки при следующей записи
+  // (см. upsertWithConflictCheck): без этого самая первая правка после открытия страницы
+  // не с чем было бы сверить.
+  cloudSnapshot.updatedAt = { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} };
+  (ordersRes.data || []).forEach(r => { cloudSnapshot.updatedAt.orders[r.id] = r.updated_at; });
+  (tasksRes.data || []).forEach(r => { cloudSnapshot.updatedAt.tasks[r.id] = r.updated_at; });
+  (advRes.data || []).forEach(r => { cloudSnapshot.updatedAt.advances[r.id] = r.updated_at; });
+  (boardsRes.data || []).forEach(r => { cloudSnapshot.updatedAt.planningBoards[r.id] = r.updated_at; });
+  (lessonsRes.data || []).forEach(r => { cloudSnapshot.updatedAt.planningLessons[r.id] = r.updated_at; });
+
   return { orders: pulledOrders, tasks: pulledTasks, advances: pulledAdvances, planningBoards: boards, appSettings: pulledSettings, activityLog: pulledLog };
 }
 
@@ -301,11 +426,13 @@ function handleRealtimeOrders(payload) {
   if (payload.eventType === 'DELETE') {
     orders = orders.filter(o => o.id !== payload.old.id);
     delete cloudSnapshot.orders[payload.old.id];
+    delete cloudSnapshot.updatedAt.orders[payload.old.id];
   } else {
     const o = normalizeOrder(rowToOrder(payload.new));
     const idx = orders.findIndex(x => x.id === o.id);
     if (idx >= 0) orders[idx] = o; else orders.push(o);
     cloudSnapshot.orders[o.id] = o;
+    cloudSnapshot.updatedAt.orders[o.id] = payload.new.updated_at;
   }
   syncPlanningWithOrders();
   renderCurrent();
@@ -315,11 +442,13 @@ function handleRealtimeTasks(payload) {
   if (payload.eventType === 'DELETE') {
     appTasks = appTasks.filter(t => t.id !== payload.old.id);
     delete cloudSnapshot.tasks[payload.old.id];
+    delete cloudSnapshot.updatedAt.tasks[payload.old.id];
   } else {
     const t = normalizeTask(rowToTask(payload.new));
     const idx = appTasks.findIndex(x => x.id === t.id);
     if (idx >= 0) appTasks[idx] = t; else appTasks.push(t);
     cloudSnapshot.tasks[t.id] = t;
+    cloudSnapshot.updatedAt.tasks[t.id] = payload.new.updated_at;
   }
   renderCurrent();
 }
@@ -328,11 +457,13 @@ function handleRealtimeAdvances(payload) {
   if (payload.eventType === 'DELETE') {
     advances = advances.filter(a => a.id !== payload.old.id);
     delete cloudSnapshot.advances[payload.old.id];
+    delete cloudSnapshot.updatedAt.advances[payload.old.id];
   } else {
     const a = normalizeAdvance(rowToAdvance(payload.new));
     const idx = advances.findIndex(x => x.id === a.id);
     if (idx >= 0) advances[idx] = a; else advances.push(a);
     cloudSnapshot.advances[a.id] = a;
+    cloudSnapshot.updatedAt.advances[a.id] = payload.new.updated_at;
   }
   renderCurrent();
 }
@@ -341,12 +472,14 @@ function handleRealtimeBoards(payload) {
   if (payload.eventType === 'DELETE') {
     planningBoards = planningBoards.filter(b => b.id !== payload.old.id);
     delete cloudSnapshot.planningBoards[payload.old.id];
+    delete cloudSnapshot.updatedAt.planningBoards[payload.old.id];
   } else {
     const rowBoard = rowToBoard(payload.new);
     const existing = planningBoards.find(b => b.id === rowBoard.id);
     if (existing) { Object.assign(existing, rowBoard, { lessons: existing.lessons || [] }); }
     else { planningBoards.push(rowBoard); }
     cloudSnapshot.planningBoards[rowBoard.id] = boardSnapshotShape(rowBoard);
+    cloudSnapshot.updatedAt.planningBoards[rowBoard.id] = payload.new.updated_at;
   }
   renderCurrent();
 }
@@ -355,6 +488,7 @@ function handleRealtimeLessons(payload) {
   if (payload.eventType === 'DELETE') {
     planningBoards.forEach(b => { b.lessons = (b.lessons || []).filter(l => l.id !== payload.old.id); });
     delete cloudSnapshot.planningLessons[payload.old.id];
+    delete cloudSnapshot.updatedAt.planningLessons[payload.old.id];
   } else {
     const lesson = rowToLesson(payload.new);
     const board = planningBoards.find(b => b.id === payload.new.board_id);
@@ -364,6 +498,7 @@ function handleRealtimeLessons(payload) {
       if (idx >= 0) board.lessons[idx] = lesson; else board.lessons.push(lesson);
     }
     cloudSnapshot.planningLessons[lesson.id] = { ...lesson, boardId: payload.new.board_id };
+    cloudSnapshot.updatedAt.planningLessons[lesson.id] = payload.new.updated_at;
   }
   renderCurrent();
 }
