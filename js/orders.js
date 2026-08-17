@@ -312,7 +312,10 @@ function quickChangeStatus(id, newStatus){
 /* SIDEBAR POMODORO CONTROLLER */
 const SPC_RING_CIRCUMFERENCE = 263.89; // 2 * PI * 42 (радиус кольца в SVG)
 const SPC_CYCLE_DURATION = 3600; // за сколько секунд кольцо делает один полный круг (1 час)
-let activeTimer = { id: 'standalone', title: 'Свободный замер', start: 0, elapsed: 0, segmentStart: 0, interval: null, running: false };
+let activeTimer = { id: 'standalone', title: 'Свободный замер', start: 0, elapsed: 0, segmentStart: 0, interval: null, running: false, nextMilestoneMs: 0 };
+
+// Шаг всплывающих уведомлений о вехах таймера — каждые 30 минут в работе.
+const TIMER_MILESTONE_STEP_MS = 30 * 60 * 1000;
 
 const spcPlayIcon = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M5.45 4.6L10.55 8L5.45 11.4V4.6Z"/></svg>`;
 const spcPauseIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>`;
@@ -357,6 +360,13 @@ function updateSidebarTimerUI() {
     saveData();
   }
 
+  // Вехи "отработали N минут/часов" — проверяем через while (не if), чтобы не потерять
+  // веху, если вкладка была свёрнута/в фоне и таймер интервалов пропустил несколько тиков разом.
+  while (activeTimer.running && activeTimer.id !== 'standalone' && activeTimer.elapsed >= activeTimer.nextMilestoneMs) {
+    notifyTimerMilestone(activeTimer.nextMilestoneMs);
+    activeTimer.nextMilestoneMs += TIMER_MILESTONE_STEP_MS;
+  }
+
   const disp = document.getElementById('spcDisplay');
   if (disp) disp.textContent = spcFormatTime(elapsedSec);
 
@@ -374,6 +384,7 @@ function toggleSidebarTimer() {
     clearInterval(activeTimer.interval);
     if(icon) icon.innerHTML = spcPlayIcon;
   } else {
+    if (activeTimer.id !== 'standalone') requestTimerNotificationPermission();
     activeTimer.start = Date.now() - activeTimer.elapsed;
     activeTimer.running = true;
     activeTimer.interval = setInterval(updateSidebarTimerUI, 1000);
@@ -390,6 +401,8 @@ function resetSidebarTimer() {
   activeTimer.segmentStart = 0;
   activeTimer.id = 'standalone';
   activeTimer.title = 'Свободный замер';
+  activeTimer.nextMilestoneMs = TIMER_MILESTONE_STEP_MS;
+  dismissAllTimerToasts();
   const disp = document.getElementById('spcDisplay');
   if(disp) disp.textContent = spcFormatTime(0);
   const ring = document.getElementById('spcRingProgress');
@@ -399,6 +412,68 @@ function resetSidebarTimer() {
   const nameEl = document.getElementById('spcTaskName');
   if(nameEl) nameEl.textContent = 'Свободный замер';
   refreshTimerButtons();
+}
+
+/* ВЕХИ ТАЙМЕРА ("отработали 30 минут") — тост в углу экрана, пока вкладка активна,
+ * системное уведомление ОС — если вкладка свёрнута/не в фокусе. */
+
+function requestTimerNotificationPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+}
+
+function notifyTimerMilestone(ms) {
+  const label = fmtMilestoneDuration(ms);
+  const title = activeTimer.title;
+  const orderId = activeTimer.id;
+  const isBackground = document.hidden || !document.hasFocus();
+  if (isBackground) {
+    sendSystemTimerNotification(label, title, orderId);
+  } else {
+    showTimerToast(label, title, orderId);
+  }
+}
+
+function sendSystemTimerNotification(label, title, orderId) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const n = new Notification('Таймер CRM', { body: `Отработано ${label} — «${title}»` });
+  n.onclick = () => {
+    window.focus();
+    n.close();
+    if (orderId && orderId !== 'standalone') goToOrderCard(orderId);
+  };
+}
+
+function showTimerToast(label, title, orderId) {
+  const root = document.getElementById('timerToastRoot');
+  if (!root) return;
+  const toast = document.createElement('div');
+  toast.className = 'timer-toast';
+  toast.innerHTML = `
+    <div class="timer-toast-icon"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8.2L10.6 9.9"/></svg></div>
+    <div class="timer-toast-body">
+      <div class="timer-toast-title">Отработано ${label}</div>
+      <div class="timer-toast-sub">${escapeHtml(title)}</div>
+    </div>`;
+  toast.addEventListener('click', () => {
+    dismissTimerToast(toast);
+    if (orderId && orderId !== 'standalone') goToOrderCard(orderId);
+  });
+  root.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => dismissTimerToast(toast), 7000);
+}
+
+function dismissTimerToast(toast) {
+  if (!toast || !toast.parentNode || toast.classList.contains('hide')) return;
+  toast.classList.remove('show');
+  toast.classList.add('hide');
+  setTimeout(() => toast.remove(), 300);
+}
+
+function dismissAllTimerToasts() {
+  const root = document.getElementById('timerToastRoot');
+  if (root) root.innerHTML = '';
 }
 
 // Позиция, в которую сейчас "капает" время таймера — первая ещё не отмеченная "Готов".

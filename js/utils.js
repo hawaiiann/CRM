@@ -151,6 +151,25 @@ function fmtHours(h) {
 
 function isHourlyUnit(l){ return (l.type||'').toLowerCase().includes('час'); }
 
+// Русское склонение числительного: pluralizeRu(1,'час','часа','часов') -> 'час', (3,...) -> 'часа', (5,...) -> 'часов'
+function pluralizeRu(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+// "1 ч 30 минут" для веховых уведомлений таймера — принимает миллисекунды
+function fmtMilestoneDuration(ms) {
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const parts = [];
+  if (h > 0) parts.push(`${h} ${pluralizeRu(h, 'час', 'часа', 'часов')}`);
+  if (m > 0) parts.push(`${m} ${pluralizeRu(m, 'минута', 'минуты', 'минут')}`);
+  return parts.join(' ') || '0 минут';
+}
+
 // Понимает часы в формате "1.5", "1,5", "1:30" и "1ч 30м" — везде возвращает десятичные часы.
 function parseHours(v){
   const s = String(v||'').trim().toLowerCase();

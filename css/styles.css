@@ -2159,3 +2159,49 @@
   .close-x { position: absolute; top: 22px; right: 22px; background: none; border: none; cursor: pointer; color: var(--text-faint); display: flex; align-items: center; justify-content: center; }
   .close-x:hover { color: var(--text); }
   #fileInput { display: none; }
+
+  /* Всплывающий тост-попап таймера (вехи 30/60/90 мин), правый нижний угол экрана */
+  .timer-toast-root {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 100010;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .timer-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 300px;
+    max-width: calc(100vw - 48px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hover);
+    padding: 14px 16px;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .timer-toast:hover { border-color: var(--accent-yellow); }
+  .timer-toast.show { opacity: 1; transform: translateY(0) scale(1); }
+  .timer-toast.hide { opacity: 0; transform: translateY(10px) scale(0.97); }
+  .timer-toast-icon {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--accent-yellow);
+    color: #1E1E1E;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .timer-toast-body { min-width: 0; }
+  .timer-toast-title { font-size: 13.5px; font-weight: 800; color: var(--text); }
+  .timer-toast-sub { font-size: 12px; font-weight: 600; color: var(--text-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
