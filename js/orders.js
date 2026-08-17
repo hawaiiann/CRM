@@ -1036,6 +1036,7 @@ function confirmDeleteOrder(wipeStats) {
   if (!id) return;
 
   orders = orders.filter(o=>o.id!==id);
+  deleteFromCloud('orders', id);
   if (wipeStats) {
     activityLog = activityLog.filter(e => e.orderId !== id);
   }

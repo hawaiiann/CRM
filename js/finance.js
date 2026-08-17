@@ -280,6 +280,7 @@ function deleteAdvance(id) {
   const label = a ? `${fmtMoney(a.amount)} от ${a.client} (${a.date})` : 'эту запись';
   if (!confirm(`Удалить запись об авансе — ${label}?`)) return;
   advances = advances.filter(x => x.id !== id);
+  deleteFromCloud('advances', id);
   saveData();
   renderFinance();
 }

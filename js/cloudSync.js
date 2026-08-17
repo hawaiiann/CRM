@@ -160,16 +160,29 @@ function diffById(currentArr) {
   return { currentMap };
 }
 
+// ВАЖНО: раньше здесь же вычислялись id "пропавшие из массива с прошлого снимка" и они
+// удалялись из облака — но массив в памяти может "похудеть" не только от реального удаления
+// пользователем (сетевой сбой при загрузке, гонка состояний, любой баг рендера) — то есть
+// такая логика рисковала стереть данные без явного действия пользователя. Теперь этот
+// diff отвечает ТОЛЬКО за upsert; настоящее удаление — только через deleteFromCloud(),
+// вызываемый explicit-но из самих функций удаления (confirmDeleteOrder, deleteTask и т.д.).
 function collectionChanged(currentMap, snapshotMap) {
   const toUpsert = [];
-  const toDeleteIds = [];
   for (const id in currentMap) {
     if (JSON.stringify(currentMap[id]) !== JSON.stringify(snapshotMap[id])) toUpsert.push(currentMap[id]);
   }
-  for (const id in snapshotMap) {
-    if (!(id in currentMap)) toDeleteIds.push(id);
+  return { toUpsert };
+}
+
+// Единственный источник настоящего удаления записи из облака — вызывается explicit-но
+// в момент, когда пользователь ЯВНО нажал "Удалить" (см. orders.js/tasks.js/finance.js/planning.js).
+async function deleteFromCloud(table, id) {
+  if (!cloudUserId || !id) return;
+  try {
+    await supabaseClient.from(table).delete().eq('id', id);
+  } catch (err) {
+    console.error(`Не удалось удалить запись из облака (${table}/${id}):`, err);
   }
-  return { toUpsert, toDeleteIds };
 }
 
 /* ---------- Отправка изменений в облако ---------- */
@@ -182,25 +195,21 @@ async function performCloudSync() {
     const { currentMap: ordersMap } = diffById(orders);
     const ordersDiff = collectionChanged(ordersMap, cloudSnapshot.orders);
     if (ordersDiff.toUpsert.length) await supabaseClient.from('orders').upsert(ordersDiff.toUpsert.map(orderToRow));
-    if (ordersDiff.toDeleteIds.length) await supabaseClient.from('orders').delete().in('id', ordersDiff.toDeleteIds);
     cloudSnapshot.orders = ordersMap;
 
     const { currentMap: tasksMap } = diffById(appTasks);
     const tasksDiff = collectionChanged(tasksMap, cloudSnapshot.tasks);
     if (tasksDiff.toUpsert.length) await supabaseClient.from('tasks').upsert(tasksDiff.toUpsert.map(taskToRow));
-    if (tasksDiff.toDeleteIds.length) await supabaseClient.from('tasks').delete().in('id', tasksDiff.toDeleteIds);
     cloudSnapshot.tasks = tasksMap;
 
     const { currentMap: advMap } = diffById(advances);
     const advDiff = collectionChanged(advMap, cloudSnapshot.advances);
     if (advDiff.toUpsert.length) await supabaseClient.from('advances').upsert(advDiff.toUpsert.map(advanceToRow));
-    if (advDiff.toDeleteIds.length) await supabaseClient.from('advances').delete().in('id', advDiff.toDeleteIds);
     cloudSnapshot.advances = advMap;
 
     const { currentMap: boardsMap } = diffById(planningBoards.map(boardSnapshotShape));
     const boardsDiff = collectionChanged(boardsMap, cloudSnapshot.planningBoards);
     if (boardsDiff.toUpsert.length) await supabaseClient.from('planning_boards').upsert(boardsDiff.toUpsert.map(boardToRow));
-    if (boardsDiff.toDeleteIds.length) await supabaseClient.from('planning_boards').delete().in('id', boardsDiff.toDeleteIds);
     cloudSnapshot.planningBoards = boardsMap;
 
     const allLessons = [];
@@ -208,7 +217,6 @@ async function performCloudSync() {
     const { currentMap: lessonsMap } = diffById(allLessons);
     const lessonsDiff = collectionChanged(lessonsMap, cloudSnapshot.planningLessons);
     if (lessonsDiff.toUpsert.length) await supabaseClient.from('planning_lessons').upsert(lessonsDiff.toUpsert.map(lessonToRow));
-    if (lessonsDiff.toDeleteIds.length) await supabaseClient.from('planning_lessons').delete().in('id', lessonsDiff.toDeleteIds);
     cloudSnapshot.planningLessons = lessonsMap;
 
     if (JSON.stringify(appSettings) !== JSON.stringify(cloudSnapshot.appSettings)) {

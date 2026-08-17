@@ -624,7 +624,9 @@ function formatQuarterOnBlur(el, bIdx) {
 
 function deletePlanningBoard(bIdx) {
   if (confirm(`Удалить "${planningBoards[bIdx].title}" со всеми уроками?`)) {
+    const boardId = planningBoards[bIdx].id;
     planningBoards.splice(bIdx, 1);
+    deleteFromCloud('planning_boards', boardId); // уроки этой доски удалятся каскадом (FK on delete cascade)
     saveData();
     renderPlanning();
   }
@@ -923,7 +925,9 @@ function deleteCurrentLesson() {
   const { bIdx, lIdx } = activeLessonState;
   if (bIdx !== null && lIdx !== null && planningBoards[bIdx]) {
     if (confirm('Удалить этот урок?')) {
+      const lessonId = planningBoards[bIdx].lessons[lIdx].id;
       planningBoards[bIdx].lessons.splice(lIdx, 1);
+      deleteFromCloud('planning_lessons', lessonId);
       saveData();
       closeLessonModal();
     }

@@ -229,6 +229,7 @@ function deleteTask(id) {
   const label = t ? (t.text.length > 60 ? t.text.slice(0, 60) + '…' : t.text) : 'эту задачу';
   if (!confirm(`Удалить задачу «${label}»?`)) return;
   appTasks = appTasks.filter(x => x.id !== id);
+  deleteFromCloud('tasks', id);
   saveData();
   refreshAllTaskWidgets();
 }
