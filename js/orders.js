@@ -175,7 +175,6 @@ function renderOrders(){
 
 /* ORDER CARD */
 function renderOrderCard(o){
-  const itemsSummary = o.lines.map(l => `${l.label} (${l.qty} ${l.type})`).join(' · ');
   const displayTitle = o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
   const statusOptions = Object.keys(statusLabels).map(k=> `<option value="${k}" ${o.status===k?'selected':''}>${statusLabels[k]}</option>`).join('');
 
@@ -224,7 +223,7 @@ function renderOrderCard(o){
           ${isOverdue ? `<span class="badge" style="background:var(--rose-soft); color:var(--rose);">⏰ Просрочен</span>` : ''}
           ${advBadgeHtml}
         </div>
-        <div class="occ-items-summary">${o.client ? `<span style="cursor:pointer; text-decoration:underline dotted;" onclick="event.stopPropagation(); openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</span> — ` : ''}${escapeHtml(itemsSummary)}</div>
+        ${o.client ? `<div class="occ-items-summary"><span style="cursor:pointer; text-decoration:underline dotted;" onclick="event.stopPropagation(); openClientCard('${escapeHtml(o.client)}')">${escapeHtml(o.client)}</span></div>` : ''}
       </div>
       <div class="occ-right">
         <div>

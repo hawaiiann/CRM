@@ -31,6 +31,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_
 });
 
 let cloudUserId = null;
+let cloudUserEmail = null;
 let cloudSyncInFlight = false;
 let cloudSyncPending = false;
 let cloudSyncDebounceTimer = null;
@@ -47,7 +48,35 @@ let cloudSnapshot = {
   updatedAt: { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} }
 };
 
-/* ---------- Вход ---------- */
+/* ---------- Вход + переключатель аккаунтов ---------- */
+
+const KNOWN_ACCOUNTS_KEY = 'design_crm_known_accounts_v1';
+
+// Аккаунты, куда когда-либо входили с "Запомнить меня" — email + токены сессии (не пароль!),
+// чтобы переключатель в шапке сайдбара мог войти в них заново без повторного ввода пароля.
+function getKnownAccounts() {
+  try { return JSON.parse(localStorage.getItem(KNOWN_ACCOUNTS_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function saveKnownAccountsMap(map) {
+  localStorage.setItem(KNOWN_ACCOUNTS_KEY, JSON.stringify(map));
+}
+function rememberAccount(session) {
+  const map = getKnownAccounts();
+  map[session.user.id] = {
+    email: session.user.email,
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    lastUsed: Date.now()
+  };
+  saveKnownAccountsMap(map);
+}
+function forgetAccount(userId) {
+  const map = getKnownAccounts();
+  delete map[userId];
+  saveKnownAccountsMap(map);
+  renderAccountSwitcher();
+}
 
 // Ждёт активную сессию — если её нет, показывает экран входа и виснет,
 // пока handleAuthSubmit() её не разрешит после успешного логина.
@@ -59,6 +88,13 @@ async function ensureAuthenticated() {
     session = await new Promise(resolve => { resolveAuthWait = resolve; });
   }
   cloudUserId = session.user.id;
+  cloudUserEmail = session.user.email;
+  // Держим токены свежими для УЖЕ запомненных аккаунтов (supabase-js их периодически ротирует) —
+  // не добавляет новых записей сама по себе, только обновляет то, что уже было сохранено раньше.
+  supabaseClient.auth.onAuthStateChange((event, s) => {
+    if (s && getKnownAccounts()[s.user.id]) rememberAccount(s);
+  });
+  renderAccountSwitcher();
   return session;
 }
 
@@ -75,9 +111,17 @@ async function handleAuthSubmit(event) {
   try {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    if (rememberMeOnNextSignIn) rememberAccount(data.session);
     document.getElementById('authOverlay').classList.remove('show');
     document.getElementById('authForm').reset();
-    if (resolveAuthWait) { resolveAuthWait(data.session); resolveAuthWait = null; }
+    if (resolveAuthWait) {
+      resolveAuthWait(data.session);
+      resolveAuthWait = null;
+    } else {
+      // Вход под другим аккаунтом поверх уже работающего приложения — проще и надёжнее
+      // перезагрузить страницу, чтобы весь стейт (заказы, реалтайм-подписка) пересобрался с нуля.
+      window.location.reload();
+    }
   } catch (err) {
     errEl.textContent = 'Не удалось войти: проверьте email и пароль.';
     errEl.style.display = 'block';
@@ -90,6 +134,77 @@ async function handleAuthSubmit(event) {
 async function signOutCloud() {
   await supabaseClient.auth.signOut();
   window.location.reload(); // проще всего сбросить всё in-memory состояние и снова показать экран входа
+}
+
+/* ---------- UI переключателя аккаунтов (шапка сайдбара) ---------- */
+
+function renderAccountSwitcher() {
+  const emailEl = document.getElementById('accountSwitcherEmail');
+  const menuEl = document.getElementById('accountSwitcherMenu');
+  if (!emailEl || !menuEl) return;
+
+  const map = getKnownAccounts();
+  emailEl.textContent = cloudUserEmail || '';
+
+  const others = Object.entries(map)
+    .filter(([id]) => id !== cloudUserId)
+    .sort((a, b) => b[1].lastUsed - a[1].lastUsed);
+
+  const othersHtml = others.map(([id, acc]) => `
+    <div class="account-switcher-item" onclick="switchToAccount('${id}')">
+      <span>${escapeHtml(acc.email)}</span>
+      <button type="button" class="account-switcher-remove" onclick="event.stopPropagation(); forgetAccount('${id}')" title="Забыть аккаунт (выйти из списка)">×</button>
+    </div>
+  `).join('');
+
+  menuEl.innerHTML = `
+    ${othersHtml}
+    ${others.length ? '<div class="account-switcher-divider"></div>' : ''}
+    <div class="account-switcher-item" onclick="addAnotherAccount()"><span>+ Войти под другим аккаунтом</span></div>
+    <div class="account-switcher-item account-switcher-signout" onclick="signOutCloud()"><span>Выйти</span></div>
+  `;
+}
+
+function toggleAccountSwitcherMenu(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('accountSwitcher').classList.toggle('open');
+}
+function closeAccountSwitcherMenu() {
+  const sw = document.getElementById('accountSwitcher');
+  if (sw) sw.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const sw = document.getElementById('accountSwitcher');
+  if (sw && !sw.contains(e.target)) sw.classList.remove('open');
+});
+
+// Переключение на уже посещённый аккаунт — без пароля, по сохранённым токенам сессии.
+async function switchToAccount(userId) {
+  closeAccountSwitcherMenu();
+  const acc = getKnownAccounts()[userId];
+  if (!acc) return;
+  const { error } = await supabaseClient.auth.setSession({ access_token: acc.access_token, refresh_token: acc.refresh_token });
+  if (error) {
+    alert('Не удалось переключиться — сессия этого аккаунта истекла. Войдите в него заново через "Войти под другим аккаунтом".');
+    forgetAccount(userId);
+    return;
+  }
+  window.location.reload();
+}
+
+// Показывает форму входа ПОВЕРХ уже работающего приложения (не разлогинивая текущего,
+// пока не введут другие корректные данные) — для добавления ещё одного известного аккаунта.
+function addAnotherAccount() {
+  closeAccountSwitcherMenu();
+  document.getElementById('authCloseBtn').style.display = '';
+  document.getElementById('authOverlay').classList.add('show');
+}
+// Закрыть форму входа обратно, если её открыли поверх уже работающего приложения
+// (при обязательном первом входе кнопки закрытия не показываем — см. authCloseBtn в index.html).
+function closeAuthOverlayIfDismissable() {
+  if (resolveAuthWait) return; // обязательный первый вход — так просто не закрыть
+  document.getElementById('authOverlay').classList.remove('show');
+  document.getElementById('authForm').reset();
 }
 
 /* ---------- JS-объект <-> строка таблицы ---------- */

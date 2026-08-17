@@ -139,6 +139,45 @@
     color: var(--text);
   }
 
+  /* Переключатель аккаунтов — шапка сайдбара, кликабельная (см. cloudSync.js) */
+  .account-switcher { position: relative; padding: 4px 8px 16px; }
+  .account-switcher-trigger {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: none; padding: 4px; margin: -4px;
+    border-radius: var(--radius-sm); cursor: pointer; text-align: left;
+    transition: background 0.15s ease;
+  }
+  .account-switcher-trigger:hover { background: var(--subcard); }
+  .account-switcher-trigger .brand-mark { margin: 0; }
+  .account-switcher-info { flex: 1; min-width: 0; }
+  .account-switcher-email {
+    font-size: 11px; font-weight: 600; color: var(--text-faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;
+  }
+  .account-switcher-chevron { flex-shrink: 0; color: var(--text-faint); transition: transform 0.15s ease; }
+  .account-switcher.open .account-switcher-chevron { transform: rotate(180deg); }
+
+  .account-switcher-menu {
+    display: none;
+    position: absolute; left: 8px; right: 8px; top: 100%;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-hover); padding: 6px; z-index: 60;
+  }
+  .account-switcher.open .account-switcher-menu { display: block; }
+  .account-switcher-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text);
+  }
+  .account-switcher-item:hover { background: var(--subcard); }
+  .account-switcher-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-switcher-remove {
+    background: none; border: none; color: var(--text-faint); cursor: pointer; flex-shrink: 0;
+    padding: 2px 4px; font-size: 14px; line-height: 1; border-radius: 4px;
+  }
+  .account-switcher-remove:hover { color: var(--rose); }
+  .account-switcher-divider { border-top: 1px solid var(--border); margin: 6px 2px; }
+  .account-switcher-signout { color: var(--rose); }
+
   nav.navlist { display: flex; flex-direction: column; gap: 4px; }
   .navlabel {
     font-size: 11px;
