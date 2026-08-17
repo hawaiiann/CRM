@@ -89,6 +89,39 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
   if (netDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'netRevenue', delta: netDelta });
 }
 
+// "Бегущий итог" накопительных показателей (Презентации/Рабочие листы/Слайды/Страницы на
+// Дашборде) считается суммой дельт в activityLog — а не пересчётом с нуля по факту. Если
+// когда-либо часть заказов попала в базу в обход recordActivityChanges (импорт JSON, миграция
+// схемы подсчёта — как объединение "Карточка с вопросами" в один показатель с "Рабочий лист"
+// в v1.16.1) — итог в журнале расходится с реальным текущим количеством и больше не
+// самовыправляется. Эта функция сверяет их и добавляет ОДНУ корректирующую запись на
+// показатель, если расхождение есть. Не трогает сами заказы/финансы — только статистику.
+function reconcileCumulativeStats() {
+  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0;
+  orders.forEach(o => {
+    const types = splitLineTypes(o.lines);
+    const units = splitLineUnits(o.lines);
+    realPresentations += types.presentations;
+    realWorksheets += types.worksheets;
+    realSlides += units.slides;
+    realPages += units.pages;
+  });
+  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0 };
+  activityLog.forEach(e => { if (e.field in logged) logged[e.field] += e.delta; });
+
+  const today = dateKey(new Date());
+  const real = { presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages };
+  let fixedFields = [];
+  Object.keys(real).forEach(field => {
+    const diff = Math.round((real[field] - logged[field]) * 10000) / 10000;
+    if (diff !== 0) {
+      activityLog.push({ date: today, orderId: null, field, delta: diff });
+      fixedFields.push(`${field}: ${logged[field]} → ${real[field]}`);
+    }
+  });
+  return fixedFields;
+}
+
 /* Data Loading & Saving — источник истины теперь Supabase (см. cloudSync.js),
  * localStorage остаётся быстрым локальным кэшем и офлайн-подстраховкой на случай,
  * если облако недоступно (см. loadFromLocalStorageFallback ниже). */

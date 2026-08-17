@@ -76,6 +76,22 @@ function addDashboardMetric() {
   renderCurrent();
 }
 
+function runReconcileCumulativeStats() {
+  const fixed = reconcileCumulativeStats();
+  if (!fixed.length) {
+    alert('Всё сходится — расхождений между журналом и реальным количеством нет.');
+    return;
+  }
+  if (!confirm(`Найдено расхождение:\n\n${fixed.join('\n')}\n\nДобавить корректирующую запись в журнал активности?`)) {
+    activityLog.pop(); // отменить (может быть несколько добавленных за один вызов — снимем по числу полей)
+    for (let i = 1; i < fixed.length; i++) activityLog.pop();
+    return;
+  }
+  saveData();
+  renderCurrent();
+  alert('Готово — статистика на Дашборде пересчитана.');
+}
+
 function updateDashboardMetricType(idx, val) {
   if (appSettings.dashboardMetrics[idx]) appSettings.dashboardMetrics[idx].type = val;
   saveData();
