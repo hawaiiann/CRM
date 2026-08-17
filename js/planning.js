@@ -824,11 +824,14 @@ function renderLessonChecklist() {
 // Позицию, добавленную в состав урока, зеркалим и в связанный заказ (если он уже
 // есть) — отдельной строкой с тем же названием. Без этого пункт чек-листа урока
 // существовал бы только "на бумаге", не попадая ни в состав заказа, ни в статистику.
+// Возвращает true, если позицию реально создали/уже нашли в заказе — используется, чтобы
+// пометить пункт чек-листа как "пришедший из заказа" (fromOrder), иначе при удалении
+// этой же позиции из заказа синхронизация не поймёт, что пункт чек-листа тоже пора убрать.
 function syncNewLessonItemToOrder(board, lesson, text) {
   const order = findGoverningOrder(board, lesson);
-  if (!order) return;
+  if (!order) return false;
   const already = (order.lines || []).some(l => (l.label || l.type || 'Работа').toLowerCase() === text.toLowerCase());
-  if (already) return;
+  if (already) return true;
   const before = JSON.parse(JSON.stringify(order));
   if (!order.lines) order.lines = [];
   order.lines.push({
@@ -842,6 +845,7 @@ function syncNewLessonItemToOrder(board, lesson, text) {
     ready: false
   });
   recordActivityChanges(before, order);
+  return true;
 }
 
 // Клик по варианту из справочника — сразу добавляет позицию в состав урока (не просто заполняет поле)
@@ -851,8 +855,8 @@ function pickLessonItemFromCatalog(value) {
     const board = planningBoards[bIdx];
     const lesson = board.lessons[lIdx];
     if (!lesson.items) lesson.items = [];
-    lesson.items.push({ id: 'i_' + Date.now(), text: value, done: false });
-    syncNewLessonItemToOrder(board, lesson, value);
+    const fromOrder = syncNewLessonItemToOrder(board, lesson, value);
+    lesson.items.push({ id: 'i_' + Date.now(), text: value, done: false, fromOrder });
     saveData();
     closeAllCombos();
     const input = document.getElementById('lmNewItemInput');
@@ -870,12 +874,13 @@ function handleLessonAddItem(e) {
       const board = planningBoards[bIdx];
       const lesson = board.lessons[lIdx];
       if (!lesson.items) lesson.items = [];
+      const fromOrder = syncNewLessonItemToOrder(board, lesson, val);
       lesson.items.push({
         id: 'i_' + Date.now(),
         text: val,
-        done: false
+        done: false,
+        fromOrder
       });
-      syncNewLessonItemToOrder(board, lesson, val);
       e.target.value = '';
       saveData();
       renderLessonChecklist();

@@ -292,11 +292,18 @@ function syncPlanningWithOrders() {
       if (!lineLabel.trim()) return;
       let item = lesson.items.find(i => i.text.toLowerCase() === lineLabel.toLowerCase());
       if (!item) {
-        item = { id: 'i_' + Date.now() + Math.random().toString(36).substr(2, 5), text: lineLabel, done: false };
+        item = { id: 'i_' + Date.now() + Math.random().toString(36).substr(2, 5), text: lineLabel, done: false, fromOrder: true };
         lesson.items.push(item);
       }
       item.done = !!line.ready;
     });
+
+    // Позицию удалили из заказа — убираем и пункт чек-листа, но только если он сам
+    // когда-то появился ИЗ позиции заказа (fromOrder). Пункты базового наполнения
+    // класса (заданы в шаблоне доски заранее, до заказа) трогать нельзя — они законно
+    // остаются "незакрытыми", пока по ним вообще не появится заказ (см. комментарий ниже).
+    const currentLineLabels = new Set((o.lines || []).map(l => (l.label || l.type || 'Работа').trim().toLowerCase()).filter(Boolean));
+    lesson.items = lesson.items.filter(item => !item.fromOrder || currentLineLabels.has(item.text.trim().toLowerCase()));
 
     // Заказ завершён целиком (в т.ч. если статус переключили вручную, минуя чекбоксы
     // "Готов" по каждой позиции) — подчищаем как завершённые все пункты, что совпадают
