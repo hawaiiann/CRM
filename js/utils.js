@@ -190,14 +190,19 @@ function parseHours(v){
   return parseNum(s);
 }
 
-// Раскладывает позиции заказа на "слайды" и "страницы" по единице измерения (l.type)
+// Раскладывает позиции заказа на "слайды" и "страницы" — по ТИПУ РАБОТЫ (l.label), а не по
+// единице измерения (l.type): "Ед. изм." — отдельное поле формы, которое может быть выставлено
+// как угодно и не обязано совпадать с типом (реальные данные это подтвердили — слайды/страницы
+// занижались, когда "Ед.изм." не был выставлен в "Слайд"/"Страница"). Слайды — Кол-во у позиций
+// "Презентация", страницы — Кол-во у позиций "Рабочий лист"/"Карточка с вопросами" — та же пара
+// условий, что и splitLineTypes() ниже, просто вместо +1 суммируем qty.
 function splitLineUnits(lines) {
   let slides = 0, pages = 0;
   (lines || []).forEach(l => {
-    const unit = (l.type || '').toLowerCase();
+    const label = (l.label || '').toLowerCase();
     const qty = parseNum(l.qty);
-    if (unit.includes('слайд')) slides += qty;
-    else if (unit.includes('лист') || unit.includes('страниц')) pages += qty;
+    if (label.includes('презентац')) slides += qty;
+    else if (label.includes('рабочий лист') || label.includes('карточ')) pages += qty;
   });
   return { slides, pages };
 }
