@@ -375,6 +375,45 @@ function updateSidebarTimerUI() {
   const progress = (elapsedSec % SPC_CYCLE_DURATION) / SPC_CYCLE_DURATION;
   const ring = document.getElementById('spcRingProgress');
   if (ring) ring.style.strokeDashoffset = SPC_RING_CIRCUMFERENCE * (1 - progress);
+
+  persistTimerState();
+}
+
+// Виджет таймера живёт только в памяти вкладки (activeTimer) — без этого пауза или
+// незавершённая сессия молча "слетали" на 00:00 при перезагрузке страницы.
+function persistTimerState() {
+  localStorage.setItem(TIMER_STATE_KEY, JSON.stringify({
+    id: activeTimer.id, title: activeTimer.title, elapsed: activeTimer.elapsed,
+    segmentStart: activeTimer.segmentStart, nextMilestoneMs: activeTimer.nextMilestoneMs
+  }));
+}
+
+// Восстанавливает виджет после перезагрузки — ВСЕГДА на паузе, даже если при сохранении
+// он тикал: если вкладка была закрыта неизвестно на сколько (например, на ночь), автоматически
+// продолжать отсчёт было бы опасно — молча накрутило бы лишние часы. Пользователь сам жмёт "Старт".
+function restoreTimerState() {
+  const raw = localStorage.getItem(TIMER_STATE_KEY);
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.id || !saved.elapsed) return;
+    activeTimer.id = saved.id;
+    activeTimer.title = saved.title || 'Свободный замер';
+    activeTimer.elapsed = saved.elapsed;
+    activeTimer.segmentStart = saved.segmentStart || 0;
+    activeTimer.nextMilestoneMs = saved.nextMilestoneMs || TIMER_MILESTONE_STEP_MS;
+    activeTimer.running = false;
+
+    const elapsedSec = Math.floor(activeTimer.elapsed / 1000);
+    const disp = document.getElementById('spcDisplay');
+    if (disp) disp.textContent = spcFormatTime(elapsedSec);
+    const nameEl = document.getElementById('spcTaskName');
+    if (nameEl) nameEl.textContent = activeTimer.title;
+    const progress = (elapsedSec % SPC_CYCLE_DURATION) / SPC_CYCLE_DURATION;
+    const ring = document.getElementById('spcRingProgress');
+    if (ring) ring.style.strokeDashoffset = SPC_RING_CIRCUMFERENCE * (1 - progress);
+    refreshTimerButtons();
+  } catch(e) { console.error('Не удалось восстановить состояние таймера:', e); }
 }
 
 function toggleSidebarTimer() {
@@ -383,6 +422,13 @@ function toggleSidebarTimer() {
     activeTimer.running = false;
     clearInterval(activeTimer.interval);
     if(icon) icon.innerHTML = spcPlayIcon;
+    // Пауза раньше не списывала время — до минуты могло потеряться, если пользователь
+    // после паузы просто закрывал вкладку, ничего явно не завершив.
+    if (activeTimer.id !== 'standalone') {
+      flushTimerSegment(activeTimer.id);
+      saveData();
+    }
+    persistTimerState();
   } else {
     if (activeTimer.id !== 'standalone') requestTimerNotificationPermission();
     activeTimer.start = Date.now() - activeTimer.elapsed;
@@ -403,6 +449,7 @@ function resetSidebarTimer() {
   activeTimer.title = 'Свободный замер';
   activeTimer.nextMilestoneMs = TIMER_MILESTONE_STEP_MS;
   dismissAllTimerToasts();
+  localStorage.removeItem(TIMER_STATE_KEY);
   const disp = document.getElementById('spcDisplay');
   if(disp) disp.textContent = spcFormatTime(0);
   const ring = document.getElementById('spcRingProgress');

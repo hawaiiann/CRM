@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.19.0';
+const APP_VERSION = '1.19.1';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -12,6 +12,7 @@ const ADVANCES_KEY = 'design_crm_advances_v1';
 const PLANNING_KEY = 'design_crm_planning_v8';
 const BACKUP_CFG_KEY = 'design_crm_backup_cfg';
 const ACTIVITY_LOG_KEY = 'design_crm_activity_log_v1';
+const TIMER_STATE_KEY = 'design_crm_timer_state_v1'; // локально, на устройстве — не облачные данные
 
 let orders = [];
 let appTasks = [];
@@ -167,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
    Сначала ждём вход (экран логина, если сессии ещё нет) — данные у каждого
    пользователя свои, поэтому загружать их до входа просто нечем. */
 async function initApp() {
+  restoreTimerState(); // чисто локальное состояние виджета таймера — не зависит от входа/облака
   await ensureAuthenticated();
   await loadData();
   renderCurrent();
