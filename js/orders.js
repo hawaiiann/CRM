@@ -460,7 +460,7 @@ function toggleSidebarTimer() {
     }
     persistTimerState();
   } else {
-    if (activeTimer.id !== 'standalone') requestTimerNotificationPermission();
+    if (activeTimer.id !== 'standalone') requestNotificationPermission();
     activeTimer.start = Date.now() - activeTimer.elapsed;
     activeTimer.running = true;
     activeTimer.interval = setInterval(updateSidebarTimerUI, 1000);
@@ -492,9 +492,10 @@ function resetSidebarTimer() {
 }
 
 /* ВЕХИ ТАЙМЕРА ("отработали 30 минут") — тост в углу экрана, пока вкладка активна,
- * системное уведомление ОС — если вкладка свёрнута/не в фокусе. */
+ * системное уведомление ОС — если вкладка свёрнута/не в фокусе.
+ * Тем же механизмом (и тем же разрешением ОС) пользуются напоминания о сроках сдачи ниже. */
 
-function requestTimerNotificationPermission() {
+function requestNotificationPermission() {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission === 'default') Notification.requestPermission();
 }
@@ -551,6 +552,92 @@ function dismissTimerToast(toast) {
 function dismissAllTimerToasts() {
   const root = document.getElementById('timerToastRoot');
   if (root) root.innerHTML = '';
+}
+
+/* ---------- Напоминания о сроках сдачи ----------
+ * Дедлайн у заказа хранится датой без времени, поэтому пороги тоже дневные: "срок завтра"
+ * и "срок сегодня" — как только заказ пересекает границу, один раз показываем тост (вкладка
+ * активна) или системное уведомление ОС (свёрнута/не в фокусе) — тем же механизмом, что и
+ * вехи таймера выше. Плюс третий порог — "уже просрочен" (сама просрочка и так видна
+ * красным бейджем в списке постоянно, но уведомление ловит момент перехода, даже если
+ * в этот момент никто не смотрит на список).
+ *
+ * "Уже показано" храним в localStorage как набор строк "orderId|deadline|kind": если заказ
+ * потом переносят на другую дату — это уже другая строка, и по новому сроку уведомление
+ * придёт заново, как и должно быть.
+ */
+function loadNotifiedDeadlines() {
+  try { return new Set(JSON.parse(localStorage.getItem(DEADLINE_NOTIFIED_KEY) || '[]')); }
+  catch (e) { return new Set(); }
+}
+function saveNotifiedDeadlines(set) {
+  // Не даём набору расти бесконечно годами — оставляем последние 500 меток, этого с большим
+  // запасом хватает на всю активную работу, а старые всё равно уже никому не интересны.
+  const arr = [...set];
+  localStorage.setItem(DEADLINE_NOTIFIED_KEY, JSON.stringify(arr.slice(-500)));
+}
+
+function checkDeadlineReminders() {
+  if (!orders || !orders.length) return;
+  const today = dateKey(new Date());
+  const notified = loadNotifiedDeadlines();
+  let changed = false;
+
+  orders.forEach(o => {
+    if (!o.deadline || ['done', 'cancelled'].includes(o.status)) return;
+    const daysUntil = daysBetween(today, o.deadline); // 0 = сегодня, 1 = завтра, <0 = просрочен
+    let kind = null;
+    if (daysUntil === 0) kind = 'today';
+    else if (daysUntil === 1) kind = 'tomorrow';
+    else if (daysUntil < 0) kind = 'overdue';
+    if (!kind) return;
+
+    const key = `${o.id}|${o.deadline}|${kind}`;
+    if (notified.has(key)) return;
+    notified.add(key);
+    changed = true;
+    notifyDeadline(o, kind);
+  });
+
+  if (changed) saveNotifiedDeadlines(notified);
+}
+
+function deadlineReminderText(o, kind) {
+  const title = o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
+  if (kind === 'today') return { heading: 'Срок сдачи сегодня', body: title };
+  if (kind === 'tomorrow') return { heading: 'Срок сдачи завтра', body: title };
+  return { heading: 'Заказ просрочен', body: title };
+}
+
+function notifyDeadline(o, kind) {
+  const isBackground = document.hidden || !document.hasFocus();
+  if (isBackground) sendSystemDeadlineNotification(o, kind);
+  else showDeadlineToast(o, kind);
+}
+
+function sendSystemDeadlineNotification(o, kind) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const { heading, body } = deadlineReminderText(o, kind);
+  const n = new Notification(heading, { body });
+  n.onclick = () => { window.focus(); n.close(); goToOrderCard(o.id); };
+}
+
+function showDeadlineToast(o, kind) {
+  const root = document.getElementById('timerToastRoot');
+  if (!root) return;
+  const { heading, body } = deadlineReminderText(o, kind);
+  const toast = document.createElement('div');
+  toast.className = 'timer-toast' + (kind === 'overdue' ? ' timer-toast-danger' : '');
+  toast.innerHTML = `
+    <div class="timer-toast-icon"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg></div>
+    <div class="timer-toast-body">
+      <div class="timer-toast-title">${escapeHtml(heading)}</div>
+      <div class="timer-toast-sub">${escapeHtml(body)}</div>
+    </div>`;
+  toast.addEventListener('click', () => { dismissTimerToast(toast); goToOrderCard(o.id); });
+  root.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => dismissTimerToast(toast), 9000);
 }
 
 // Позиция, в которую сейчас "капает" время таймера — первая ещё не отмеченная "Готов".

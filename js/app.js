@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.27.1';
+const APP_VERSION = '1.28.0';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -13,6 +13,7 @@ const PLANNING_KEY = 'design_crm_planning_v8';
 const BACKUP_CFG_KEY = 'design_crm_backup_cfg';
 const ACTIVITY_LOG_KEY = 'design_crm_activity_log_v1';
 const TIMER_STATE_KEY = 'design_crm_timer_state_v1'; // локально, на устройстве — не облачные данные
+const DEADLINE_NOTIFIED_KEY = 'design_crm_deadline_notified_v1'; // локально — какие напоминания о сроках уже показаны
 
 let orders = [];
 let appTasks = [];
@@ -180,6 +181,14 @@ async function initApp() {
   renderCurrent();
   restoreBackupDirectoryHandle();
   subscribeRealtime();
+
+  // Напоминания о сроках сдачи — сразу после загрузки (порог мог пересечься, пока
+  // приложение было закрыто) и дальше раз в 30 минут, пока вкладка открыта: дедлайн
+  // хранится датой без времени, чаще проверять нет смысла. Разрешение на системные
+  // уведомления просим здесь же, не дожидаясь первого запуска таймера.
+  requestNotificationPermission();
+  checkDeadlineReminders();
+  setInterval(checkDeadlineReminders, 30 * 60 * 1000);
 
   const versionEl = document.getElementById('appVersionDisplay');
   if (versionEl) versionEl.textContent = `v${APP_VERSION}`;

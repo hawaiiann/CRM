@@ -2282,6 +2282,9 @@
     align-items: center;
     justify-content: center;
   }
+  /* Напоминание "заказ просрочен" — тот же тост, но красным, а не нейтральным жёлтым акцентом */
+  .timer-toast-danger:hover { border-color: var(--rose); }
+  .timer-toast-danger .timer-toast-icon { background: var(--rose-soft); color: var(--rose); }
   .timer-toast-body { min-width: 0; }
   .timer-toast-title { font-size: 13.5px; font-weight: 800; color: var(--text); }
   .timer-toast-sub { font-size: 12px; font-weight: 600; color: var(--text-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
