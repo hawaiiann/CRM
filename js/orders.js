@@ -9,14 +9,19 @@ function togglePaymentStatus(id, event) {
     const before = JSON.parse(JSON.stringify(o));
     const pay = orderPaymentState(o);
     if (pay.isFullyPaid) {
-      // Снимаем оплату целиком — деньги "не получены". Аванс при этом не трогаем,
-      // он списывается отдельно и живёт своей жизнью.
+      // Снимаем оплату целиком — все платежи убираются. Аванс не трогаем: он списывается
+      // отдельно и живёт своей жизнью.
+      o.payments = [];
       o.paidAmount = 0;
       o.isPaid = false;
       o.paidAt = null;
     } else {
-      // Отмечаем полную оплату: получено ровно то, что оставалось после аванса.
-      o.paidAmount = Math.max(0, Math.round((pay.full - pay.advUsed) * 100) / 100);
+      // Клик по бейджу = "получил остаток сегодня": дописываем ОДИН платёж на остаток,
+      // не затирая уже внесённые частичные платежи.
+      const rest = Math.max(0, Math.round(pay.remaining * 100) / 100);
+      o.payments = orderPayments(o).map(p => normalizePayment(p));
+      if (rest > 0) o.payments.push(normalizePayment({ amount: rest, date: dateKey(new Date()), note: '' }));
+      o.paidAmount = orderPaymentsTotal(o);
       o.isPaid = true;
       o.paidAt = o.paidAt || dateKey(new Date());
     }
@@ -292,6 +297,7 @@ function renderOrderCard(o){
                   <span>Из аванса <b>${fmtMoney(advUsed)}</b></span>
                   <span>К доплате <b class="amber">${fmtMoney(remToPay)}</b></span>
                 </div>
+                ${paymentsHistoryHtml(o)}
               </div>
 
               <div style="display:flex; gap:8px;">
@@ -888,7 +894,7 @@ function duplicateOrder(id){
   document.getElementById('f_lesson').value = lessonNumMatch ? String(parseInt(o.lesson,10)+1) : (o.lesson||'');
 
   document.getElementById('f_status').value = 'queue';
-  document.getElementById('f_paidAmount').value = '';
+  currentPayments = []; // дублирование заказа: деньги по нему ещё не приходили
   document.getElementById('f_priority').checked = false;
   document.getElementById('f_advanceUsed').value = '';
 
@@ -931,7 +937,7 @@ function editOrder(id){
   document.getElementById('f_quarter').value = o.quarter||'';
   document.getElementById('f_lesson').value = o.lesson||'';
   document.getElementById('f_status').value = o.status||'queue';
-  document.getElementById('f_paidAmount').value = o.paidAmount || '';
+  currentPayments = orderPayments(o).map(p => normalizePayment(p));
   document.getElementById('f_priority').checked = !!o.priority;
   document.getElementById('f_advanceUsed').value = o.advanceUsed || '';
 
@@ -946,7 +952,7 @@ function editOrder(id){
   renderLines();
   updateModalAdvanceInfo();
   warnIfAdvanceExceedsOrder();
-  updatePaymentSummary();
+  renderOrderPayments();
   populateLinkedLessonSelect(o.linkedLessonId || '');
   syncModalStatusColor();
   syncModalPriorityTheme();
@@ -990,7 +996,8 @@ form.addEventListener('submit', (e)=>{
     quarter: qtr,
     lesson: les,
     status: document.getElementById('f_status').value,
-    paidAmount: parseNum(document.getElementById('f_paidAmount').value),
+    // Пустые строки платежей (добавил и не заполнил) отбрасываем, как и пустые позиции.
+    payments: currentPayments.filter(p => parseNum(p.amount) > 0).map(p => normalizePayment(p)),
     priority: document.getElementById('f_priority').checked,
     advanceUsed: parseNum(document.getElementById('f_advanceUsed').value),
     taxType: document.getElementById('f_taxType').value,
@@ -1004,15 +1011,14 @@ form.addEventListener('submit', (e)=>{
     linkedLessonId: document.getElementById('f_linkedLessonId').value || null
   };
 
-  // isPaid больше не вводится руками — это производная от того, покрыта ли стоимость
-  // авансом и полученными деньгами (см. orderPaymentState). Храним её для совместимости
-  // со старыми данными и фильтрами.
+  // isPaid и paidAmount больше не вводятся руками — это производные от платежей и аванса
+  // (см. orderPaymentState/orderPaymentsTotal). Храним их для совместимости со старыми
+  // данными, фильтрами и с базой, где колонки payments может ещё не быть.
+  data.paidAmount = orderPaymentsTotal(data);
   data.isPaid = orderPaymentState(data).isFullyPaid;
-
-  // Дата поступления денег: проставляем, когда деньги по заказу впервые появились,
-  // и убираем, если сумму обнулили. Уже проставленную дату не перетираем.
-  const prevOrder = id ? orders.find(o => o.id === id) : null;
-  data.paidAt = parseNum(data.paidAmount) > 0 ? ((prevOrder && prevOrder.paidAt) || dateKey(new Date())) : null;
+  // Дата у каждого платежа своя, поэтому единый paidAt нужен только как признак
+  // "деньги были" — для дат в статистике он больше не используется.
+  data.paidAt = data.payments.length ? (data.payments[0].date || null) : null;
 
   // Похожий заказ (тот же клиент/предмет/класс/четверть/номер урока) уже существует —
   // частая случайность при повторном сохранении или сбитой нумерации при дублировании.

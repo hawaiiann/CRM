@@ -563,7 +563,7 @@
         <button type="button" class="advance-link-btn" onclick="fillMaxAdvanceForOrder()">Списать всё</button>
       </div>
 
-      <!-- ПОЛУЧЕННАЯ ОПЛАТА (деньгами, помимо аванса) -->
+      <!-- ПОЛУЧЕННАЯ ОПЛАТА (деньгами, помимо аванса) — список платежей с датами -->
       <div class="advance-box">
         <div class="field-group-label" style="margin-bottom:12px;">Оплата по заказу</div>
         <div class="advance-row3">
@@ -571,16 +571,22 @@
             <div class="advance-col-label">Стоимость заказа</div>
             <div class="advance-value" id="payOrderTotalBadge">0 ₽</div>
           </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Оплачено деньгами</label>
-            <input type="text" inputmode="decimal" id="f_paidAmount" placeholder="0 ₽" oninput="updatePaymentSummary()">
+          <div>
+            <div class="advance-col-label">Получено деньгами</div>
+            <div class="advance-value green" id="payReceivedBadge">0 ₽</div>
           </div>
           <div>
             <div class="advance-col-label">К доплате</div>
             <div class="advance-value" id="payRemainingBadge">0 ₽</div>
           </div>
         </div>
-        <button type="button" class="advance-link-btn" onclick="fillFullPaymentForOrder()">Получил всё</button>
+
+        <div id="paymentsList" style="display:flex; flex-direction:column; gap:8px; margin-top:12px;"></div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button type="button" class="advance-link-btn" onclick="addOrderPaymentRow()">+ Добавить платёж</button>
+          <button type="button" class="advance-link-btn" onclick="fillFullPaymentForOrder()">Получил всё</button>
+        </div>
       </div>
 
       <div class="field">

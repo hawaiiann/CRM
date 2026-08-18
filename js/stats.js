@@ -50,16 +50,23 @@ function revenueEventsForOrder(o, advancesList) {
     });
   }
 
-  const paidMoney = Math.min(parseNum(o.paidAmount), Math.max(0, full - advUsed));
-  if (paidMoney > 0) {
-    const netForMoney = fullExact > 0 ? paidMoney * (base / fullExact) : 0;
+  // Каждый платёж — своё событие своей датой. Раньше вся сумма падала одним событием на
+  // единый paidAt, поэтому оплата частями выглядела как один перевод в последний день.
+  // Больше, чем осталось после аванса, не признаём — на случай опечатки в сумме.
+  let room = Math.max(0, full - advUsed);
+  orderPayments(o).forEach(p => {
+    if (room <= 0) return;
+    const amount = Math.min(parseNum(p.amount), room);
+    if (amount <= 0) return;
+    room -= amount;
+    const netForMoney = fullExact > 0 ? amount * (base / fullExact) : 0;
     events.push({
-      date: o.paidAt || o.deadline || orderContributionDate(o),
+      date: p.date || o.deadline || orderContributionDate(o),
       orderId: o.id,
-      revenue: Math.round(paidMoney * 100) / 100,
+      revenue: Math.round(amount * 100) / 100,
       net: Math.round(netForMoney * 100) / 100
     });
-  }
+  });
   return events;
 }
 

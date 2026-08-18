@@ -214,7 +214,11 @@ function orderToRow(o) {
     id: o.id, user_id: cloudUserId, title: o.title || '', client: o.client || '', subject: o.subject || '',
     grade: o.grade || '', quarter: o.quarter || '', lesson: o.lesson || '', status: o.status || 'queue',
     is_paid: !!o.isPaid, priority: !!o.priority, advance_used: parseNum(o.advanceUsed),
-    paid_amount: parseNum(o.paidAmount),
+    payments: o.payments || [],
+    // Производная сумма платежей. Дублируется намеренно: если колонки payments в базе ещё
+    // нет (не выполнен ALTER TABLE), она отбрасывается, а paid_amount продолжает уезжать —
+    // оплата не теряется, просто без разбивки по платежам.
+    paid_amount: orderPaymentsTotal(o),
     tax_type: o.taxType || 'none', start_date: o.start || null, deadline: o.deadline || null,
     estimated_hours: String(o.estimatedHours ?? ''), actual_hours: String(o.actualHours ?? ''),
     lines: o.lines || [], notes: o.notes || '', created_at: o.createdAt || Date.now(),
@@ -227,6 +231,7 @@ function rowToOrder(r) {
     id: r.id, title: r.title || '', client: r.client || '', subject: r.subject || '',
     grade: r.grade || '', quarter: r.quarter || '', lesson: r.lesson || '', status: r.status || 'queue',
     isPaid: !!r.is_paid, priority: !!r.priority, advanceUsed: r.advance_used || 0,
+    payments: Array.isArray(r.payments) ? r.payments : [],
     paidAmount: r.paid_amount || 0,
     taxType: r.tax_type || 'none', start: r.start_date || '', deadline: r.deadline || '',
     estimatedHours: r.estimated_hours ?? '', actualHours: r.actual_hours ?? '',

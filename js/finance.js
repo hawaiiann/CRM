@@ -313,39 +313,94 @@ function currentFormOrderTotal() {
   return baseTotal * (1 + rate);
 }
 
-// Блок "Оплата по заказу": стоимость, полученные деньги и остаток к доплате.
-// Остаток = стоимость − аванс − деньги, поэтому при дозаказе он растёт сам,
-// а уже полученная сумма никуда не devается (см. orderPaymentState в utils.js).
+/* ---------- Блок "Оплата по заказу": список платежей ----------
+ * Черновик платежей формы живёт в currentPayments — по тому же принципу, что currentLines
+ * для позиций: правки применяются к заказу только при сохранении. */
+let currentPayments = [];
+
+function renderOrderPayments() {
+  const list = document.getElementById('paymentsList');
+  if (!list) return;
+
+  list.innerHTML = currentPayments.length ? currentPayments.map(p => `
+    <div class="payment-row" data-id="${p.id}">
+      <input type="text" inputmode="decimal" value="${escapeHtml(String(p.amount || ''))}" placeholder="Сумма ₽"
+             oninput="updatePaymentField('${p.id}','amount',this.value)">
+      <input type="date" value="${escapeHtml(p.date || '')}"
+             onchange="updatePaymentField('${p.id}','date',this.value)">
+      <input type="text" value="${escapeHtml(p.note || '')}" placeholder="Примечание"
+             oninput="updatePaymentField('${p.id}','note',this.value)">
+      <button type="button" class="line-rm" title="Удалить платёж" onclick="removeOrderPayment('${p.id}')">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  `).join('') : `<div style="font-size:12.5px; color:var(--text-faint);">Платежей пока нет. Аванс учитывается отдельно, выше.</div>`;
+
+  updatePaymentSummary();
+}
+
+function addOrderPaymentRow() {
+  // Сумма нового платежа по умолчанию — остаток к доплате: чаще всего платят именно его.
+  const rest = Math.max(0, Math.round(remainingForFormOrder() * 100) / 100);
+  currentPayments.push(normalizePayment({ amount: rest || '', date: dateKey(new Date()), note: '' }));
+  renderOrderPayments();
+}
+
+function removeOrderPayment(id) {
+  currentPayments = currentPayments.filter(p => p.id !== id);
+  renderOrderPayments();
+}
+
+function updatePaymentField(id, field, value) {
+  const p = currentPayments.find(x => x.id === id);
+  if (!p) return;
+  p[field] = field === 'amount' ? value : value;
+  updatePaymentSummary();
+}
+
+function paymentsDraftTotal() {
+  return currentPayments.reduce((s, p) => s + parseNum(p.amount), 0);
+}
+
+function remainingForFormOrder() {
+  const totalWithTax = currentFormOrderTotal();
+  const advUsed = Math.min(parseNum(document.getElementById('f_advanceUsed').value), totalWithTax);
+  return Math.max(0, totalWithTax - advUsed - paymentsDraftTotal());
+}
+
+// Стоимость, полученные деньги и остаток. Остаток = стоимость − аванс − платежи,
+// поэтому при дозаказе он растёт сам, а полученное никуда не девается.
 function updatePaymentSummary() {
   const totalEl = document.getElementById('payOrderTotalBadge');
+  const receivedEl = document.getElementById('payReceivedBadge');
   const remainEl = document.getElementById('payRemainingBadge');
-  const input = document.getElementById('f_paidAmount');
-  if (!totalEl || !remainEl || !input) return;
+  if (!totalEl || !remainEl || !receivedEl) return;
 
   const totalWithTax = currentFormOrderTotal();
   const advUsed = Math.min(parseNum(document.getElementById('f_advanceUsed').value), totalWithTax);
-  const paidMoney = parseNum(input.value);
-  const remaining = Math.max(0, totalWithTax - advUsed - paidMoney);
+  const received = paymentsDraftTotal();
+  const remaining = Math.max(0, totalWithTax - advUsed - received);
 
   totalEl.textContent = fmtMoney(totalWithTax);
+  receivedEl.textContent = fmtMoney(received);
   remainEl.textContent = fmtMoney(remaining);
   remainEl.style.color = remaining <= 0.01 ? 'var(--green)' : 'var(--amber)';
 
-  // Ввели больше, чем осталось после аванса — подсвечиваем, это почти всегда опечатка.
+  // Платежей больше, чем осталось после аванса — почти всегда опечатка, подсвечиваем.
   const maxPayable = Math.max(0, totalWithTax - advUsed);
-  input.style.borderColor = paidMoney > maxPayable + 0.01 ? 'var(--rose)' : '';
-  input.title = paidMoney > maxPayable + 0.01
-    ? `Больше, чем осталось после аванса (${fmtMoney(maxPayable)}). Проверьте сумму.`
-    : '';
+  const over = received > maxPayable + 0.01;
+  document.querySelectorAll('#paymentsList .payment-row input:first-child').forEach(inp => {
+    inp.style.borderColor = over ? 'var(--rose)' : '';
+    inp.title = over ? `Сумма платежей (${fmtMoney(received)}) больше остатка после аванса (${fmtMoney(maxPayable)}). Проверьте.` : '';
+  });
 }
 
-// Кнопка "Получил всё" — проставляет ровно остаток после аванса.
+// Кнопка "Получил всё" — добавляет один платёж ровно на остаток, сегодняшней датой.
 function fillFullPaymentForOrder() {
-  const totalWithTax = currentFormOrderTotal();
-  const advUsed = Math.min(parseNum(document.getElementById('f_advanceUsed').value), totalWithTax);
-  const rest = Math.max(0, Math.round((totalWithTax - advUsed) * 100) / 100);
-  document.getElementById('f_paidAmount').value = rest ? String(rest) : '';
-  updatePaymentSummary();
+  const rest = Math.max(0, Math.round(remainingForFormOrder() * 100) / 100);
+  if (rest <= 0) { updatePaymentSummary(); return; }
+  currentPayments.push(normalizePayment({ amount: rest, date: dateKey(new Date()), note: '' }));
+  renderOrderPayments();
 }
 
 // Подсвечивает поле "Использовано аванса" красным, если вбили больше, чем реально стоит заказ.

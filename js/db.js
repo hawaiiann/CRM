@@ -9,10 +9,11 @@ function normalizeOrder(o){
     quarter: o.quarter || '', lesson: o.lesson||'',
     status:o.status||'queue', isPaid: !!o.isPaid, priority: !!o.priority,
     advanceUsed: parseNum(o.advanceUsed || o.advance || 0),
-    // Сколько по заказу реально получено ДЕНЬГАМИ (помимо списания с аванса). Раньше оплата
-    // была булевой галочкой, и она "ломалась" при дозаказе: добавили позицию — и приходилось
-    // выбирать между "оплачено целиком" и "не оплачено вовсе". Сумма это переживает: к доплате
-    // считается как стоимость − аванс − полученные деньги (см. orderPaymentState).
+    // Платежи по заказу (помимо списания с аванса) — список, а не одна сумма: школа платит
+    // частями, и важно видеть, когда и сколько пришло. paidAmount остаётся как производная
+    // сумма: она нужна старым данным и продолжает уезжать в облако, если колонки payments
+    // там ещё нет (см. orderPayments/orderPaymentState в utils.js).
+    payments: (o.payments && Array.isArray(o.payments) ? o.payments : []).map(normalizePayment),
     paidAmount: parseNum(o.paidAmount || 0),
     taxType: o.taxType||'none',
     start:o.start||dateKey(new Date()), deadline:o.deadline||dateKey(addDays(new Date(),7)), 
@@ -32,6 +33,15 @@ function normalizeOrder(o){
     // Дата, когда заказ отметили оплаченным. Нужна, чтобы выручка попадала в статистику
     // днём поступления денег, а не датой заказа (см. js/stats.js).
     paidAt: o.paidAt || null
+  };
+}
+
+function normalizePayment(p) {
+  return {
+    id: p.id || ('pay' + Date.now() + Math.random().toString(36).slice(2, 7)),
+    amount: parseNum(p.amount),
+    date: p.date || dateKey(new Date()),
+    note: p.note || ''
   };
 }
 
@@ -87,12 +97,29 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
 function migratePaidFlagToAmount() {
   let migrated = 0;
   orders.forEach(o => {
-    if (o.isPaid && !parseNum(o.paidAmount)) {
+    if (o.isPaid && !parseNum(o.paidAmount) && !(o.payments && o.payments.length)) {
       const full = Math.round(orderTotal(o));
       const advUsed = Math.min(parseNum(o.advanceUsed), full);
       const rest = Math.max(0, Math.round((full - advUsed) * 100) / 100);
       if (rest > 0) { o.paidAmount = rest; migrated++; }
     }
+  });
+  return migrated;
+}
+
+// Следующий шаг той же истории: одиночная сумма превращается в список платежей.
+// Дату берём из paidAt (её проставляла отметка "Оплачено"), иначе из срока сдачи —
+// лучшее, что известно о том, когда пришли деньги.
+function migratePaidAmountToPayments() {
+  let migrated = 0;
+  orders.forEach(o => {
+    if ((o.payments && o.payments.length) || parseNum(o.paidAmount) <= 0) return;
+    o.payments = [normalizePayment({
+      amount: parseNum(o.paidAmount),
+      date: o.paidAt || o.deadline || dateKey(new Date()),
+      note: ''
+    })];
+    migrated++;
   });
   return migrated;
 }
@@ -202,6 +229,7 @@ function loadFromLocalStorageFallback() {
   });
 
   migratePaidFlagToAmount();
+  migratePaidAmountToPayments();
 
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
   activityLog = rawLog ? JSON.parse(rawLog) : [];
@@ -225,7 +253,7 @@ async function loadData(){
     const rawBcfg = localStorage.getItem(BACKUP_CFG_KEY);
     if (rawBcfg) backupSettings = { ...backupSettings, ...JSON.parse(rawBcfg) };
 
-    const migratedPaid = migratePaidFlagToAmount();
+    const migratedPaid = migratePaidFlagToAmount() + migratePaidAmountToPayments();
 
     activityLog = cloud.activityLog || [];
     const purged = purgeObsoleteJournalFields();

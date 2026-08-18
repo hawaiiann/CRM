@@ -249,15 +249,32 @@ function orderTotal(o){
 // авансом клиента — эта часть аванса тоже считается полученной выручкой.
 // Сумму с налогом округляем до целого рубля — именно так выставляется реальный счёт клиенту,
 // а не с дробными копейками, которые появляются чисто из-за умножения на ставку налога.
-// Единая точка расчёта оплаты по заказу. Раньше оплата была булевой галочкой, из-за чего
-// при дозаказе (добавили позицию в уже оплаченный заказ) приходилось выбирать между
-// "оплачено целиком" и "не оплачено вовсе" — и вся сумма улетала в "ожидает оплаты".
-// Теперь храним полученную сумму, а остаток считается: стоимость − аванс − деньги.
+// Список платежей по заказу. Оплата прошла путь: галочка -> одна сумма -> список платежей.
+// Список нужен потому, что школа платит частями: одна сумма показывала итог, но не отвечала
+// на вопрос "когда и сколько пришло". Заодно у каждого платежа своя дата — это убрало
+// костыль с единым paidAt и сделало график выручки честным.
+//
+// orderPayments() — единая точка чтения: если список ещё не заполнен (заказ из старых
+// данных), берём прежнюю одиночную сумму, чтобы ничего не потерялось до миграции.
+function orderPayments(o) {
+  if (Array.isArray(o.payments) && o.payments.length) return o.payments;
+  const legacy = parseNum(o.paidAmount);
+  if (legacy > 0) return [{ id: 'legacy', amount: legacy, date: o.paidAt || o.deadline || '', note: '' }];
+  return [];
+}
+
+function orderPaymentsTotal(o) {
+  return orderPayments(o).reduce((s, p) => s + parseNum(p.amount), 0);
+}
+
+// Единая точка расчёта оплаты по заказу: остаток = стоимость − аванс − полученные деньги.
+// Благодаря этому дозаказ в оплаченный заказ просто увеличивает остаток, а полученное
+// никуда не девается.
 function orderPaymentState(o) {
   const fullExact = orderTotal(o);
   const full = Math.round(fullExact);
   const advUsed = Math.min(parseNum(o.advanceUsed), full);
-  const paidMoney = Math.min(parseNum(o.paidAmount), Math.max(0, full - advUsed));
+  const paidMoney = Math.min(orderPaymentsTotal(o), Math.max(0, full - advUsed));
   const covered = advUsed + paidMoney;
   const remaining = Math.max(0, Math.round((full - covered) * 100) / 100);
   return {
@@ -265,6 +282,26 @@ function orderPaymentState(o) {
     remaining,
     isFullyPaid: full > 0 && remaining <= 0
   };
+}
+
+// История платежей в развёрнутой карточке заказа — ради этого список и заводился:
+// видно не только сколько получено, но когда и какими частями.
+function paymentsHistoryHtml(o) {
+  const list = orderPayments(o).filter(p => parseNum(p.amount) > 0);
+  if (!list.length) return '';
+  const rows = list
+    .slice()
+    .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1)
+    .map(p => `
+      <div class="paid-history-row">
+        <span>${p.date ? fmtDeadline(p.date) : 'без даты'}${p.note ? ' · ' + escapeHtml(p.note) : ''}</span>
+        <b>${fmtMoney(parseNum(p.amount))}</b>
+      </div>`)
+    .join('');
+  return `<div class="paid-history">
+    <div class="details-box-label" style="margin-top:8px;">Платежи (${list.length})</div>
+    ${rows}
+  </div>`;
 }
 
 // Бейдж оплаты — три состояния вместо прежних двух: полностью оплачен, частично

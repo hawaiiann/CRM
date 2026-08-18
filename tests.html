@@ -113,6 +113,48 @@ check('нет аванса у клиента — часть по авансу п
     .map(e => e.date),
   ['2026-08-10']);
 
+group('История платежей');
+check('несколько платежей — каждый своей датой',
+  revenueEventsForOrder(makeOrder({ payments: [
+    { id: 'p1', amount: 2000, date: '2026-08-14', note: 'первый перевод' },
+    { id: 'p2', amount: 1500, date: '2026-08-17', note: '' },
+    { id: 'p3', amount: 1500, date: '2026-08-19', note: '' }
+  ] }), ADV).map(e => [e.date, e.revenue]),
+  [['2026-08-14', 2000], ['2026-08-17', 1500], ['2026-08-19', 1500]]);
+
+check('сумма платежей = полученное',
+  orderPaymentState(makeOrder({ payments: [
+    { id: 'p1', amount: 2000, date: '2026-08-14' },
+    { id: 'p2', amount: 1000, date: '2026-08-17' }
+  ] })).covered,
+  3000);
+
+check('к доплате считается по сумме платежей',
+  orderPaymentState(makeOrder({ payments: [{ id: 'p1', amount: 2000, date: '2026-08-14' }] })).remaining,
+  3000);
+
+check('аванс + платежи закрывают заказ полностью',
+  orderPaymentState(makeOrder({ advanceUsed: 3000, payments: [{ id: 'p1', amount: 2000, date: '2026-08-18' }] })).isFullyPaid,
+  true);
+
+check('платежи сверх остатка после аванса не признаются',
+  revenueEventsForOrder(makeOrder({ advanceUsed: 3000, payments: [
+    { id: 'p1', amount: 5000, date: '2026-08-18' }
+  ] }), ADV).filter(e => e.date === '2026-08-18').reduce((s, e) => s + e.revenue, 0),
+  2000);
+
+check('старые данные без списка платежей читаются из одиночной суммы',
+  orderPaymentState(makeOrder({ paidAmount: 1500, paidAt: '2026-08-17' })).covered,
+  1500);
+
+check('дозаказ к оплаченному: полученное сохраняется, растёт остаток', (() => {
+    const o = makeOrder({ payments: [{ id: 'p1', amount: 5000, date: '2026-08-17' }] });
+    o.lines.push({ id: 'l2', label: 'Рабочий лист', type: 'Страница', qty: 2, rate: 500 });
+    const p = orderPaymentState(o);
+    return [p.covered, p.remaining];
+  })(),
+  [5000, 1000]);
+
 group('Чистый доход (за вычетом налога)');
 check('налог 4% — чистыми меньше выручки',
   revenueEventsForOrder(makeOrder({ taxType: 'individual', paidAmount: 5200, paidAt: '2026-08-18' }), ADV)
