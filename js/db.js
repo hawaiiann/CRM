@@ -150,8 +150,16 @@ function reconcileCumulativeStats() {
 
   // Выручку не "подправляем" по расхождению, а полностью пересобираем из заказов и реестра
   // авансов — она из них однозначно выводится, и это надёжнее, чем накапливать поправки.
-  const revenueEntries = rebuildRevenueLog();
-  fixedFields.push(`выручка пересобрана заново — записей: ${revenueEntries}`);
+  // Сообщаем об этом только если результат реально отличается от того, что было, иначе
+  // кнопка всегда рапортовала бы о "расхождении", даже когда всё в порядке.
+  const revenueKey = (log) => JSON.stringify(
+    log.filter(e => e.field === 'revenue' || e.field === 'netRevenue')
+       .map(e => [e.date, e.orderId, e.field, Math.round(e.delta * 100) / 100])
+       .sort()
+  );
+  const revenueBefore = revenueKey(activityLog);
+  rebuildRevenueLog();
+  if (revenueKey(activityLog) !== revenueBefore) fixedFields.push('выручка пересобрана по датам поступления денег');
 
   return fixedFields;
 }

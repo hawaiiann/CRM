@@ -76,20 +76,31 @@ function addDashboardMetric() {
   renderCurrent();
 }
 
-function runReconcileCumulativeStats() {
+async function runReconcileCumulativeStats() {
+  // Снимок журнала ДО пересчёта: отмена должна возвращать ровно прежнее состояние.
+  // Раньше отмена снимала записи "по счётчику показателей", но пересборка выручки
+  // добавляет их сразу много — и отмена оставляла журнал покорёженным.
+  const logBefore = JSON.parse(JSON.stringify(activityLog));
+
   const fixed = reconcileCumulativeStats();
   if (!fixed.length) {
     alert('Всё сходится — расхождений между журналом и реальным количеством нет.');
     return;
   }
-  if (!confirm(`Найдено расхождение:\n\n${fixed.join('\n')}\n\nДобавить корректирующую запись в журнал активности?`)) {
-    activityLog.pop(); // отменить (может быть несколько добавленных за один вызов — снимем по числу полей)
-    for (let i = 1; i < fixed.length; i++) activityLog.pop();
+  if (!confirm(`Пересчёт статистики:\n\n${fixed.join('\n')}\n\nПрименить?`)) {
+    activityLog = logBefore;
     return;
   }
+
+  // Выручка пересобирается с нуля, поэтому в облаке журнал нужно ЗАМЕНИТЬ целиком,
+  // а не дописать: иначе прежние записи выручки остаются там и после перезагрузки
+  // складываются с новыми.
+  const replaced = await replaceActivityLogInCloud();
   saveData();
   renderCurrent();
-  alert('Готово — статистика на Дашборде пересчитана.');
+  alert(replaced
+    ? 'Готово — статистика пересчитана и сохранена в облако.'
+    : 'Статистика пересчитана локально, но сохранить в облако не удалось — проверьте соединение (внизу сайдбара будет предупреждение).');
 }
 
 function updateDashboardMetricType(idx, val) {

@@ -326,6 +326,40 @@ async function deleteActivityLogForOrder(orderId) {
   }
 }
 
+// Полная замена журнала активности в облаке текущим локальным содержимым.
+// Нужна для пересборки статистики: rebuildRevenueLog() выкидывает старые записи выручки
+// ЛОКАЛЬНО, а обычная отправка умеет только добавлять новые — старые строки оставались
+// в облаке навсегда. После перезагрузки подтягивались и те и другие, и выручка задваивалась
+// (симптом: "после F5 сбивается, после пересчёта чинится").
+async function replaceActivityLogInCloud() {
+  if (!cloudUserId) return false;
+  try {
+    const { error: delError } = await supabaseClient.from('activity_log').delete().eq('user_id', cloudUserId);
+    if (delError) throw delError;
+
+    const useEntryId = activityLogSupportsEntryId;
+    activityLog.forEach(e => { if (useEntryId && !e.entryId) e.entryId = makeEntryId(); });
+    if (activityLog.length) {
+      const rows = activityLog.map(e => {
+        const row = { user_id: cloudUserId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta };
+        if (useEntryId) row.entry_id = e.entryId;
+        return row;
+      });
+      const { error: insError } = await supabaseClient.from('activity_log').insert(rows);
+      if (insError) throw insError;
+    }
+
+    cloudSnapshot.activityLogSyncedIds = new Set(activityLog.map(e => e.entryId).filter(Boolean));
+    cloudSnapshot.activityLogSyncedCount = activityLog.length;
+    markSyncHealthy();
+    return true;
+  } catch (err) {
+    console.error('Не удалось заменить журнал статистики в облаке:', err);
+    markSyncFailed();
+    return false;
+  }
+}
+
 // Единственный источник настоящего удаления записи из облака — вызывается explicit-но
 // в момент, когда пользователь ЯВНО нажал "Удалить" (см. orders.js/tasks.js/finance.js/planning.js).
 async function deleteFromCloud(table, id) {
