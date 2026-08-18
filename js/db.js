@@ -161,13 +161,18 @@ function reconcileCumulativeStats() {
       else if (e.field === 'netRevenue') loggedNet += e.delta;
       else if (e.field === 'hours') loggedHours += e.delta;
     });
-    const date = orderSeedDate(o);
+    // Часы — это работа, растянутая по срокам заказа, поэтому недостающие часы разумно
+    // отнести к дате самого заказа. Выручка — наоборот, разовое событие "пришли деньги":
+    // недостающая сумма означает "признано, но не записано", и честная дата для неё —
+    // сегодня (день, когда мы это учли), а не дата начала заказа. Иначе деньги
+    // "разъезжаются" по старым датам и график выручки выглядит пустым.
+    const workDate = orderSeedDate(o);
     const revDiff = Math.round((rec.revenue - loggedRev) * 100) / 100;
     const netDiff = Math.round((rec.net - loggedNet) * 100) / 100;
     const hoursDiff = Math.round((realHours - loggedHours) * 10000) / 10000;
-    if (revDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'revenue', delta: revDiff }); revenueFixes++; }
-    if (netDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: netDiff }); netFixes++; }
-    if (hoursDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
+    if (revDiff !== 0) { activityLog.push({ date: today, orderId: o.id, field: 'revenue', delta: revDiff }); revenueFixes++; }
+    if (netDiff !== 0) { activityLog.push({ date: today, orderId: o.id, field: 'netRevenue', delta: netDiff }); netFixes++; }
+    if (hoursDiff !== 0) { activityLog.push({ date: workDate, orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
   });
   if (revenueFixes) fixedFields.push(`выручка: поправлено заказов — ${revenueFixes}`);
   if (netFixes) fixedFields.push(`чистый доход: поправлено заказов — ${netFixes}`);
