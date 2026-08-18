@@ -295,22 +295,23 @@ function updateModalAdvanceInfo() {
 
 function calculateModalAdvanceDiff() {
   const advUsed = parseNum(document.getElementById('f_advanceUsed').value);
-  const baseTotal = currentLines.reduce((s,l)=> s + calculateLineTotal(l), 0);
-  const taxSel = document.getElementById('f_taxType');
-  const rate = taxSel ? (taxSel.value==='individual' ? 0.04 : (taxSel.value==='entity' ? 0.06 : 0)) : 0;
-  const totalWithTax = baseTotal * (1 + rate);
-  const diff = Math.max(0, totalWithTax - advUsed);
+  const diff = Math.max(0, currentFormOrderTotal() - advUsed);
   document.getElementById('advanceCalcSummary').textContent = fmtMoney(diff);
   updatePaymentSummary();
 }
 
 // Текущая стоимость заказа в форме (по позициям + налог) — берём напрямую из черновика,
-// а не из уже округлённого текста на экране.
+// а не из уже округлённого текста на экране. Округляем до целого рубля — так же, как
+// orderTotal/orderRecognizedRevenue: именно с округлённой суммой выставляется счёт клиенту,
+// и её же показывает бейдж "Стоимость заказа". Раньше здесь возвращалось точное дробное
+// число (например, 2329.6 при налоге 4%), а пользователь естественно вводит платёж по
+// округлённой сумме с экрана (2330) — разница в 40 копеек превышала допуск в 1 копейку и
+// ложно подсвечивала поле платежа как "больше, чем можно" при полностью оплаченном заказе.
 function currentFormOrderTotal() {
   const baseTotal = currentLines.reduce((s, l) => s + calculateLineTotal(l), 0);
   const taxSel = document.getElementById('f_taxType');
   const rate = taxSel ? (taxSel.value === 'individual' ? 0.04 : (taxSel.value === 'entity' ? 0.06 : 0)) : 0;
-  return baseTotal * (1 + rate);
+  return Math.round(baseTotal * (1 + rate));
 }
 
 /* ---------- Блок "Оплата по заказу": список платежей ----------
@@ -408,10 +409,7 @@ function fillFullPaymentForOrder() {
 function warnIfAdvanceExceedsOrder() {
   const input = document.getElementById('f_advanceUsed');
   const advUsed = parseNum(input.value);
-  const baseTotal = currentLines.reduce((s,l)=> s + calculateLineTotal(l), 0);
-  const taxSel = document.getElementById('f_taxType');
-  const rate = taxSel ? (taxSel.value==='individual' ? 0.04 : (taxSel.value==='entity' ? 0.06 : 0)) : 0;
-  const totalWithTax = baseTotal * (1 + rate);
+  const totalWithTax = currentFormOrderTotal();
   input.style.borderColor = advUsed > totalWithTax + 0.01 ? 'var(--rose)' : '';
   input.title = advUsed > totalWithTax + 0.01
     ? `Это больше, чем стоимость заказа (${fmtMoney(totalWithTax)}). Проверьте сумму.`

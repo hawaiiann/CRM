@@ -847,6 +847,12 @@ function openModal(edit){
   document.getElementById('modalTitle').textContent = edit ? 'Изменить заказ' : 'Новый заказ';
   document.getElementById('btnDelete').style.display = edit ? 'inline-block' : 'none';
   overlay.classList.add('show');
+  // Скроллится сам .overlay (у модалки нет собственного overflow), и его scrollTop не
+  // сбрасывается автоматически при display:none → flex. Если в прошлый раз форму закрыли
+  // прокрученной вниз (например, после сохранения из нижней части длинной формы с блоком
+  // оплаты), следующее открытие — хоть нового заказа, хоть другого — начиналось с той же
+  // прокрутки: шапка с названием и полем клиента оказывалась обрезана сверху.
+  overlay.scrollTop = 0;
 }
 function closeModal(){ overlay.classList.remove('show'); form.reset(); }
 

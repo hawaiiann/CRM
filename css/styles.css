@@ -120,18 +120,17 @@
     padding: 4px 8px 16px;
   }
   .brand-mark {
+    /* Раньше здесь был градиентный кружок с буквой "D"; теперь внутри инлайновый SVG
+       со своим уже нарисованным фоном (скруглённый квадрат) — контейнеру своя заливка
+       и скругление больше не нужны, только размер и центрирование. */
     width: 34px;
     height: 34px;
-    border-radius: var(--radius-pill);
-    background: linear-gradient(135deg, #D4F86A, #A8E10C 60%, #7CB518);
-    color: #1E1E1E;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 800;
-    font-size: 16px;
   }
+  .brand-mark svg { width: 100%; height: 100%; display: block; }
   .brand-name {
     font-weight: 800;
     font-size: 16px;
