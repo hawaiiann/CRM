@@ -380,13 +380,48 @@ async function deleteFromCloud(table, id) {
 // существовала — UPDATE идёт с WHERE updated_at = <последнее известное нам значение>.
 // Если сервер её с тех пор изменил кто-то другой, 0 строк совпадёт — вместо слепой
 // перезаписи забираем актуальную версию с сервера и подставляем её локально.
+/* ---------- Устойчивость к незавершённой миграции схемы ----------
+ * Если в базе ещё нет колонки, которую шлёт приложение (не выполнен ALTER TABLE из
+ * CHANGELOG), PostgREST отклоняет ЗАПИСЬ ЦЕЛИКОМ. Раньше это означало, что ни одна правка
+ * заказа не уезжает в облако — всё живёт только локально и "слетает" после перезагрузки,
+ * причём молча. Теперь недостающую колонку запоминаем, выкидываем из запроса и повторяем:
+ * приложение продолжает работать, просто без этого поля, пока миграцию не выполнят. */
+const missingColumnsByTable = {};
+
+function stripKnownMissingColumns(table, payload) {
+  const missing = missingColumnsByTable[table];
+  if (!missing || !missing.size) return payload;
+  const copy = { ...payload };
+  missing.forEach(col => delete copy[col]);
+  return copy;
+}
+
+// Из ошибки PostgREST вида "Could not find the 'paid_amount' column of 'orders'..."
+// достаём имя колонки. Возвращает true, если удалось запомнить новую недостающую колонку.
+function noteMissingColumn(table, error) {
+  const msg = String((error && error.message) || '');
+  const match = msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/);
+  if (!match) return false;
+  const col = match[1];
+  if (!missingColumnsByTable[table]) missingColumnsByTable[table] = new Set();
+  if (missingColumnsByTable[table].has(col)) return false;
+  missingColumnsByTable[table].add(col);
+  console.warn(`В таблице "${table}" нет колонки "${col}" — она не будет сохраняться, пока не выполнен ALTER TABLE (см. CHANGELOG). Остальные поля синхронизируются как обычно.`);
+  return true;
+}
+
 // Одна попытка условного UPDATE — WHERE id = ... AND updated_at = compareAt.
 // true = применилось (и updatedAtMap обновлён свежим значением), false = 0 строк совпало.
 async function tryConditionalUpdate(table, id, item, toRowFn, compareAt, updatedAtMap) {
-  const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
-  const { data, error } = await supabaseClient.from(table)
+  const build = () => stripKnownMissingColumns(table, { ...toRowFn(item), updated_at: new Date().toISOString() });
+  const run = (payload) => supabaseClient.from(table)
     .update(payload).eq('id', id).eq('updated_at', compareAt)
     .select('updated_at');
+
+  let { data, error } = await run(build());
+  // Схема отстаёт от приложения — выкидываем неизвестную колонку и пробуем ещё раз,
+  // иначе ни одна правка этой таблицы вообще не уедет в облако.
+  if (error && noteMissingColumn(table, error)) ({ data, error } = await run(build()));
   if (error) throw error;
   if (!data || !data.length) return false;
   updatedAtMap[id] = data[0].updated_at;
@@ -415,8 +450,11 @@ async function upsertWithConflictCheck(table, items, toRowFn, cloudSnapshotMap, 
           continue;
         }
       } else {
-        const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
-        const { data, error } = await supabaseClient.from(table).insert(payload).select('updated_at').single();
+        const buildInsert = () => stripKnownMissingColumns(table, { ...toRowFn(item), updated_at: new Date().toISOString() });
+        let { data, error } = await supabaseClient.from(table).insert(buildInsert()).select('updated_at').single();
+        if (error && noteMissingColumn(table, error)) {
+          ({ data, error } = await supabaseClient.from(table).insert(buildInsert()).select('updated_at').single());
+        }
         if (error) {
           // Запись уже есть в облаке, просто мы не знали её updated_at (потеряли его при
           // разрешении конфликта, переключении аккаунта и т.п.). Без этой ветки INSERT падал
