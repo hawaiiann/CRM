@@ -312,23 +312,42 @@ async function deleteFromCloud(table, id) {
 // существовала — UPDATE идёт с WHERE updated_at = <последнее известное нам значение>.
 // Если сервер её с тех пор изменил кто-то другой, 0 строк совпадёт — вместо слепой
 // перезаписи забираем актуальную версию с сервера и подставляем её локально.
+// Одна попытка условного UPDATE — WHERE id = ... AND updated_at = compareAt.
+// true = применилось (и updatedAtMap обновлён свежим значением), false = 0 строк совпало.
+async function tryConditionalUpdate(table, id, item, toRowFn, compareAt, updatedAtMap) {
+  const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
+  const { data, error } = await supabaseClient.from(table)
+    .update(payload).eq('id', id).eq('updated_at', compareAt)
+    .select('updated_at');
+  if (error) throw error;
+  if (!data || !data.length) return false;
+  updatedAtMap[id] = data[0].updated_at;
+  return true;
+}
+
 async function upsertWithConflictCheck(table, items, toRowFn, cloudSnapshotMap, updatedAtMap, mergeServerRow) {
   for (const item of items) {
     const id = item.id;
-    const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
     const known = updatedAtMap[id];
     try {
       if (known) {
-        const { data, error } = await supabaseClient.from(table)
-          .update(payload).eq('id', id).eq('updated_at', known)
-          .select('updated_at');
-        if (error) throw error;
-        if (!data || !data.length) {
+        let applied = await tryConditionalUpdate(table, id, item, toRowFn, known, updatedAtMap);
+        if (!applied) {
+          // 0 строк совпало — это НЕ обязательно чужая правка: наш собственный known мог
+          // просто отстать (гонка внутри той же сессии, задержка realtime-эха и т.п.).
+          // Прежде чем сдаться и подставить чужую версию поверх только что сделанной
+          // локальной правки — один раз перечитываем актуальный updated_at и пробуем ещё раз.
+          const { data: freshRow } = await supabaseClient.from(table).select('updated_at').eq('id', id).maybeSingle();
+          if (freshRow) applied = await tryConditionalUpdate(table, id, item, toRowFn, freshRow.updated_at, updatedAtMap);
+        }
+        if (!applied) {
+          // Действительно конфликт (или запись успела исчезнуть) — здесь уже разумно
+          // считать сервер источником истины и подставить его версию локально.
           await resolveSyncConflict(table, id, updatedAtMap, mergeServerRow);
           continue;
         }
-        updatedAtMap[id] = data[0].updated_at;
       } else {
+        const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
         const { data, error } = await supabaseClient.from(table).insert(payload).select('updated_at').single();
         if (error) throw error;
         updatedAtMap[id] = data.updated_at;
