@@ -633,6 +633,17 @@ function subscribeRealtime() {
 // Нужно, чтобы входящее realtime-событие (в том числе эхо нашей же прошлой записи, оно
 // приходит с задержкой) не затирало то, что пользователь только что изменил, но что ещё
 // лежит в debounce-очереди на отправку — иначе правка молча откатывается на глазах.
+// Realtime-события могут приходить с задержкой, не по порядку и повторно (Supabase
+// переигрывает недавние события при переподключении). Устаревшее эхо нашей же прошлой
+// записи несёт СТАРОЕ значение поля — и, применившись после более новой правки, откатывает
+// её (симптом: "иногда статус оплаты сам возвращается обратно"). Версия записи у нас уже
+// есть — updated_at, поэтому просто игнорируем всё, что не новее известного нам.
+function isStaleRealtimeRow(updatedAtMap, id, incomingUpdatedAt) {
+  const known = updatedAtMap[id];
+  if (!known || !incomingUpdatedAt) return false;
+  return new Date(incomingUpdatedAt).getTime() <= new Date(known).getTime();
+}
+
 function hasUnsentLocalChanges(snapshotMap, id, currentShape) {
   if (!currentShape) return false;
   const snap = snapshotMap[id];
@@ -646,6 +657,7 @@ function handleRealtimeOrders(payload) {
     delete cloudSnapshot.orders[payload.old.id];
     delete cloudSnapshot.updatedAt.orders[payload.old.id];
   } else {
+    if (isStaleRealtimeRow(cloudSnapshot.updatedAt.orders, payload.new.id, payload.new.updated_at)) return;
     const o = normalizeOrder(rowToOrder(payload.new));
     const existing = orders.find(x => x.id === o.id);
     if (hasUnsentLocalChanges(cloudSnapshot.orders, o.id, existing)) {
@@ -669,6 +681,7 @@ function handleRealtimeTasks(payload) {
     delete cloudSnapshot.tasks[payload.old.id];
     delete cloudSnapshot.updatedAt.tasks[payload.old.id];
   } else {
+    if (isStaleRealtimeRow(cloudSnapshot.updatedAt.tasks, payload.new.id, payload.new.updated_at)) return;
     const t = normalizeTask(rowToTask(payload.new));
     const existing = appTasks.find(x => x.id === t.id);
     if (hasUnsentLocalChanges(cloudSnapshot.tasks, t.id, existing)) {
@@ -689,6 +702,7 @@ function handleRealtimeAdvances(payload) {
     delete cloudSnapshot.advances[payload.old.id];
     delete cloudSnapshot.updatedAt.advances[payload.old.id];
   } else {
+    if (isStaleRealtimeRow(cloudSnapshot.updatedAt.advances, payload.new.id, payload.new.updated_at)) return;
     const a = normalizeAdvance(rowToAdvance(payload.new));
     const existing = advances.find(x => x.id === a.id);
     if (hasUnsentLocalChanges(cloudSnapshot.advances, a.id, existing)) {
@@ -709,6 +723,7 @@ function handleRealtimeBoards(payload) {
     delete cloudSnapshot.planningBoards[payload.old.id];
     delete cloudSnapshot.updatedAt.planningBoards[payload.old.id];
   } else {
+    if (isStaleRealtimeRow(cloudSnapshot.updatedAt.planningBoards, payload.new.id, payload.new.updated_at)) return;
     const rowBoard = rowToBoard(payload.new);
     const existing = planningBoards.find(b => b.id === rowBoard.id);
     if (hasUnsentLocalChanges(cloudSnapshot.planningBoards, rowBoard.id, existing ? boardSnapshotShape(existing) : null)) {
@@ -729,6 +744,7 @@ function handleRealtimeLessons(payload) {
     delete cloudSnapshot.planningLessons[payload.old.id];
     delete cloudSnapshot.updatedAt.planningLessons[payload.old.id];
   } else {
+    if (isStaleRealtimeRow(cloudSnapshot.updatedAt.planningLessons, payload.new.id, payload.new.updated_at)) return;
     const lesson = rowToLesson(payload.new);
     const board = planningBoards.find(b => b.id === payload.new.board_id);
     const existingLesson = board ? (board.lessons || []).find(l => l.id === lesson.id) : null;

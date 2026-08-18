@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.20.5';
+const APP_VERSION = '1.20.6';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -82,10 +82,13 @@ let appSettings = {
 // отдельно от label ("слайдов" — родительный падеж, нужен в числовом контексте "106 слайдов").
 const DASHBOARD_METRIC_TYPES = {
   hours:         { label: 'Часы',            unit: 'ч',   activityField: 'hours' },
+  // ВАЖНО: cumulative у доп. показателя должен совпадать с основным. Пока у "слайдов"/"страниц"
+  // флага не было, основное число показывало итог за всё время, а доп. — только прирост за
+  // текущий день, и пара выглядела бессмысленно ("19 презентаций · 22 слайда").
   presentations: { label: 'Презентации',     unit: 'шт.', activityField: 'presentations', cumulative: true,
-                    secondary: { label: 'слайдов', pairLabel: 'слайды', unit: 'шт.', activityField: 'slides' } },
+                    secondary: { label: 'слайдов', pairLabel: 'слайды', unit: 'шт.', activityField: 'slides', cumulative: true } },
   worksheets:    { label: 'Рабочие листы',   unit: 'шт.', activityField: 'worksheets', cumulative: true,
-                    secondary: { label: 'страниц', pairLabel: 'страницы', unit: 'шт.', activityField: 'pages' } },
+                    secondary: { label: 'страниц', pairLabel: 'страницы', unit: 'шт.', activityField: 'pages', cumulative: true } },
   revenue:       { label: 'Выручка',         unit: '₽',   activityField: 'revenue',
                     secondary: { label: 'чистыми', pairLabel: 'чистый доход', unit: '₽', activityField: 'netRevenue' } }
 };
