@@ -71,12 +71,10 @@ function getSortedFinanceList() {
   if (finSort === 'status') {
     finList.sort((a,b) => {
       const getStatusScore = (o) => {
-        if (o.isPaid) return 1;
-        const adv = parseNum(o.advanceUsed);
-        const full = orderTotal(o);
-        if (adv >= full) return 2;
-        if (adv > 0) return 3;
-        return 4;
+        const p = orderPaymentState(o);
+        if (p.isFullyPaid) return 1;
+        if (p.covered > 0) return 2;
+        return 3;
       };
       return getStatusScore(a) - getStatusScore(b);
     });
@@ -86,9 +84,7 @@ function getSortedFinanceList() {
     finList.sort((a,b) => orderTotal(a) - orderTotal(b));
   } else if (finSort === 'pending_desc') {
     finList.sort((a,b) => {
-      const remA = a.isPaid ? 0 : Math.max(0, orderTotal(a) - parseNum(a.advanceUsed));
-      const remB = b.isPaid ? 0 : Math.max(0, orderTotal(b) - parseNum(b.advanceUsed));
-      return remB - remA;
+      return orderPaymentState(b).remaining - orderPaymentState(a).remaining;
     });
   } else if (finSort === 'adv_desc') {
     finList.sort((a,b) => parseNum(b.advanceUsed) - parseNum(a.advanceUsed));
@@ -109,11 +105,12 @@ function exportFinanceCSV() {
     const base = orderBaseTotal(o);
     const full = orderTotal(o);
     const tax = full - base;
-    const advUsed = parseNum(o.advanceUsed);
-    const remToPay = o.isPaid ? 0 : Math.max(0, full - advUsed);
+    const pay = orderPaymentState(o);
+    const advUsed = pay.advUsed;
+    const remToPay = pay.remaining;
     let statusText = 'Не оплачено';
-    if (o.isPaid) statusText = 'Оплачен полностью';
-    else if (advUsed > 0) statusText = `Аванс ${fmtMoney(advUsed)}, доплата ${fmtMoney(remToPay)}`;
+    if (pay.isFullyPaid) statusText = 'Оплачен полностью';
+    else if (pay.covered > 0) statusText = `Получено ${fmtMoney(pay.covered)}, к доплате ${fmtMoney(remToPay)}`;
     return [o.title || 'Без названия', o.client || '—', full, tax, advUsed, remToPay, statusText];
   });
   const csvLines = [header, ...rows].map(row => row.map(csvEscape).join(';'));
@@ -140,11 +137,10 @@ function renderFinance() {
     totalNetIncome += rec.net;
     totalTax += rec.revenue - rec.net;
 
-    if(!o.isPaid) {
-      const advUsed = Math.min(parseNum(o.advanceUsed), full);
-      const rem = Math.max(0, full - advUsed);
-      totalPending += rem;
-    }
+    // "Ожидает оплаты" — только реально висящий остаток. Раньше при снятой галочке
+    // "оплачено" сюда попадала вся сумма заказа целиком, даже если деньги частично уже
+    // получены (это и ломалось при дозаказе в оплаченный заказ).
+    totalPending += orderPaymentState(o).remaining;
   });
 
   const totalAdvUsed = orders.reduce((s,o) => s + parseNum(o.advanceUsed), 0);
@@ -185,15 +181,10 @@ function renderFinance() {
     const base = orderBaseTotal(o);
     const full = orderTotal(o);
     const tax = full - base;
-    const advUsed = parseNum(o.advanceUsed);
-    const remToPay = o.isPaid ? 0 : Math.max(0, full - advUsed);
-
-    let statusHtml = `<span class="unpaid-badge" title="Кликните для смены статуса оплаты" onclick="togglePaymentStatus('${o.id}', event)">Не оплачено</span>`;
-    if (o.isPaid) {
-      statusHtml = `<span class="paid-badge" title="Кликните для смены статуса оплаты" onclick="togglePaymentStatus('${o.id}', event)">Оплачен полностью</span>`;
-    } else if (advUsed > 0) {
-      statusHtml = `<span class="badge review" title="Кликните для смены статуса оплаты" onclick="togglePaymentStatus('${o.id}', event)">Аванс: ${fmtMoney(advUsed)} · Доплата: ${fmtMoney(remToPay)}</span>`;
-    }
+    const pay = orderPaymentState(o);
+    const advUsed = pay.advUsed;
+    const remToPay = pay.remaining;
+    const statusHtml = paymentBadgeHtml(o);
 
     return `
       <tr>
@@ -310,6 +301,51 @@ function calculateModalAdvanceDiff() {
   const totalWithTax = baseTotal * (1 + rate);
   const diff = Math.max(0, totalWithTax - advUsed);
   document.getElementById('advanceCalcSummary').textContent = fmtMoney(diff);
+  updatePaymentSummary();
+}
+
+// Текущая стоимость заказа в форме (по позициям + налог) — берём напрямую из черновика,
+// а не из уже округлённого текста на экране.
+function currentFormOrderTotal() {
+  const baseTotal = currentLines.reduce((s, l) => s + calculateLineTotal(l), 0);
+  const taxSel = document.getElementById('f_taxType');
+  const rate = taxSel ? (taxSel.value === 'individual' ? 0.04 : (taxSel.value === 'entity' ? 0.06 : 0)) : 0;
+  return baseTotal * (1 + rate);
+}
+
+// Блок "Оплата по заказу": стоимость, полученные деньги и остаток к доплате.
+// Остаток = стоимость − аванс − деньги, поэтому при дозаказе он растёт сам,
+// а уже полученная сумма никуда не devается (см. orderPaymentState в utils.js).
+function updatePaymentSummary() {
+  const totalEl = document.getElementById('payOrderTotalBadge');
+  const remainEl = document.getElementById('payRemainingBadge');
+  const input = document.getElementById('f_paidAmount');
+  if (!totalEl || !remainEl || !input) return;
+
+  const totalWithTax = currentFormOrderTotal();
+  const advUsed = Math.min(parseNum(document.getElementById('f_advanceUsed').value), totalWithTax);
+  const paidMoney = parseNum(input.value);
+  const remaining = Math.max(0, totalWithTax - advUsed - paidMoney);
+
+  totalEl.textContent = fmtMoney(totalWithTax);
+  remainEl.textContent = fmtMoney(remaining);
+  remainEl.style.color = remaining <= 0.01 ? 'var(--green)' : 'var(--amber)';
+
+  // Ввели больше, чем осталось после аванса — подсвечиваем, это почти всегда опечатка.
+  const maxPayable = Math.max(0, totalWithTax - advUsed);
+  input.style.borderColor = paidMoney > maxPayable + 0.01 ? 'var(--rose)' : '';
+  input.title = paidMoney > maxPayable + 0.01
+    ? `Больше, чем осталось после аванса (${fmtMoney(maxPayable)}). Проверьте сумму.`
+    : '';
+}
+
+// Кнопка "Получил всё" — проставляет ровно остаток после аванса.
+function fillFullPaymentForOrder() {
+  const totalWithTax = currentFormOrderTotal();
+  const advUsed = Math.min(parseNum(document.getElementById('f_advanceUsed').value), totalWithTax);
+  const rest = Math.max(0, Math.round((totalWithTax - advUsed) * 100) / 100);
+  document.getElementById('f_paidAmount').value = rest ? String(rest) : '';
+  updatePaymentSummary();
 }
 
 // Подсвечивает поле "Использовано аванса" красным, если вбили больше, чем реально стоит заказ.

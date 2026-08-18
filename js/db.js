@@ -7,8 +7,13 @@ function normalizeOrder(o){
     id: o.id, title:o.title||'', client:o.client||'', 
     subject: o.subject||'', grade: o.grade||o.class||'',
     quarter: o.quarter || '', lesson: o.lesson||'',
-    status:o.status||'queue', isPaid: !!o.isPaid, priority: !!o.priority, 
+    status:o.status||'queue', isPaid: !!o.isPaid, priority: !!o.priority,
     advanceUsed: parseNum(o.advanceUsed || o.advance || 0),
+    // Сколько по заказу реально получено ДЕНЬГАМИ (помимо списания с аванса). Раньше оплата
+    // была булевой галочкой, и она "ломалась" при дозаказе: добавили позицию — и приходилось
+    // выбирать между "оплачено целиком" и "не оплачено вовсе". Сумма это переживает: к доплате
+    // считается как стоимость − аванс − полученные деньги (см. orderPaymentState).
+    paidAmount: parseNum(o.paidAmount || 0),
     taxType: o.taxType||'none',
     start:o.start||dateKey(new Date()), deadline:o.deadline||dateKey(addDays(new Date(),7)), 
     estimatedHours: o.estimatedHours ?? '', actualHours: o.actualHours ?? '',
@@ -151,6 +156,22 @@ function reconcileCumulativeStats() {
   return fixedFields;
 }
 
+// Разовый перевод старой булевой оплаты в сумму: галочка "оплачен полностью" означала
+// ровно "получено всё, что не покрыто авансом" — это и записываем. Без миграции такие
+// заказы после обновления выглядели бы как полностью неоплаченные.
+function migratePaidFlagToAmount() {
+  let migrated = 0;
+  orders.forEach(o => {
+    if (o.isPaid && !parseNum(o.paidAmount)) {
+      const full = Math.round(orderTotal(o));
+      const advUsed = Math.min(parseNum(o.advanceUsed), full);
+      const rest = Math.max(0, Math.round((full - advUsed) * 100) / 100);
+      if (rest > 0) { o.paidAmount = rest; migrated++; }
+    }
+  });
+  return migrated;
+}
+
 // Дата, когда деньги по авансу реально поступили — берём из реестра авансов клиента
 // (самый ранний аванс). Именно она, а не дата заказа, честно отражает движение денег.
 function clientAdvanceDate(client) {
@@ -186,14 +207,15 @@ function rebuildRevenueLog() {
       entriesAdded += 2;
     }
 
-    if (o.isPaid) {
-      const rest = Math.round((full - advUsed) * 100) / 100;
-      const netRest = Math.round((base - netForAdvance) * 100) / 100;
-      if (rest !== 0 || netRest !== 0) {
-        const date = o.paidAt || o.deadline || dateKey(new Date());
-        if (rest !== 0) { activityLog.push({ date, orderId: o.id, field: 'revenue', delta: rest }); entriesAdded++; }
-        if (netRest !== 0) { activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: netRest }); entriesAdded++; }
-      }
+    // Полученные ДЕНЬГАМИ (помимо аванса) — датой оплаты. Берём именно сумму, а не флаг:
+    // при частичной оплате признаём только её часть, остаток висит в "к доплате".
+    const paidMoney = Math.min(parseNum(o.paidAmount), Math.max(0, full - advUsed));
+    if (paidMoney > 0) {
+      const netForMoney = fullExact > 0 ? paidMoney * (base / fullExact) : 0;
+      const date = o.paidAt || o.deadline || dateKey(new Date());
+      activityLog.push({ date, orderId: o.id, field: 'revenue', delta: Math.round(paidMoney * 100) / 100 });
+      activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: Math.round(netForMoney * 100) / 100 });
+      entriesAdded += 2;
     }
   });
   return entriesAdded;
@@ -303,6 +325,8 @@ function loadFromLocalStorageFallback() {
     (board.lessons || []).forEach(lesson => { if (!lesson.id) lesson.id = 'l_' + Date.now() + Math.random().toString(36).slice(2, 7); });
   });
 
+  migratePaidFlagToAmount();
+
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
   activityLog = rawLog ? JSON.parse(rawLog) : [];
   seedActivityLogIfEmpty();
@@ -325,11 +349,13 @@ async function loadData(){
     const rawBcfg = localStorage.getItem(BACKUP_CFG_KEY);
     if (rawBcfg) backupSettings = { ...backupSettings, ...JSON.parse(rawBcfg) };
 
+    const migratedPaid = migratePaidFlagToAmount();
+
     activityLog = cloud.activityLog || [];
     const beforeSeedLen = activityLog.length;
     seedActivityLogIfEmpty();
     backfillRevenueInActivityLog();
-    if (activityLog.length !== beforeSeedLen) scheduleCloudSync(); // досчитанное сразу же отправляем в облако
+    if (activityLog.length !== beforeSeedLen || migratedPaid) scheduleCloudSync(); // досчитанное сразу же отправляем в облако
 
     syncPlanningWithOrders();
 

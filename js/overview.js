@@ -147,8 +147,10 @@ function renderOverview(){
     }
   });
 
-  const activeRev = orders.filter(o=>!o.isPaid && o.status!=='cancelled')
-    .reduce((s,o)=>s+Math.max(0, orderTotal(o)-parseNum(o.advanceUsed)),0);
+  // "Ожидает оплаты" — сумма реальных остатков (стоимость − аванс − полученные деньги),
+  // а не полная стоимость всех заказов без галочки "оплачено".
+  const activeRev = orders.filter(o => o.status !== 'cancelled')
+    .reduce((s, o) => s + orderPaymentState(o).remaining, 0);
 
   // Процент изменения относительно прошлого месяца — только там, где для сравнения
   // есть за что зацепиться (Выручка, Выполнено). "Активных" и "Ожидает оплаты" — моментальные

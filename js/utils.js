@@ -251,17 +251,43 @@ function orderTotal(o){
 // авансом клиента — эта часть аванса тоже считается полученной выручкой.
 // Сумму с налогом округляем до целого рубля — именно так выставляется реальный счёт клиенту,
 // а не с дробными копейками, которые появляются чисто из-за умножения на ставку налога.
-function orderRecognizedRevenue(o){
-  const base = orderBaseTotal(o);
+// Единая точка расчёта оплаты по заказу. Раньше оплата была булевой галочкой, из-за чего
+// при дозаказе (добавили позицию в уже оплаченный заказ) приходилось выбирать между
+// "оплачено целиком" и "не оплачено вовсе" — и вся сумма улетала в "ожидает оплаты".
+// Теперь храним полученную сумму, а остаток считается: стоимость − аванс − деньги.
+function orderPaymentState(o) {
   const fullExact = orderTotal(o);
   const full = Math.round(fullExact);
-  if (o.isPaid) return { revenue: full, net: Math.round(base) };
   const advUsed = Math.min(parseNum(o.advanceUsed), full);
-  if (advUsed > 0) {
-    const net = fullExact > 0 ? advUsed * (base / fullExact) : 0;
-    return { revenue: advUsed, net };
-  }
-  return { revenue: 0, net: 0 };
+  const paidMoney = Math.min(parseNum(o.paidAmount), Math.max(0, full - advUsed));
+  const covered = advUsed + paidMoney;
+  const remaining = Math.max(0, Math.round((full - covered) * 100) / 100);
+  return {
+    full, fullExact, advUsed, paidMoney, covered,
+    remaining,
+    isFullyPaid: full > 0 && remaining <= 0
+  };
+}
+
+// Бейдж оплаты — три состояния вместо прежних двух: полностью оплачен, частично
+// (видно, сколько именно висит) и совсем не оплачен. Клик по нему переключает оплату.
+function paymentBadgeHtml(o) {
+  const p = orderPaymentState(o);
+  const onclick = `onclick="togglePaymentStatus('${o.id}', event)"`;
+  if (p.isFullyPaid) return `<span class="paid-badge" title="Оплачен полностью. Клик — снять оплату" ${onclick}>Оплачено</span>`;
+  if (p.covered > 0) return `<span class="badge partial-paid" title="Получено ${fmtMoney(p.covered)} из ${fmtMoney(p.full)}. Клик — отметить полную оплату" ${onclick}>К доплате ${fmtMoney(p.remaining)}</span>`;
+  return `<span class="unpaid-badge" title="Оплаты не было. Клик — отметить полную оплату" ${onclick}>Не оплачено</span>`;
+}
+
+function orderRecognizedRevenue(o){
+  const base = orderBaseTotal(o);
+  const p = orderPaymentState(o);
+  // Признаём ровно то, что реально получено: аванс + деньги. Полностью оплаченный заказ
+  // при этом даёт всю сумму (covered == full), как и раньше.
+  if (p.covered <= 0) return { revenue: 0, net: 0 };
+  if (p.isFullyPaid) return { revenue: p.full, net: Math.round(base) };
+  const net = p.fullExact > 0 ? p.covered * (base / p.fullExact) : 0;
+  return { revenue: Math.round(p.covered * 100) / 100, net: Math.round(net * 100) / 100 };
 }
 
 function getItemIcon(type) {

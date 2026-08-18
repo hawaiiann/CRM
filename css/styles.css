@@ -1077,6 +1077,9 @@
 
   .paid-badge { background: var(--green-soft); color: var(--green); }
   .unpaid-badge { background: var(--rose-soft); color: var(--rose); }
+  /* Частичная оплата — промежуточное состояние между "оплачено" и "не оплачено":
+     деньги получены, но не все, и в бейдже сразу видно, сколько ещё висит. */
+  .badge.partial-paid { background: var(--amber-soft, rgba(245,158,11,0.16)); color: var(--amber); cursor: pointer; }
   .btn-start-badge { background: linear-gradient(135deg, #D4F86A, #A8E10C 60%, #7CB518); color: #17190A; font-weight: 800 !important; }
 
   /* Toolbar */

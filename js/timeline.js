@@ -176,7 +176,7 @@ function renderTimelineSubBoard(subDays, fixedColWidth) {
               <select class="badge ${o.status}" onchange="quickChangeStatus('${o.id}', this.value); adjustSelectWidth(this);">
                 ${statusOptions}
               </select>
-              ${o.isPaid ? `<span class="paid-badge" onclick="togglePaymentStatus('${o.id}', event)">Оплачено</span>` : `<span class="unpaid-badge" onclick="togglePaymentStatus('${o.id}', event)">Не оплачено</span>`}
+              ${paymentBadgeHtml(o)}
             </div>
           </div>
 

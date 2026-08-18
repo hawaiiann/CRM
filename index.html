@@ -557,20 +557,35 @@
             <input type="text" inputmode="decimal" id="f_advanceUsed" placeholder="0 ₽" oninput="calculateModalAdvanceDiff(); warnIfAdvanceExceedsOrder();">
           </div>
           <div>
-            <div class="advance-col-label">Остаток к доплате</div>
+            <div class="advance-col-label">Остаток после аванса</div>
             <div class="advance-value" id="advanceCalcSummary">0 ₽</div>
           </div>
         </div>
         <button type="button" class="advance-link-btn" onclick="fillMaxAdvanceForOrder()">Списать всё</button>
       </div>
 
+      <!-- ПОЛУЧЕННАЯ ОПЛАТА (деньгами, помимо аванса) -->
+      <div class="advance-box">
+        <div class="field-group-label" style="margin-bottom:12px;">Оплата по заказу</div>
+        <div class="advance-row3">
+          <div>
+            <div class="advance-col-label">Стоимость заказа</div>
+            <div class="advance-value" id="payOrderTotalBadge">0 ₽</div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Оплачено деньгами</label>
+            <input type="text" inputmode="decimal" id="f_paidAmount" placeholder="0 ₽" oninput="updatePaymentSummary()">
+          </div>
+          <div>
+            <div class="advance-col-label">К доплате</div>
+            <div class="advance-value" id="payRemainingBadge">0 ₽</div>
+          </div>
+        </div>
+        <button type="button" class="advance-link-btn" onclick="fillFullPaymentForOrder()">Получил всё</button>
+      </div>
+
       <div class="field">
-        <label style="display:flex; justify-content:space-between; align-items:center;">
-          <span>Состав заказа (Тип, Ед.изм, Кол-во, Часы, Ставка)</span>
-          <label style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--text); cursor:pointer; text-transform:none;">
-            <input type="checkbox" id="f_isPaid" style="width:auto;"> Заказ полностью оплачен
-          </label>
-        </label>
+        <label>Состав заказа (Тип, Ед.изм, Кол-во, Часы, Ставка)</label>
 
         <div class="lines-table">
           <div class="lines-head">

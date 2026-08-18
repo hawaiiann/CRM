@@ -7,9 +7,19 @@ function togglePaymentStatus(id, event) {
   const o = orders.find(x => x.id === id);
   if(o) {
     const before = JSON.parse(JSON.stringify(o));
-    o.isPaid = !o.isPaid;
-    // Дата поступления денег: ставим при отметке, снимаем при откате статуса.
-    o.paidAt = o.isPaid ? dateKey(new Date()) : null;
+    const pay = orderPaymentState(o);
+    if (pay.isFullyPaid) {
+      // Снимаем оплату целиком — деньги "не получены". Аванс при этом не трогаем,
+      // он списывается отдельно и живёт своей жизнью.
+      o.paidAmount = 0;
+      o.isPaid = false;
+      o.paidAt = null;
+    } else {
+      // Отмечаем полную оплату: получено ровно то, что оставалось после аванса.
+      o.paidAmount = Math.max(0, Math.round((pay.full - pay.advUsed) * 100) / 100);
+      o.isPaid = true;
+      o.paidAt = o.paidAt || dateKey(new Date());
+    }
     recordActivityChanges(before, o);
     saveData();
     renderCurrent();
@@ -180,11 +190,10 @@ function renderOrderCard(o){
   const displayTitle = o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия';
   const statusOptions = Object.keys(statusLabels).map(k=> `<option value="${k}" ${o.status===k?'selected':''}>${statusLabels[k]}</option>`).join('');
 
-  const fullPrice = orderTotal(o);
-  const advUsed = parseNum(o.advanceUsed);
-  // Заказ отмечен "Оплачено" (в т.ч. напрямую, минуя аванс) — доплаты по нему больше нет,
-  // даже если списанный аванс формально меньше полной цены (та же логика, что в Финансах).
-  const remToPay = o.isPaid ? 0 : Math.max(0, fullPrice - advUsed);
+  const pay = orderPaymentState(o);
+  const fullPrice = pay.fullExact;
+  const advUsed = pay.advUsed;
+  const remToPay = pay.remaining;
 
   const isOverdue = isOrderOverdue(o);
 
@@ -221,7 +230,7 @@ function renderOrderCard(o){
           <select class="badge ${o.status}" onclick="event.stopPropagation()" onchange="quickChangeStatus('${o.id}', this.value); adjustSelectWidth(this);">
             ${statusOptions}
           </select>
-          ${o.isPaid ? `<span class="paid-badge" onclick="togglePaymentStatus('${o.id}', event)">Оплачено</span>` : `<span class="unpaid-badge" onclick="togglePaymentStatus('${o.id}', event)">Не оплачено</span>`}
+          ${paymentBadgeHtml(o)}
           ${isOverdue ? `<span class="badge" style="background:var(--rose-soft); color:var(--rose);">⏰ Просрочен</span>` : ''}
           ${advBadgeHtml}
         </div>
@@ -803,7 +812,7 @@ function updateLinesTotalSum() {
   const totalWithTax = total * (1+rate);
   const totalWithTaxEl = document.getElementById('linesTotalWithTax');
   if(totalWithTaxEl) totalWithTaxEl.textContent = fmtMoney(totalWithTax);
-  calculateModalAdvanceDiff();
+  calculateModalAdvanceDiff(); // внутри пересчитывает и блок оплаты (updatePaymentSummary)
 }
 
 function addLine(){
@@ -879,7 +888,7 @@ function duplicateOrder(id){
   document.getElementById('f_lesson').value = lessonNumMatch ? String(parseInt(o.lesson,10)+1) : (o.lesson||'');
 
   document.getElementById('f_status').value = 'queue';
-  document.getElementById('f_isPaid').checked = false;
+  document.getElementById('f_paidAmount').value = '';
   document.getElementById('f_priority').checked = false;
   document.getElementById('f_advanceUsed').value = '';
 
@@ -922,7 +931,7 @@ function editOrder(id){
   document.getElementById('f_quarter').value = o.quarter||'';
   document.getElementById('f_lesson').value = o.lesson||'';
   document.getElementById('f_status').value = o.status||'queue';
-  document.getElementById('f_isPaid').checked = !!o.isPaid;
+  document.getElementById('f_paidAmount').value = o.paidAmount || '';
   document.getElementById('f_priority').checked = !!o.priority;
   document.getElementById('f_advanceUsed').value = o.advanceUsed || '';
 
@@ -937,6 +946,7 @@ function editOrder(id){
   renderLines();
   updateModalAdvanceInfo();
   warnIfAdvanceExceedsOrder();
+  updatePaymentSummary();
   populateLinkedLessonSelect(o.linkedLessonId || '');
   syncModalStatusColor();
   syncModalPriorityTheme();
@@ -980,7 +990,7 @@ form.addEventListener('submit', (e)=>{
     quarter: qtr,
     lesson: les,
     status: document.getElementById('f_status').value,
-    isPaid: document.getElementById('f_isPaid').checked,
+    paidAmount: parseNum(document.getElementById('f_paidAmount').value),
     priority: document.getElementById('f_priority').checked,
     advanceUsed: parseNum(document.getElementById('f_advanceUsed').value),
     taxType: document.getElementById('f_taxType').value,
@@ -994,10 +1004,15 @@ form.addEventListener('submit', (e)=>{
     linkedLessonId: document.getElementById('f_linkedLessonId').value || null
   };
 
-  // Дата поступления денег: проставляем в момент, когда заказ впервые стал оплаченным
-  // (через форму), и убираем, если оплату сняли. Уже проставленную дату не перетираем.
+  // isPaid больше не вводится руками — это производная от того, покрыта ли стоимость
+  // авансом и полученными деньгами (см. orderPaymentState). Храним её для совместимости
+  // со старыми данными и фильтрами.
+  data.isPaid = orderPaymentState(data).isFullyPaid;
+
+  // Дата поступления денег: проставляем, когда деньги по заказу впервые появились,
+  // и убираем, если сумму обнулили. Уже проставленную дату не перетираем.
   const prevOrder = id ? orders.find(o => o.id === id) : null;
-  data.paidAt = data.isPaid ? ((prevOrder && prevOrder.paidAt) || dateKey(new Date())) : null;
+  data.paidAt = parseNum(data.paidAmount) > 0 ? ((prevOrder && prevOrder.paidAt) || dateKey(new Date())) : null;
 
   // Похожий заказ (тот же клиент/предмет/класс/четверть/номер урока) уже существует —
   // частая случайность при повторном сохранении или сбитой нумерации при дублировании.
