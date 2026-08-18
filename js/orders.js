@@ -640,6 +640,76 @@ function showDeadlineToast(o, kind) {
   setTimeout(() => dismissTimerToast(toast), 9000);
 }
 
+/* ---------- Напоминание "аванс закончился" ----------
+ * Тем же тостом/уведомлением, что и сроки сдачи. Срабатывает, когда у клиента, который
+ * когда-либо вносил аванс (иначе предупреждать не о чем — не все клиенты вообще им
+ * пользуются) и по которому сейчас есть незавершённая работа, доступный остаток дошёл до
+ * нуля — чтобы не оказаться в ситуации "поработал, а платить не с чего" и вовремя попросить
+ * клиента пополнить.
+ *
+ * Дедуп-ключ — клиент + текущая внесённая сумма: если клиент пополнит аванс, сумма
+ * изменится и ключ станет новым — при повторном исчерпании (уже другой суммы) предупредит
+ * заново. Если ничего не менялось, повторно не спамит при каждой проверке. */
+function loadNotifiedAdvances() {
+  try { return new Set(JSON.parse(localStorage.getItem(ADVANCE_NOTIFIED_KEY) || '[]')); }
+  catch (e) { return new Set(); }
+}
+function saveNotifiedAdvances(set) {
+  localStorage.setItem(ADVANCE_NOTIFIED_KEY, JSON.stringify([...set].slice(-500)));
+}
+
+function checkAdvanceReminders() {
+  if (!orders || !orders.length) return;
+  const activeClients = [...new Set(
+    orders.filter(o => !['done', 'cancelled'].includes(o.status) && o.client).map(o => o.client)
+  )];
+  if (!activeClients.length) return;
+
+  const notified = loadNotifiedAdvances();
+  let changed = false;
+
+  activeClients.forEach(client => {
+    const stats = getClientAdvanceStats(client);
+    if (stats.totalIn <= 0 || stats.available > 0) return; // не пользуется авансом либо ещё есть остаток
+    const key = `${client}|${Math.round(stats.totalIn * 100)}`;
+    if (notified.has(key)) return;
+    notified.add(key);
+    changed = true;
+    notifyAdvanceExhausted(client);
+  });
+
+  if (changed) saveNotifiedAdvances(notified);
+}
+
+function notifyAdvanceExhausted(client) {
+  const isBackground = document.hidden || !document.hasFocus();
+  if (isBackground) sendSystemAdvanceNotification(client);
+  else showAdvanceToast(client);
+}
+
+function sendSystemAdvanceNotification(client) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const n = new Notification('Аванс закончился', { body: client });
+  n.onclick = () => { window.focus(); n.close(); openClientCard(client); };
+}
+
+function showAdvanceToast(client) {
+  const root = document.getElementById('timerToastRoot');
+  if (!root) return;
+  const toast = document.createElement('div');
+  toast.className = 'timer-toast';
+  toast.innerHTML = `
+    <div class="timer-toast-icon"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M5.4 8H10.6M8 5.4V10.6" stroke-linecap="round"/></svg></div>
+    <div class="timer-toast-body">
+      <div class="timer-toast-title">Аванс закончился</div>
+      <div class="timer-toast-sub">${escapeHtml(client)}</div>
+    </div>`;
+  toast.addEventListener('click', () => { dismissTimerToast(toast); openClientCard(client); });
+  root.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => dismissTimerToast(toast), 9000);
+}
+
 // Позиция, в которую сейчас "капает" время таймера — первая ещё не отмеченная "Готов".
 // Если все позиции уже готовы, лишнее время уходит в последнюю (деть его больше некуда).
 function getActiveLineForTimer(order) {
@@ -841,7 +911,7 @@ function renderLines(){
     <div class="line-row" data-id="${l.id}">
       <div class="line-field-wrap lf-type">
         <label class="line-field-label">Тип</label>
-        ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateLineDirect('${l.id}','label',this.value);`)}
+        ${renderComboField(`lineLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateLineDirect('${l.id}','label',this.value); updateHoursHint('${l.id}');`)}
       </div>
 
       <div class="line-field-wrap lf-unit">
@@ -856,7 +926,7 @@ function renderLines(){
 
       <div class="line-field-wrap lf-hours">
         <label class="line-field-label">Часы</label>
-        <input type="text" inputmode="text" value="${l.pomoHours}" placeholder="0 ч, или 1:30" oninput="updateLineDirect('${l.id}','pomoHours',this.value); updateLinesCalcUI('${l.id}');" onchange="normalizeLineHours('${l.id}');">
+        <input type="text" inputmode="text" id="lineHours-${l.id}" value="${l.pomoHours}" placeholder="0 ч, или 1:30" oninput="updateLineDirect('${l.id}','pomoHours',this.value); updateLinesCalcUI('${l.id}');" onchange="normalizeLineHours('${l.id}');">
       </div>
 
       <div class="line-field-wrap lf-rate">
@@ -883,6 +953,7 @@ function renderLines(){
     </div>`).join('');
 
   updateLinesTotalSum();
+  currentLines.forEach(l => updateHoursHint(l.id));
 }
 
 function updateLineDirect(id, field, val){
@@ -908,7 +979,38 @@ function updateLinesCalcUI(id) {
     if(calcEl) calcEl.textContent = l.ignorePrice ? '0 ₽' : fmtMoney(calculateLineTotal(l));
     updateLinesTotalSum();
     warnIfAdvanceExceedsOrder();
+    updateHoursHint(id);
   }
+}
+
+// Средние фактические часы на единицу по этому типу работы — считаем по ВСЕМ когда-либо
+// сохранённым позициям (любых заказов, не только текущего), где часы и количество заполнены.
+// Взвешенное среднее (сумма часов / сумма количества), а не среднее по отдельным позициям —
+// иначе одна позиция с qty=1 весила бы столько же, сколько другая с qty=50.
+function averageHoursPerUnit(label) {
+  const norm = (label || '').trim().toLowerCase();
+  if (!norm) return null;
+  let hoursSum = 0, qtySum = 0;
+  orders.forEach(o => (o.lines || []).forEach(l => {
+    if ((l.label || '').trim().toLowerCase() !== norm) return;
+    const h = parseHours(l.pomoHours), q = parseNum(l.qty);
+    if (h > 0 && q > 0) { hoursSum += h; qtySum += q; }
+  }));
+  return qtySum > 0 ? hoursSum / qtySum : null;
+}
+
+// Подсказка ожидаемых часов в плейсхолдере поля "Часы" — по истории таких же позиций
+// в прошлых заказах. Не перетирает уже введённое значение: только placeholder, только
+// когда поле пустое — это ориентир для НОВОЙ позиции, а не навязанное число.
+function updateHoursHint(lineId) {
+  const line = currentLines.find(l => l.id === lineId);
+  const input = document.getElementById(`lineHours-${lineId}`);
+  if (!line || !input) return;
+  if (parseHours(line.pomoHours) > 0) { input.placeholder = '0 ч, или 1:30'; return; }
+  const avg = averageHoursPerUnit(line.label);
+  if (avg === null) { input.placeholder = '0 ч, или 1:30'; return; }
+  const suggested = Math.round(avg * (parseNum(line.qty) || 1) * 100) / 100;
+  input.placeholder = suggested > 0 ? `≈ ${suggested} ч по истории` : '0 ч, или 1:30';
 }
 
 function updateLinesTotalSum() {

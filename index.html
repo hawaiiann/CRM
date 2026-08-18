@@ -58,6 +58,10 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.2 13V9.4M8 13V5M13.8 13V2.4"/></svg>
         Финансы
       </button>
+      <button class="navitem" data-view="clients" onclick="switchView('clients')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5.3" r="2.3"/><path d="M1.6 13.4C1.6 10.8 3.5 9 6 9C8.5 9 10.4 10.8 10.4 13.4"/><circle cx="11.5" cy="5.6" r="1.8" opacity="0.55"/><path d="M11 9.05C13.05 9.35 14.4 10.95 14.4 13.4" opacity="0.55"/></svg>
+        Клиенты
+      </button>
 
       <div class="navlabel">Работа</div>
       <button class="navitem" data-view="orders" onclick="switchView('orders')">
@@ -341,6 +345,40 @@
                 </tfoot>
               </table>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLIENTS -->
+      <section class="view" id="view-clients">
+        <div class="topbar">
+          <div><h1>Клиенты</h1><p>Все заказчики: активные заказы, остаток аванса, сумма к доплате</p></div>
+        </div>
+
+        <div class="toolbar">
+          <input type="text" id="searchClients" placeholder="Поиск по клиентам..." oninput="renderClients()">
+          <select id="clientsSortBy" onchange="renderClients()">
+            <option value="name">Сортировка: По алфавиту</option>
+            <option value="due_desc">По сумме к доплате (убывание)</option>
+            <option value="advance_desc">По остатку аванса (убывание)</option>
+            <option value="orders_desc">По числу активных заказов (убывание)</option>
+          </select>
+        </div>
+
+        <div class="card panel" style="margin-top:16px;">
+          <div style="overflow-x:auto;">
+            <table class="finance-table">
+              <thead>
+                <tr>
+                  <th>Клиент</th>
+                  <th>Активных заказов</th>
+                  <th>Доступный аванс</th>
+                  <th>К доплате всего</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody id="clientsTableBody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1005,6 +1043,7 @@
 <script src="js/planning.js"></script>
 <script src="js/overview.js"></script>
 <script src="js/finance.js"></script>
+<script src="js/clients.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/timeline.js"></script>
 <script src="js/orders.js"></script>

@@ -3,7 +3,7 @@
  * ============================================================ */
 
 // Версия приложения — см. CHANGELOG.md за подробностями. Обновляется вручную при каждом наборе правок.
-const APP_VERSION = '1.28.0';
+const APP_VERSION = '1.29.0';
 
 const STORAGE_KEY = 'design_crm_orders_v10';
 const SETTINGS_KEY = 'design_crm_settings_v6';
@@ -14,6 +14,7 @@ const BACKUP_CFG_KEY = 'design_crm_backup_cfg';
 const ACTIVITY_LOG_KEY = 'design_crm_activity_log_v1';
 const TIMER_STATE_KEY = 'design_crm_timer_state_v1'; // локально, на устройстве — не облачные данные
 const DEADLINE_NOTIFIED_KEY = 'design_crm_deadline_notified_v1'; // локально — какие напоминания о сроках уже показаны
+const ADVANCE_NOTIFIED_KEY = 'design_crm_advance_notified_v1'; // локально — по каким клиентам уже показано "аванс закончился"
 
 let orders = [];
 let appTasks = [];
@@ -139,6 +140,7 @@ function renderCurrent(){
   fillSelects();
   if(currentView==='overview') renderOverview();
   else if(currentView==='finance') renderFinance();
+  else if(currentView==='clients') renderClients();
   else if(currentView==='planning') renderPlanning();
   else if(currentView==='orders') renderOrders();
   else if(currentView==='timeline') renderTimeline();
@@ -188,7 +190,8 @@ async function initApp() {
   // уведомления просим здесь же, не дожидаясь первого запуска таймера.
   requestNotificationPermission();
   checkDeadlineReminders();
-  setInterval(checkDeadlineReminders, 30 * 60 * 1000);
+  checkAdvanceReminders();
+  setInterval(() => { checkDeadlineReminders(); checkAdvanceReminders(); }, 30 * 60 * 1000);
 
   const versionEl = document.getElementById('appVersionDisplay');
   if (versionEl) versionEl.textContent = `v${APP_VERSION}`;
