@@ -1038,6 +1038,7 @@ function confirmDeleteOrder(wipeStats) {
   deleteFromCloud('orders', id);
   if (wipeStats) {
     activityLog = activityLog.filter(e => e.orderId !== id);
+    deleteActivityLogForOrder(id); // иначе записи остаются в облаке и возвращаются при следующей загрузке
   }
   if (activeTimer.id === id) resetSidebarTimer();
 

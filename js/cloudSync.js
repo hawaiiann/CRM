@@ -305,6 +305,21 @@ function collectionChanged(currentMap, snapshotMap) {
   return { toUpsert };
 }
 
+// Удаление заказа с очисткой его статистики: локально записи журнала выбрасываются
+// фильтром, но в облаке они оставались навсегда — при следующей загрузке возвращались,
+// и "очищенная" статистика воскресала. Плюс приводим счётчик отправленного хвоста журнала
+// в соответствие, иначе позиционная отправка новых записей ломается (см. performCloudSync).
+async function deleteActivityLogForOrder(orderId) {
+  if (!cloudUserId || !orderId) return;
+  try {
+    await supabaseClient.from('activity_log').delete().eq('order_id', orderId);
+    cloudSnapshot.activityLogSyncedCount = activityLog.length;
+  } catch (err) {
+    console.error('Не удалось удалить записи статистики заказа из облака:', err);
+    markSyncFailed();
+  }
+}
+
 // Единственный источник настоящего удаления записи из облака — вызывается explicit-но
 // в момент, когда пользователь ЯВНО нажал "Удалить" (см. orders.js/tasks.js/finance.js/planning.js).
 async function deleteFromCloud(table, id) {
@@ -362,12 +377,22 @@ async function upsertWithConflictCheck(table, items, toRowFn, cloudSnapshotMap, 
       } else {
         const payload = { ...toRowFn(item), updated_at: new Date().toISOString() };
         const { data, error } = await supabaseClient.from(table).insert(payload).select('updated_at').single();
-        if (error) throw error;
-        updatedAtMap[id] = data.updated_at;
+        if (error) {
+          // Запись уже есть в облаке, просто мы не знали её updated_at (потеряли его при
+          // разрешении конфликта, переключении аккаунта и т.п.). Без этой ветки INSERT падал
+          // бы по дублю первичного ключа на КАЖДОМ сохранении, и правка не уезжала никогда.
+          const { data: fresh } = await supabaseClient.from(table).select('updated_at').eq('id', id).maybeSingle();
+          if (!fresh) throw error;
+          const applied = await tryConditionalUpdate(table, id, item, toRowFn, fresh.updated_at, updatedAtMap);
+          if (!applied) { await resolveSyncConflict(table, id, updatedAtMap, mergeServerRow); continue; }
+        } else {
+          updatedAtMap[id] = data.updated_at;
+        }
       }
       cloudSnapshotMap[id] = snapshotCopy(item);
     } catch (err) {
       console.error(`Ошибка синхронизации записи (${table}/${id}):`, err);
+      markSyncFailed(); // ошибка по конкретной записи гасилась здесь и наружу не выходила
     }
   }
 }
@@ -486,13 +511,23 @@ async function performCloudSync() {
       cloudSnapshot.appSettings = JSON.parse(JSON.stringify(appSettings));
     }
 
-    if (activityLog.length > cloudSnapshot.activityLogSyncedCount) {
-      const newEntries = activityLog.slice(cloudSnapshot.activityLogSyncedCount);
-      await supabaseClient.from('activity_log').insert(newEntries.map(e => ({ user_id: cloudUserId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta })));
+    // Журнал активности отправляется "хвостом" по счётчику уже отправленных записей.
+    // Если журнал локально СОКРАТИЛСЯ (удаление заказа с очисткой его статистики), счётчик
+    // оказывался больше длины — и условие ниже не выполнялось уже НИКОГДА: новые записи
+    // статистики молча переставали уезжать в облако до конца сессии. Подстраховка-кламп:
+    if (cloudSnapshot.activityLogSyncedCount > activityLog.length) {
       cloudSnapshot.activityLogSyncedCount = activityLog.length;
     }
+    if (activityLog.length > cloudSnapshot.activityLogSyncedCount) {
+      const newEntries = activityLog.slice(cloudSnapshot.activityLogSyncedCount);
+      const { error: logError } = await supabaseClient.from('activity_log').insert(newEntries.map(e => ({ user_id: cloudUserId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta })));
+      if (logError) throw logError; // иначе счётчик уехал бы вперёд, и записи потерялись бы навсегда
+      cloudSnapshot.activityLogSyncedCount = activityLog.length;
+    }
+    markSyncHealthy();
   } catch (err) {
     console.error('Ошибка облачной синхронизации:', err);
+    markSyncFailed();
   } finally {
     cloudSyncInFlight = false;
     if (cloudSyncPending) { cloudSyncPending = false; performCloudSync(); }
@@ -503,6 +538,28 @@ function scheduleCloudSync() {
   if (!cloudUserId) return;
   clearTimeout(cloudSyncDebounceTimer);
   cloudSyncDebounceTimer = setTimeout(performCloudSync, 600);
+}
+
+/* ---------- Индикатор состояния синхронизации ----------
+ * Раньше любая ошибка отправки просто уходила в console.error: приложение выглядело так,
+ * будто всё сохранено, а в облаке правки не было. Для приложения с деньгами и учётом часов
+ * это самый неприятный класс проблем — молчаливая потеря. Теперь сбой виден в сайдбаре. */
+let syncFailedSince = null;
+
+function markSyncFailed() {
+  if (!syncFailedSince) syncFailedSince = Date.now();
+  renderSyncStatus();
+}
+function markSyncHealthy() {
+  if (syncFailedSince) { syncFailedSince = null; renderSyncStatus(); }
+}
+function renderSyncStatus() {
+  const el = document.getElementById('syncStatusDisplay');
+  if (!el) return;
+  if (!syncFailedSince) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = '';
+  el.textContent = '⚠ Не сохранено в облако';
+  el.title = 'Последняя синхронизация не прошла (нет сети или ошибка сервера). Данные есть локально; не закрывайте вкладку и проверьте соединение — отправка повторится автоматически при следующем изменении.';
 }
 
 /* ---------- Первая загрузка из облака ---------- */
@@ -572,6 +629,17 @@ function subscribeRealtime() {
     .subscribe();
 }
 
+// Есть ли у нас локальная правка этой записи, которая ЕЩЁ НЕ УЕХАЛА в облако?
+// Нужно, чтобы входящее realtime-событие (в том числе эхо нашей же прошлой записи, оно
+// приходит с задержкой) не затирало то, что пользователь только что изменил, но что ещё
+// лежит в debounce-очереди на отправку — иначе правка молча откатывается на глазах.
+function hasUnsentLocalChanges(snapshotMap, id, currentShape) {
+  if (!currentShape) return false;
+  const snap = snapshotMap[id];
+  if (!snap) return true; // локально есть, в облако ни разу не отправляли
+  return JSON.stringify(currentShape) !== JSON.stringify(snap);
+}
+
 function handleRealtimeOrders(payload) {
   if (payload.eventType === 'DELETE') {
     orders = orders.filter(o => o.id !== payload.old.id);
@@ -579,6 +647,13 @@ function handleRealtimeOrders(payload) {
     delete cloudSnapshot.updatedAt.orders[payload.old.id];
   } else {
     const o = normalizeOrder(rowToOrder(payload.new));
+    const existing = orders.find(x => x.id === o.id);
+    if (hasUnsentLocalChanges(cloudSnapshot.orders, o.id, existing)) {
+      // Наша неотправленная правка новее — не затираем её. Но запоминаем свежий updated_at,
+      // чтобы наша отправка прошла условную проверку и не улетела в разрешение конфликта.
+      cloudSnapshot.updatedAt.orders[o.id] = payload.new.updated_at;
+      return;
+    }
     const idx = orders.findIndex(x => x.id === o.id);
     if (idx >= 0) orders[idx] = o; else orders.push(o);
     cloudSnapshot.orders[o.id] = snapshotCopy(o);
@@ -595,6 +670,11 @@ function handleRealtimeTasks(payload) {
     delete cloudSnapshot.updatedAt.tasks[payload.old.id];
   } else {
     const t = normalizeTask(rowToTask(payload.new));
+    const existing = appTasks.find(x => x.id === t.id);
+    if (hasUnsentLocalChanges(cloudSnapshot.tasks, t.id, existing)) {
+      cloudSnapshot.updatedAt.tasks[t.id] = payload.new.updated_at;
+      return;
+    }
     const idx = appTasks.findIndex(x => x.id === t.id);
     if (idx >= 0) appTasks[idx] = t; else appTasks.push(t);
     cloudSnapshot.tasks[t.id] = snapshotCopy(t);
@@ -610,6 +690,11 @@ function handleRealtimeAdvances(payload) {
     delete cloudSnapshot.updatedAt.advances[payload.old.id];
   } else {
     const a = normalizeAdvance(rowToAdvance(payload.new));
+    const existing = advances.find(x => x.id === a.id);
+    if (hasUnsentLocalChanges(cloudSnapshot.advances, a.id, existing)) {
+      cloudSnapshot.updatedAt.advances[a.id] = payload.new.updated_at;
+      return;
+    }
     const idx = advances.findIndex(x => x.id === a.id);
     if (idx >= 0) advances[idx] = a; else advances.push(a);
     cloudSnapshot.advances[a.id] = snapshotCopy(a);
@@ -626,6 +711,10 @@ function handleRealtimeBoards(payload) {
   } else {
     const rowBoard = rowToBoard(payload.new);
     const existing = planningBoards.find(b => b.id === rowBoard.id);
+    if (hasUnsentLocalChanges(cloudSnapshot.planningBoards, rowBoard.id, existing ? boardSnapshotShape(existing) : null)) {
+      cloudSnapshot.updatedAt.planningBoards[rowBoard.id] = payload.new.updated_at;
+      return;
+    }
     if (existing) { Object.assign(existing, rowBoard, { lessons: existing.lessons || [] }); }
     else { planningBoards.push(rowBoard); }
     cloudSnapshot.planningBoards[rowBoard.id] = boardSnapshotShape(rowBoard);
@@ -642,6 +731,11 @@ function handleRealtimeLessons(payload) {
   } else {
     const lesson = rowToLesson(payload.new);
     const board = planningBoards.find(b => b.id === payload.new.board_id);
+    const existingLesson = board ? (board.lessons || []).find(l => l.id === lesson.id) : null;
+    if (hasUnsentLocalChanges(cloudSnapshot.planningLessons, lesson.id, existingLesson ? { ...existingLesson, boardId: payload.new.board_id } : null)) {
+      cloudSnapshot.updatedAt.planningLessons[lesson.id] = payload.new.updated_at;
+      return;
+    }
     if (board) {
       if (!board.lessons) board.lessons = [];
       const idx = board.lessons.findIndex(l => l.id === lesson.id);
@@ -655,8 +749,13 @@ function handleRealtimeLessons(payload) {
 
 function handleRealtimeSettings(payload) {
   if (payload.eventType === 'DELETE') return;
-  appSettings = payload.new.data;
-  cloudSnapshot.appSettings = JSON.parse(JSON.stringify(appSettings));
+  // Свои несохранённые правки справочников не затираем (та же логика, что и для остальных).
+  if (JSON.stringify(appSettings) !== JSON.stringify(cloudSnapshot.appSettings)) return;
+  // Через applySettingsMigrations, а не прямым присваиванием: пришедший объект мог быть
+  // записан более старой версией приложения и не содержать части полей (справочники,
+  // hiddenEntries, показатели дашборда) — прямое присваивание оставило бы их пустыми.
+  applySettingsMigrations(payload.new.data || {});
+  cloudSnapshot.appSettings = snapshotCopy(appSettings);
   fillSelects();
   renderCurrent();
 }
