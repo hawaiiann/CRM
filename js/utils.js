@@ -5,17 +5,15 @@
 const THEME_KEY = 'design_crm_theme'; // объявлено здесь, а не в app.js — используется сразу же ниже, до загрузки app.js
 
 function setTheme(mode) {
-  if (mode === 'dark') {
-    document.body.classList.add('dark-theme');
-    localStorage.setItem(THEME_KEY, 'dark');
-    document.getElementById('btnThemeDark').classList.add('active');
-    document.getElementById('btnThemeLight').classList.remove('active');
-  } else {
-    document.body.classList.remove('dark-theme');
-    localStorage.setItem(THEME_KEY, 'light');
-    document.getElementById('btnThemeLight').classList.add('active');
-    document.getElementById('btnThemeDark').classList.remove('active');
-  }
+  const isDark = mode === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+  // Кнопок переключателя может не быть в DOM — например, на странице тестов, где
+  // utils.js подключается отдельно. Раньше это валило скрипт на верхнем уровне.
+  const darkBtn = document.getElementById('btnThemeDark');
+  const lightBtn = document.getElementById('btnThemeLight');
+  if (darkBtn) darkBtn.classList.toggle('active', isDark);
+  if (lightBtn) lightBtn.classList.toggle('active', !isDark);
 }
 
 if(localStorage.getItem(THEME_KEY)==='dark'){ setTheme('dark'); } else { setTheme('light'); }

@@ -76,6 +76,38 @@ function addDashboardMetric() {
   renderCurrent();
 }
 
+// Сверка "журнал против прямого расчёта" — подготовка к отказу от журнала для всего,
+// кроме часов (см. stats.js). Ничего не меняет, только показывает, сходятся ли числа
+// на реальных данных. Когда сойдутся — дашборд можно переключать на прямой расчёт.
+function compareStatsSources() {
+  const fromJournal = { revenue: 0, netRevenue: 0, presentations: 0, worksheets: 0, slides: 0, pages: 0 };
+  activityLog.forEach(e => { if (e.field in fromJournal) fromJournal[e.field] += e.delta; });
+
+  const direct = derivedTotals(orders, advances);
+
+  const labels = {
+    revenue: 'Выручка', netRevenue: 'Чистый доход', presentations: 'Презентации',
+    worksheets: 'Рабочие листы', slides: 'Слайды', pages: 'Страницы'
+  };
+  const lines = [];
+  let mismatches = 0;
+  Object.keys(labels).forEach(field => {
+    const j = Math.round(fromJournal[field] * 100) / 100;
+    const d = Math.round(direct[field] * 100) / 100;
+    const same = Math.abs(j - d) < 0.01;
+    if (!same) mismatches++;
+    lines.push(`${same ? '✓' : '✕'} ${labels[field]}: журнал ${j} / расчёт ${d}`);
+  });
+
+  alert(
+    (mismatches
+      ? `Расхождений: ${mismatches}. Это значит, что в журнале осели записи, которых прямой расчёт не подтверждает.\n\n`
+      : 'Всё сходится — прямой расчёт даёт те же числа, что и журнал.\n\n') +
+    lines.join('\n') +
+    '\n\nЧасы в сверку не входят: их пишет таймер по ходу работы, и прямым расчётом они не восстанавливаются.'
+  );
+}
+
 async function runReconcileCumulativeStats() {
   // Снимок журнала ДО пересчёта: отмена должна возвращать ровно прежнее состояние.
   // Раньше отмена снимала записи "по счётчику показателей", но пересборка выручки

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Тесты расчёта статистики — Дизайн CRM</title>
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background:#14151A; color:#E8E8E8; padding:28px; line-height:1.5; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:#8A8A8A; font-size:13px; margin-bottom:20px; }
+  #summary { font-size:15px; font-weight:700; padding:12px 16px; border-radius:12px; margin-bottom:18px; display:inline-block; }
+  .ok { background:rgba(124,181,24,0.18); color:#A8E10C; }
+  .bad { background:rgba(228,72,63,0.18); color:#FF6259; }
+  .group { margin:18px 0 6px; font-weight:700; font-size:14px; color:#C9C9C9; border-bottom:1px solid #2A2C33; padding-bottom:6px; }
+  .case { padding:5px 0 5px 20px; font-size:13px; position:relative; }
+  .case::before { position:absolute; left:0; }
+  .pass::before { content:'✓'; color:#A8E10C; }
+  .fail::before { content:'✕'; color:#FF6259; }
+  .fail { color:#FF9A94; }
+  .detail { color:#8A8A8A; font-size:12px; margin-left:20px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Тесты расчёта статистики</h1>
+<div class="sub">Чистые функции из <code>js/stats.js</code> — выручка и количества, выводимые напрямую из заказов и авансов. Откройте страницу, чтобы прогнать.</div>
+<div id="summary">Выполняется…</div>
+<div id="results"></div>
+
+<script src="js/utils.js"></script>
+<script src="js/stats.js"></script>
+<script>
+let passed = 0, failed = 0;
+const resultsEl = document.getElementById('results');
+
+function group(name) {
+  const el = document.createElement('div');
+  el.className = 'group';
+  el.textContent = name;
+  resultsEl.appendChild(el);
+}
+function check(name, actual, expected) {
+  const a = JSON.stringify(actual), e = JSON.stringify(expected);
+  const ok = a === e;
+  ok ? passed++ : failed++;
+  const el = document.createElement('div');
+  el.className = 'case ' + (ok ? 'pass' : 'fail');
+  el.textContent = name;
+  resultsEl.appendChild(el);
+  if (!ok) {
+    const d = document.createElement('div');
+    d.className = 'detail';
+    d.textContent = `ожидалось: ${e}\nполучено:  ${a}`;
+    resultsEl.appendChild(d);
+  }
+}
+
+/* Заказ на 5 000 ₽ без налога: 10 слайдов по 500 ₽ */
+function makeOrder(over) {
+  return Object.assign({
+    id: 'o1', client: 'Школа', taxType: 'none',
+    advanceUsed: 0, paidAmount: 0, paidAt: null,
+    start: '2026-08-10', deadline: '2026-08-20', createdAt: Date.now(),
+    lines: [{ id: 'l1', label: 'Презентация', type: 'Слайд', qty: 10, rate: 500, ready: false }]
+  }, over || {});
+}
+const ADV = [{ id: 'a1', client: 'Школа', amount: 3000, date: '2026-08-05' },
+             { id: 'a2', client: 'Школа', amount: 1000, date: '2026-08-12' }];
+
+/* ---------------------------------------------------------------- */
+group('Дата аванса клиента');
+check('берётся самый ранний аванс', advanceDateForClient(ADV, 'Школа'), '2026-08-05');
+check('у другого клиента авансов нет', advanceDateForClient(ADV, 'Гимназия'), null);
+check('пустой реестр', advanceDateForClient([], 'Школа'), null);
+
+group('Дата, к которой относим материалы заказа');
+check('берём дату начала', orderContributionDate(makeOrder()), '2026-08-10');
+check('нет начала — берём дедлайн', orderContributionDate(makeOrder({ start: '', deadline: '2026-08-20' })), '2026-08-20');
+
+group('Поступления денег по заказу');
+check('оплаты не было — событий нет',
+  revenueEventsForOrder(makeOrder(), ADV).length, 0);
+
+check('только аванс 3 000 — одно событие датой аванса',
+  revenueEventsForOrder(makeOrder({ advanceUsed: 3000 }), ADV)
+    .map(e => [e.date, e.revenue]),
+  [['2026-08-05', 3000]]);
+
+check('аванс 3 000 + доплата 2 000 — два события своими датами',
+  revenueEventsForOrder(makeOrder({ advanceUsed: 3000, paidAmount: 2000, paidAt: '2026-08-18' }), ADV)
+    .map(e => [e.date, e.revenue]),
+  [['2026-08-05', 3000], ['2026-08-18', 2000]]);
+
+check('оплата деньгами без аванса — одно событие датой оплаты',
+  revenueEventsForOrder(makeOrder({ paidAmount: 5000, paidAt: '2026-08-18' }), ADV)
+    .map(e => [e.date, e.revenue]),
+  [['2026-08-18', 5000]]);
+
+check('частичная оплата — признаём только полученное',
+  revenueEventsForOrder(makeOrder({ paidAmount: 2000, paidAt: '2026-08-18' }), ADV)
+    .reduce((s, e) => s + e.revenue, 0),
+  2000);
+
+check('деньги сверх стоимости не признаём',
+  revenueEventsForOrder(makeOrder({ paidAmount: 9999, paidAt: '2026-08-18' }), ADV)
+    .reduce((s, e) => s + e.revenue, 0),
+  5000);
+
+check('заказ без стоимости — событий нет',
+  revenueEventsForOrder(makeOrder({ lines: [], paidAmount: 1000, paidAt: '2026-08-18' }), ADV).length,
+  0);
+
+check('нет аванса у клиента — часть по авансу падает на дату заказа',
+  revenueEventsForOrder(makeOrder({ client: 'Гимназия', advanceUsed: 3000 }), ADV)
+    .map(e => e.date),
+  ['2026-08-10']);
+
+group('Чистый доход (за вычетом налога)');
+check('налог 4% — чистыми меньше выручки',
+  revenueEventsForOrder(makeOrder({ taxType: 'individual', paidAmount: 5200, paidAt: '2026-08-18' }), ADV)
+    .map(e => [e.revenue, e.net]),
+  [[5200, 5000]]);
+
+group('Счётчики материалов');
+check('презентация даёт 1 шт. и 10 слайдов',
+  countEvents([makeOrder()]).map(e => [e.presentations, e.slides]),
+  [[1, 10]]);
+
+check('рабочий лист и карточка считаются вместе, страницы суммируются',
+  countEvents([makeOrder({ lines: [
+    { id: 'a', label: 'Рабочий лист', type: 'Страница', qty: 3, rate: 100 },
+    { id: 'b', label: 'Карточка с вопросами', type: 'Страница', qty: 2, rate: 100 }
+  ] })]).map(e => [e.worksheets, e.pages]),
+  [[2, 5]]);
+
+check('вклад отнесён к дате заказа',
+  countEvents([makeOrder()]).map(e => e.date), ['2026-08-10']);
+
+/* ---------------------------------------------------------------- */
+group('Раскладка по корзинам периода');
+
+const ranges = [
+  { start: new Date(2026, 7, 16), end: new Date(2026, 7, 16) },
+  { start: new Date(2026, 7, 17), end: new Date(2026, 7, 17) },
+  { start: new Date(2026, 7, 18), end: new Date(2026, 7, 18) }
+];
+
+check('выручка — поток: попадает ровно в свой день',
+  computeDerivedSeries('revenue', ranges,
+    [makeOrder({ paidAmount: 5000, paidAt: '2026-08-17' })], ADV),
+  [0, 5000, 0]);
+
+check('выручка до начала окна в корзины не переносится',
+  computeDerivedSeries('revenue', ranges,
+    [makeOrder({ paidAmount: 5000, paidAt: '2026-08-01' })], ADV),
+  [0, 0, 0]);
+
+check('презентации — бегущий итог, держится после появления',
+  computeDerivedSeries('presentations', ranges,
+    [makeOrder({ start: '2026-08-17' })], ADV),
+  [0, 1, 1]);
+
+check('материалы, созданные до окна, входят в стартовый остаток',
+  computeDerivedSeries('presentations', ranges,
+    [makeOrder({ start: '2026-08-01' })], ADV),
+  [1, 1, 1]);
+
+check('два заказа в разные дни — итог накапливается',
+  computeDerivedSeries('presentations', ranges,
+    [makeOrder({ id: 'a', start: '2026-08-16' }), makeOrder({ id: 'b', start: '2026-08-18' })], ADV),
+  [1, 1, 2]);
+
+check('аванс и доплата ложатся в разные дни',
+  computeDerivedSeries('revenue', ranges,
+    [makeOrder({ client: 'Гимназия', start: '2026-08-16', advanceUsed: 3000, paidAmount: 2000, paidAt: '2026-08-18' })], []),
+  [3000, 0, 2000]);
+
+/* ---------------------------------------------------------------- */
+group('Сверка с текущим расчётом (orderRecognizedRevenue)');
+
+[
+  ['без оплаты', makeOrder()],
+  ['аванс полностью', makeOrder({ advanceUsed: 5000 })],
+  ['аванс частично', makeOrder({ advanceUsed: 3000 })],
+  ['аванс + доплата', makeOrder({ advanceUsed: 3000, paidAmount: 2000, paidAt: '2026-08-18' })],
+  ['только деньги', makeOrder({ paidAmount: 5000, paidAt: '2026-08-18' })],
+  ['частичные деньги', makeOrder({ paidAmount: 1500, paidAt: '2026-08-18' })],
+  ['с налогом 6%', makeOrder({ taxType: 'entity', advanceUsed: 1000, paidAmount: 500, paidAt: '2026-08-18' })]
+].forEach(([name, order]) => {
+  const viaEvents = revenueEventsForOrder(order, ADV).reduce((s, e) => s + e.revenue, 0);
+  const viaCurrent = orderRecognizedRevenue(order).revenue;
+  check(`«${name}»: новый расчёт совпадает со старым`, Math.round(viaEvents), Math.round(viaCurrent));
+});
+
+check('итоги по нескольким заказам совпадают с суммой orderRecognizedRevenue', (() => {
+    const list = [
+      makeOrder({ id: 'a', advanceUsed: 3000, paidAmount: 2000, paidAt: '2026-08-18' }),
+      makeOrder({ id: 'b', paidAmount: 1500, paidAt: '2026-08-17' }),
+      makeOrder({ id: 'c' })
+    ];
+    const viaNew = Math.round(derivedTotals(list, ADV).revenue);
+    const viaOld = Math.round(list.reduce((s, o) => s + orderRecognizedRevenue(o).revenue, 0));
+    return [viaNew, viaOld];
+  })(),
+  (() => {
+    const list = [
+      makeOrder({ id: 'a', advanceUsed: 3000, paidAmount: 2000, paidAt: '2026-08-18' }),
+      makeOrder({ id: 'b', paidAmount: 1500, paidAt: '2026-08-17' }),
+      makeOrder({ id: 'c' })
+    ];
+    const v = Math.round(list.reduce((s, o) => s + orderRecognizedRevenue(o).revenue, 0));
+    return [v, v];
+  })());
+
+/* ---------------------------------------------------------------- */
+const summary = document.getElementById('summary');
+summary.className = failed ? 'bad' : 'ok';
+summary.textContent = failed
+  ? `Провалено: ${failed} из ${passed + failed}`
+  : `Все проверки пройдены — ${passed}`;
+</script>
+</body>
+</html>
