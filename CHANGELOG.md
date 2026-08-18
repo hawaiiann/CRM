@@ -9,6 +9,47 @@
 
 ---
 
+## v1.20.7 — 2026-08-18
+
+### Добавлено — закрыты оставшиеся слабые места синхронизации
+
+**Повторная отправка после сбоя.** Раньше при неудачной синхронизации новая попытка происходила только при следующем вашем изменении: сделали правку, пропала сеть, закрыли вкладку — правка оставалась только локально. Теперь повтор идёт сам с нарастающими интервалами (5 сек → 15 сек → 1 мин → 5 мин), плюс немедленно при возврате сети и при возврате на вкладку.
+
+**Собственные идентификаторы у записей журнала статистики.** Журнал отправлялся "хвостом" по счётчику — позиционно, без идентичности у записи; при любом расхождении длины хвост съезжал, и записи могли потеряться или задвоиться. Теперь у каждой записи свой `entryId`, отправляются только реально отсутствующие в облаке, а уникальный индекс в БД делает дубли невозможными. Если SQL ниже ещё не выполнен — приложение молча работает по прежней схеме, ничего не ломается.
+
+**Кнопка "☁ Проверить синхронизацию"** (Справочники, рядом с пересчётом статистики). Сверяет то, что сейчас в приложении, с тем, что реально лежит в облаке, и показывает расхождения по каждому разделу. Только чтение, ничего не меняет. До сих пор единственным способом заметить рассинхрон было "странное поведение" — теперь это видно по нажатию.
+
+### Требуется выполнить SQL в Supabase
+
+Две доработки требуют изменений в самой базе. Приложение работает и без них, но с ними надёжнее:
+
+```sql
+-- 1. Идентификаторы записей журнала статистики (защита от дублей и потерь)
+alter table activity_log add column if not exists entry_id text;
+create unique index if not exists activity_log_entry_id_key
+  on activity_log(entry_id) where entry_id is not null;
+
+-- 2. Версия записи считается сервером, а не устройством.
+-- Иначе при расхождении часов на телефоне и компьютере сравнение версий
+-- может ошибиться в обе стороны: старое событие сойдёт за новое или наоборот.
+create or replace function set_updated_at() returns trigger as $$
+begin new.updated_at = now(); return new; end;
+$$ language plpgsql;
+
+create trigger orders_updated_at before update on orders
+  for each row execute function set_updated_at();
+create trigger tasks_updated_at before update on tasks
+  for each row execute function set_updated_at();
+create trigger advances_updated_at before update on advances
+  for each row execute function set_updated_at();
+create trigger planning_boards_updated_at before update on planning_boards
+  for each row execute function set_updated_at();
+create trigger planning_lessons_updated_at before update on planning_lessons
+  for each row execute function set_updated_at();
+create trigger app_settings_updated_at before update on app_settings
+  for each row execute function set_updated_at();
+```
+
 ## v1.20.6 — 2026-08-18
 
 ### Исправлено — статус оплаты иногда откатывался сам собой

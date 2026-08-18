@@ -42,7 +42,7 @@ let resolveAuthWait = null;
 // каждой отправкой, чтобы посылать только реально изменившиеся записи.
 let cloudSnapshot = {
   orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {},
-  appSettings: null, activityLogSyncedCount: 0,
+  appSettings: null, activityLogSyncedCount: 0, activityLogSyncedIds: new Set(),
   // updated_at последней ИЗВЕСТНОЙ НАМ версии каждой записи — основа для защиты от гонки
   // при записи (см. upsertWithConflictCheck ниже).
   updatedAt: { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} }
@@ -511,19 +511,7 @@ async function performCloudSync() {
       cloudSnapshot.appSettings = JSON.parse(JSON.stringify(appSettings));
     }
 
-    // Журнал активности отправляется "хвостом" по счётчику уже отправленных записей.
-    // Если журнал локально СОКРАТИЛСЯ (удаление заказа с очисткой его статистики), счётчик
-    // оказывался больше длины — и условие ниже не выполнялось уже НИКОГДА: новые записи
-    // статистики молча переставали уезжать в облако до конца сессии. Подстраховка-кламп:
-    if (cloudSnapshot.activityLogSyncedCount > activityLog.length) {
-      cloudSnapshot.activityLogSyncedCount = activityLog.length;
-    }
-    if (activityLog.length > cloudSnapshot.activityLogSyncedCount) {
-      const newEntries = activityLog.slice(cloudSnapshot.activityLogSyncedCount);
-      const { error: logError } = await supabaseClient.from('activity_log').insert(newEntries.map(e => ({ user_id: cloudUserId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta })));
-      if (logError) throw logError; // иначе счётчик уехал бы вперёд, и записи потерялись бы навсегда
-      cloudSnapshot.activityLogSyncedCount = activityLog.length;
-    }
+    await syncActivityLog();
     markSyncHealthy();
   } catch (err) {
     console.error('Ошибка облачной синхронизации:', err);
@@ -531,6 +519,55 @@ async function performCloudSync() {
   } finally {
     cloudSyncInFlight = false;
     if (cloudSyncPending) { cloudSyncPending = false; performCloudSync(); }
+  }
+}
+
+/* ---------- Журнал активности ----------
+ * Раньше отправлялся "хвостом" по счётчику уже отправленных записей: позиционно, без
+ * собственной идентичности у записи. Отсюда хрупкость — при любом расхождении длины
+ * (сокращение журнала, частично прошедшая вставка, две открытые вкладки) хвост съезжал,
+ * и записи либо терялись, либо дублировались. Теперь у каждой записи свой entryId:
+ * отправляем только те, которых точно нет в облаке, а уникальный индекс по entry_id
+ * в БД делает дубли невозможными в принципе.
+ *
+ * Если колонки entry_id в базе ещё нет (SQL не выполнен) — молча откатываемся на прежнюю
+ * позиционную схему, чтобы приложение продолжало работать. */
+let activityLogSupportsEntryId = true;
+
+function makeEntryId() {
+  return 'al_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
+
+async function syncActivityLog() {
+  if (activityLogSupportsEntryId) {
+    const unsent = activityLog.filter(e => !e.entryId || !cloudSnapshot.activityLogSyncedIds.has(e.entryId));
+    if (!unsent.length) return;
+    unsent.forEach(e => { if (!e.entryId) e.entryId = makeEntryId(); });
+    const rows = unsent.map(e => ({ user_id: cloudUserId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }));
+    const { error } = await supabaseClient.from('activity_log').insert(rows);
+    if (!error) {
+      unsent.forEach(e => cloudSnapshot.activityLogSyncedIds.add(e.entryId));
+      cloudSnapshot.activityLogSyncedCount = activityLog.length;
+      return;
+    }
+    // Колонки нет — работаем по-старому, но помечаем, чтобы не пытаться каждый раз.
+    if (String(error.message || '').includes('entry_id')) {
+      activityLogSupportsEntryId = false;
+      console.warn('activity_log.entry_id отсутствует — используется прежняя позиционная отправка. Выполните SQL из CHANGELOG v1.20.7.');
+    } else {
+      throw error;
+    }
+  }
+
+  // Прежняя схема (позиционный хвост) + подстраховка-кламп на случай сокращения журнала.
+  if (cloudSnapshot.activityLogSyncedCount > activityLog.length) {
+    cloudSnapshot.activityLogSyncedCount = activityLog.length;
+  }
+  if (activityLog.length > cloudSnapshot.activityLogSyncedCount) {
+    const newEntries = activityLog.slice(cloudSnapshot.activityLogSyncedCount);
+    const { error: logError } = await supabaseClient.from('activity_log').insert(newEntries.map(e => ({ user_id: cloudUserId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta })));
+    if (logError) throw logError; // иначе счётчик уехал бы вперёд, и записи потерялись бы навсегда
+    cloudSnapshot.activityLogSyncedCount = activityLog.length;
   }
 }
 
@@ -545,14 +582,37 @@ function scheduleCloudSync() {
  * будто всё сохранено, а в облаке правки не было. Для приложения с деньгами и учётом часов
  * это самый неприятный класс проблем — молчаливая потеря. Теперь сбой виден в сайдбаре. */
 let syncFailedSince = null;
+let syncRetryTimer = null;
+let syncRetryAttempt = 0;
+
+// Повторная попытка после сбоя. Без неё отправка возобновлялась только при СЛЕДУЮЩЕМ
+// изменении: сделали правку, пропала сеть, закрыли вкладку — правка осталась только
+// локально. Интервалы растут, чтобы не долбить сервер при долгом отсутствии сети.
+function scheduleSyncRetry() {
+  if (syncRetryTimer) return;
+  const delays = [5000, 15000, 60000, 300000];
+  const delay = delays[Math.min(syncRetryAttempt, delays.length - 1)];
+  syncRetryAttempt++;
+  syncRetryTimer = setTimeout(() => { syncRetryTimer = null; performCloudSync(); }, delay);
+}
 
 function markSyncFailed() {
   if (!syncFailedSince) syncFailedSince = Date.now();
   renderSyncStatus();
+  scheduleSyncRetry();
 }
 function markSyncHealthy() {
+  syncRetryAttempt = 0;
+  if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
   if (syncFailedSince) { syncFailedSince = null; renderSyncStatus(); }
 }
+
+// Сеть вернулась — не ждём следующего интервала повтора.
+window.addEventListener('online', () => { if (syncFailedSince) performCloudSync(); });
+// Возврат на вкладку — тоже хороший момент дослать зависшее.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && syncFailedSince) performCloudSync();
+});
 function renderSyncStatus() {
   const el = document.getElementById('syncStatusDisplay');
   if (!el) return;
@@ -560,6 +620,73 @@ function renderSyncStatus() {
   el.style.display = '';
   el.textContent = '⚠ Не сохранено в облако';
   el.title = 'Последняя синхронизация не прошла (нет сети или ошибка сервера). Данные есть локально; не закрывайте вкладку и проверьте соединение — отправка повторится автоматически при следующем изменении.';
+}
+
+/* ---------- Самопроверка синхронизации ----------
+ * Сверяет то, что сейчас в приложении, с тем, что реально лежит в облаке, и показывает
+ * расхождения. Нужна потому, что до сих пор единственным способом заметить рассинхрон
+ * было "странное поведение" — а теперь это видно кнопкой в Справочниках. Только чтение. */
+async function runSyncSelfCheck() {
+  if (!cloudUserId) { alert('Нет активной сессии — сначала войдите.'); return; }
+  const btnLabel = 'Проверка...';
+  try {
+    const [ordersRes, tasksRes, advRes, boardsRes, lessonsRes, logRes] = await Promise.all([
+      supabaseClient.from('orders').select('*'),
+      supabaseClient.from('tasks').select('*'),
+      supabaseClient.from('advances').select('*'),
+      supabaseClient.from('planning_boards').select('*'),
+      supabaseClient.from('planning_lessons').select('*'),
+      supabaseClient.from('activity_log').select('id')
+    ]);
+
+    const problems = [];
+
+    // Сравниваем, прогоняя обе стороны через одно и то же преобразование в строку таблицы —
+    // иначе мелкие различия нормализации ("1" против 1) выглядели бы как расхождение.
+    function compare(name, localArr, cloudRows, toRow, rowToLocal) {
+      const cloudById = {};
+      (cloudRows || []).forEach(r => { cloudById[r.id] = r; });
+      const localById = {};
+      localArr.forEach(x => { localById[x.id] = x; });
+
+      const missingInCloud = localArr.filter(x => !cloudById[x.id]).length;
+      const missingLocally = (cloudRows || []).filter(r => !localById[r.id]).length;
+      let different = 0;
+      localArr.forEach(x => {
+        const r = cloudById[x.id];
+        if (!r) return;
+        if (JSON.stringify(toRow(x)) !== JSON.stringify(toRow(rowToLocal(r)))) different++;
+      });
+      if (missingInCloud) problems.push(`${name}: нет в облаке — ${missingInCloud}`);
+      if (missingLocally) problems.push(`${name}: есть в облаке, но нет здесь — ${missingLocally}`);
+      if (different) problems.push(`${name}: расходится содержимое — ${different}`);
+    }
+
+    compare('Заказы', orders, ordersRes.data, orderToRow, rowToOrder);
+    compare('Задачи', appTasks, tasksRes.data, taskToRow, rowToTask);
+    compare('Авансы', advances, advRes.data, advanceToRow, rowToAdvance);
+    compare('Доски планирования', planningBoards, boardsRes.data, boardToRow, rowToBoard);
+
+    const localLessons = [];
+    planningBoards.forEach(b => (b.lessons || []).forEach(l => localLessons.push({ ...l, boardId: b.id })));
+    compare('Уроки', localLessons, lessonsRes.data, lessonToRow, (r) => ({ ...rowToLesson(r), boardId: r.board_id }));
+
+    const cloudLogCount = (logRes.data || []).length;
+    if (cloudLogCount !== activityLog.length) {
+      problems.push(`Журнал статистики: здесь ${activityLog.length}, в облаке ${cloudLogCount}`);
+    }
+
+    if (!problems.length) {
+      alert('Синхронизация в порядке — данные в приложении и в облаке совпадают.');
+    } else {
+      alert('Найдены расхождения:\n\n' + problems.join('\n') +
+        '\n\nЧаще всего лечится перезагрузкой страницы (данные подтянутся из облака заново). ' +
+        'Если расхождение осталось — сохраните бэкап кнопкой "Save" и покажите этот список.');
+    }
+  } catch (err) {
+    console.error('Самопроверка синхронизации не удалась:', err);
+    alert('Не удалось проверить: ' + (err.message || err));
+  }
 }
 
 /* ---------- Первая загрузка из облака ---------- */
@@ -588,7 +715,7 @@ async function cloudLoadData() {
     if (board) board.lessons.push(rowToLesson(r));
   });
   const pulledSettings = settingsRes.data ? settingsRes.data.data : null;
-  const pulledLog = (logRes.data || []).map(r => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta }));
+  const pulledLog = (logRes.data || []).map(r => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }));
 
   // Тоже глубокие копии: planningBoards уходят в приложение теми же объектами, что и здесь,
   // а orders/tasks/advances хоть и пересобираются через normalize*() в db.js — полагаться на
@@ -601,6 +728,7 @@ async function cloudLoadData() {
   boards.forEach(b => (b.lessons || []).forEach(l => { cloudSnapshot.planningLessons[l.id] = snapshotCopy({ ...l, boardId: b.id }); }));
   cloudSnapshot.appSettings = pulledSettings ? JSON.parse(JSON.stringify(pulledSettings)) : null;
   cloudSnapshot.activityLogSyncedCount = pulledLog.length;
+  cloudSnapshot.activityLogSyncedIds = new Set(pulledLog.map(e => e.entryId).filter(Boolean));
 
   // updated_at каждой записи — точка отсчёта для защиты от гонки при следующей записи
   // (см. upsertWithConflictCheck): без этого самая первая правка после открытия страницы
