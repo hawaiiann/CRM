@@ -102,7 +102,7 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
 // "застряла" незакрытая пара (плюс без компенсирующего минуса от отката), сумма разойдётся.
 // Не трогает сами заказы/финансы — только записи в журнале статистики.
 function reconcileCumulativeStats() {
-  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0, realRevenue = 0, realNet = 0;
+  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0;
   orders.forEach(o => {
     const types = splitLineTypes(o.lines);
     const units = splitLineUnits(o.lines);
@@ -110,19 +110,15 @@ function reconcileCumulativeStats() {
     realWorksheets += types.worksheets;
     realSlides += units.slides;
     realPages += units.pages;
-    const rec = orderRecognizedRevenue(o);
-    realRevenue += rec.revenue;
-    realNet += rec.net;
   });
-  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0, revenue: 0, netRevenue: 0 };
+  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0 };
   activityLog.forEach(e => { if (e.field in logged) logged[e.field] += e.delta; });
 
   const today = dateKey(new Date());
-  const real = {
-    presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages,
-    revenue: realRevenue, netRevenue: realNet
-  };
+  const real = { presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages };
   let fixedFields = [];
+  // Накопительные показатели — бегущий итог, поэтому одной общей поправкой "сегодня"
+  // конечное значение выправляется корректно.
   Object.keys(real).forEach(field => {
     const diff = Math.round((real[field] - logged[field]) * 100) / 100;
     if (diff !== 0) {
@@ -130,6 +126,35 @@ function reconcileCumulativeStats() {
       fixedFields.push(`${field}: ${logged[field]} → ${real[field]}`);
     }
   });
+
+  // Выручка/чистый доход — ПОТОКОВЫЕ показатели (считаются за период, а не бегущим итогом),
+  // поэтому важна не только сумма, но и дата: общая поправка "сегодня" нарисовала бы ложный
+  // всплеск за сегодня вместо исправления истории. Сверяем по КАЖДОМУ заказу отдельно и
+  // ставим поправку его собственной датой. Записи по уже удалённым заказам не трогаем —
+  // они остаются историческим фактом (см. "оставить статистику" при удалении заказа).
+  let revenueFixes = 0, netFixes = 0, hoursFixes = 0;
+  orders.forEach(o => {
+    const rec = orderRecognizedRevenue(o);
+    const realHours = getOrderDisplayHours(o);
+    let loggedRev = 0, loggedNet = 0, loggedHours = 0;
+    activityLog.forEach(e => {
+      if (e.orderId !== o.id) return;
+      if (e.field === 'revenue') loggedRev += e.delta;
+      else if (e.field === 'netRevenue') loggedNet += e.delta;
+      else if (e.field === 'hours') loggedHours += e.delta;
+    });
+    const date = orderSeedDate(o);
+    const revDiff = Math.round((rec.revenue - loggedRev) * 100) / 100;
+    const netDiff = Math.round((rec.net - loggedNet) * 100) / 100;
+    const hoursDiff = Math.round((realHours - loggedHours) * 10000) / 10000;
+    if (revDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'revenue', delta: revDiff }); revenueFixes++; }
+    if (netDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: netDiff }); netFixes++; }
+    if (hoursDiff !== 0) { activityLog.push({ date, orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
+  });
+  if (revenueFixes) fixedFields.push(`выручка: поправлено заказов — ${revenueFixes}`);
+  if (netFixes) fixedFields.push(`чистый доход: поправлено заказов — ${netFixes}`);
+  if (hoursFixes) fixedFields.push(`часы: поправлено заказов — ${hoursFixes}`);
+
   return fixedFields;
 }
 
@@ -183,23 +208,35 @@ const DEFAULT_PLANNING_BOARDS = () => [
   }
 ];
 
+// "Своя" дата заказа — к ней привязываются записи журнала при первичном наполнении.
+// Раньше вся история штамповалась ОДНИМ днём (днём первого запуска/импорта), из-за чего
+// на графике за этот день рисовался огромный ложный всплеск: "потоковые" показатели
+// (часы, выручка, чистый доход) считаются ЗА ПЕРИОД, а не бегущим итогом, поэтому вся
+// историческая выручка складывалась в одну дневную колонку.
+function orderSeedDate(o) {
+  if (o.start) return o.start;
+  if (o.deadline) return o.deadline;
+  if (o.createdAt) return dateKey(new Date(o.createdAt));
+  return dateKey(new Date());
+}
+
 // Досчитывает журнал активности "с нуля" по текущим заказам — используется и при
 // облачной загрузке, и в локальном фолбэке, когда журнал пуст, а заказы уже есть.
 function seedActivityLogIfEmpty() {
   if (activityLog.length) return;
-  const seedToday = dateKey(new Date());
-  orders.forEach(o => recordActivityChanges(null, o, seedToday));
+  orders.forEach(o => recordActivityChanges(null, o, orderSeedDate(o)));
 }
 
 // Разовая довставка: журнал уже существовал (создан до того, как в него добавили
-// учёт выручки), но в нём совсем нет записей о выручке — досчитываем её по всем заказам.
+// учёт выручки), но в нём совсем нет записей о выручке — досчитываем её по всем заказам,
+// тоже по дате самого заказа, а не одним днём "сегодня".
 function backfillRevenueInActivityLog() {
   if (!activityLog.length || activityLog.some(e => e.field === 'revenue')) return;
-  const seedToday = dateKey(new Date());
   orders.forEach(o => {
     const rec = orderRecognizedRevenue(o);
-    if (rec.revenue) activityLog.push({ date: seedToday, orderId: o.id, field: 'revenue', delta: rec.revenue });
-    if (rec.net) activityLog.push({ date: seedToday, orderId: o.id, field: 'netRevenue', delta: rec.net });
+    const date = orderSeedDate(o);
+    if (rec.revenue) activityLog.push({ date, orderId: o.id, field: 'revenue', delta: rec.revenue });
+    if (rec.net) activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: rec.net });
   });
 }
 

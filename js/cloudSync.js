@@ -256,8 +256,10 @@ function boardToRow(b) {
 function rowToBoard(r) {
   return { id: r.id, subject: r.subject || '', title: r.title || '', quarter: r.quarter || '', deadline: r.deadline || '', baseTemplate: r.base_template || [], collapsed: !!r.collapsed, archived: !!r.archived, lessons: [] };
 }
+// baseTemplate копируем, а не берём ссылкой — иначе снимок доски меняется вместе с живой
+// доской и правки шаблона наполнения класса не доезжают до облака (см. snapshotCopy).
 function boardSnapshotShape(b) {
-  return { id: b.id, subject: b.subject || '', title: b.title || '', quarter: b.quarter || '', deadline: b.deadline || '', baseTemplate: b.baseTemplate || [], collapsed: !!b.collapsed, archived: !!b.archived };
+  return { id: b.id, subject: b.subject || '', title: b.title || '', quarter: b.quarter || '', deadline: b.deadline || '', baseTemplate: JSON.parse(JSON.stringify(b.baseTemplate || [])), collapsed: !!b.collapsed, archived: !!b.archived };
 }
 
 function lessonToRow(l) {
@@ -271,6 +273,17 @@ function rowToLesson(r) {
 }
 
 /* ---------- Diff по id против последнего снимка ---------- */
+
+// КРИТИЧНО: в снимок всегда кладём ГЛУБОКУЮ КОПИЮ, а не ссылку на живой объект из
+// orders/appTasks/planningBoards. Иначе снимок и текущее состояние — одна и та же память,
+// сравнение "что изменилось" сравнивает объект сам с собой и правки, сделанные ПО МЕСТУ
+// (клик "Оплачено", чекбокс "Готов", списание времени таймером, галочки в чек-листе урока),
+// никогда не попадают в облако: локально применилось, в облаке старое, после перезагрузки
+// значение "слетает" обратно. Правки через форму заказа при этом сохранялись — там создаётся
+// новый объект, и разница была видна. Отсюда и эффект "часть данных сохраняется, часть нет".
+function snapshotCopy(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 function diffById(currentArr) {
   const currentMap = {};
@@ -352,7 +365,7 @@ async function upsertWithConflictCheck(table, items, toRowFn, cloudSnapshotMap, 
         if (error) throw error;
         updatedAtMap[id] = data.updated_at;
       }
-      cloudSnapshotMap[id] = item;
+      cloudSnapshotMap[id] = snapshotCopy(item);
     } catch (err) {
       console.error(`Ошибка синхронизации записи (${table}/${id}):`, err);
     }
@@ -383,7 +396,7 @@ async function performCloudSync() {
           const o = normalizeOrder(rowToOrder(row));
           const idx = orders.findIndex(x => x.id === o.id);
           if (idx >= 0) orders[idx] = o; else orders.push(o);
-          cloudSnapshot.orders[o.id] = o;
+          cloudSnapshot.orders[o.id] = snapshotCopy(o);
         } else {
           orders = orders.filter(x => x.id !== id); // сервер: запись удалена другой сессией тем временем
           delete cloudSnapshot.orders[id];
@@ -401,7 +414,7 @@ async function performCloudSync() {
           const t = normalizeTask(rowToTask(row));
           const idx = appTasks.findIndex(x => x.id === t.id);
           if (idx >= 0) appTasks[idx] = t; else appTasks.push(t);
-          cloudSnapshot.tasks[t.id] = t;
+          cloudSnapshot.tasks[t.id] = snapshotCopy(t);
         } else {
           appTasks = appTasks.filter(x => x.id !== id);
           delete cloudSnapshot.tasks[id];
@@ -418,7 +431,7 @@ async function performCloudSync() {
           const a = normalizeAdvance(rowToAdvance(row));
           const idx = advances.findIndex(x => x.id === a.id);
           if (idx >= 0) advances[idx] = a; else advances.push(a);
-          cloudSnapshot.advances[a.id] = a;
+          cloudSnapshot.advances[a.id] = snapshotCopy(a);
         } else {
           advances = advances.filter(x => x.id !== id);
           delete cloudSnapshot.advances[id];
@@ -459,7 +472,7 @@ async function performCloudSync() {
             const idx = board.lessons.findIndex(l => l.id === lesson.id);
             if (idx >= 0) board.lessons[idx] = lesson; else board.lessons.push(lesson);
           }
-          cloudSnapshot.planningLessons[lesson.id] = { ...lesson, boardId: row.board_id };
+          cloudSnapshot.planningLessons[lesson.id] = snapshotCopy({ ...lesson, boardId: row.board_id });
         } else {
           planningBoards.forEach(b => { b.lessons = (b.lessons || []).filter(l => l.id !== id); });
           delete cloudSnapshot.planningLessons[id];
@@ -520,12 +533,15 @@ async function cloudLoadData() {
   const pulledSettings = settingsRes.data ? settingsRes.data.data : null;
   const pulledLog = (logRes.data || []).map(r => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta }));
 
-  cloudSnapshot.orders = {}; pulledOrders.forEach(o => { cloudSnapshot.orders[o.id] = o; });
-  cloudSnapshot.tasks = {}; pulledTasks.forEach(t => { cloudSnapshot.tasks[t.id] = t; });
-  cloudSnapshot.advances = {}; pulledAdvances.forEach(a => { cloudSnapshot.advances[a.id] = a; });
+  // Тоже глубокие копии: planningBoards уходят в приложение теми же объектами, что и здесь,
+  // а orders/tasks/advances хоть и пересобираются через normalize*() в db.js — полагаться на
+  // это опасно, снимок обязан быть независимой копией (см. snapshotCopy).
+  cloudSnapshot.orders = {}; pulledOrders.forEach(o => { cloudSnapshot.orders[o.id] = snapshotCopy(o); });
+  cloudSnapshot.tasks = {}; pulledTasks.forEach(t => { cloudSnapshot.tasks[t.id] = snapshotCopy(t); });
+  cloudSnapshot.advances = {}; pulledAdvances.forEach(a => { cloudSnapshot.advances[a.id] = snapshotCopy(a); });
   cloudSnapshot.planningBoards = {}; boards.forEach(b => { cloudSnapshot.planningBoards[b.id] = boardSnapshotShape(b); });
   cloudSnapshot.planningLessons = {};
-  boards.forEach(b => (b.lessons || []).forEach(l => { cloudSnapshot.planningLessons[l.id] = { ...l, boardId: b.id }; }));
+  boards.forEach(b => (b.lessons || []).forEach(l => { cloudSnapshot.planningLessons[l.id] = snapshotCopy({ ...l, boardId: b.id }); }));
   cloudSnapshot.appSettings = pulledSettings ? JSON.parse(JSON.stringify(pulledSettings)) : null;
   cloudSnapshot.activityLogSyncedCount = pulledLog.length;
 
@@ -565,7 +581,7 @@ function handleRealtimeOrders(payload) {
     const o = normalizeOrder(rowToOrder(payload.new));
     const idx = orders.findIndex(x => x.id === o.id);
     if (idx >= 0) orders[idx] = o; else orders.push(o);
-    cloudSnapshot.orders[o.id] = o;
+    cloudSnapshot.orders[o.id] = snapshotCopy(o);
     cloudSnapshot.updatedAt.orders[o.id] = payload.new.updated_at;
   }
   syncPlanningWithOrders();
@@ -581,7 +597,7 @@ function handleRealtimeTasks(payload) {
     const t = normalizeTask(rowToTask(payload.new));
     const idx = appTasks.findIndex(x => x.id === t.id);
     if (idx >= 0) appTasks[idx] = t; else appTasks.push(t);
-    cloudSnapshot.tasks[t.id] = t;
+    cloudSnapshot.tasks[t.id] = snapshotCopy(t);
     cloudSnapshot.updatedAt.tasks[t.id] = payload.new.updated_at;
   }
   renderCurrent();
@@ -596,7 +612,7 @@ function handleRealtimeAdvances(payload) {
     const a = normalizeAdvance(rowToAdvance(payload.new));
     const idx = advances.findIndex(x => x.id === a.id);
     if (idx >= 0) advances[idx] = a; else advances.push(a);
-    cloudSnapshot.advances[a.id] = a;
+    cloudSnapshot.advances[a.id] = snapshotCopy(a);
     cloudSnapshot.updatedAt.advances[a.id] = payload.new.updated_at;
   }
   renderCurrent();
@@ -631,7 +647,7 @@ function handleRealtimeLessons(payload) {
       const idx = board.lessons.findIndex(l => l.id === lesson.id);
       if (idx >= 0) board.lessons[idx] = lesson; else board.lessons.push(lesson);
     }
-    cloudSnapshot.planningLessons[lesson.id] = { ...lesson, boardId: payload.new.board_id };
+    cloudSnapshot.planningLessons[lesson.id] = snapshotCopy({ ...lesson, boardId: payload.new.board_id });
     cloudSnapshot.updatedAt.planningLessons[lesson.id] = payload.new.updated_at;
   }
   renderCurrent();
