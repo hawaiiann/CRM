@@ -132,6 +132,24 @@ function reconcileCumulativeStats() {
   // всплеск за сегодня вместо исправления истории. Сверяем по КАЖДОМУ заказу отдельно и
   // ставим поправку его собственной датой. Записи по уже удалённым заказам не трогаем —
   // они остаются историческим фактом (см. "оставить статистику" при удалении заказа).
+  // Прежние ОБЩИЕ поправки по выручке (orderId: null) — их добавляла версия кнопки из
+  // v1.20.3. Пер-заказная сверка ниже их не видит (они ни к одному заказу не привязаны),
+  // поэтому они оставались "лишним слагаемым" в итоге навсегда: пер-заказные поправки
+  // приводили сумму по каждому заказу к правильной, а сверху висел неучтённый общий сдвиг.
+  // Гасим их встречной записью той же датой — идемпотентно, при повторном запуске уже 0.
+  let strayFixes = 0;
+  ['revenue', 'netRevenue'].forEach(field => {
+    const strayByDate = {};
+    activityLog.forEach(e => {
+      if (e.field === field && !e.orderId) strayByDate[e.date] = (strayByDate[e.date] || 0) + e.delta;
+    });
+    Object.keys(strayByDate).forEach(date => {
+      const sum = Math.round(strayByDate[date] * 100) / 100;
+      if (sum !== 0) { activityLog.push({ date, orderId: null, field, delta: -sum }); strayFixes++; }
+    });
+  });
+  if (strayFixes) fixedFields.push(`убрано общих поправок выручки — ${strayFixes}`);
+
   let revenueFixes = 0, netFixes = 0, hoursFixes = 0;
   orders.forEach(o => {
     const rec = orderRecognizedRevenue(o);
