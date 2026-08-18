@@ -786,7 +786,7 @@ function renderLines(){
 
 function updateLineDirect(id, field, val){
   const l = currentLines.find(x=>x.id===id);
-  if(l){ l[field] = val; }
+  if(l){ l[field] = val; linesTouchedByUser = true; }
 }
 
 // Когда пользователь закончил ввод часов (ушёл из поля) — приводим "1:30" / "1ч 30м" к десятичному виду "1.5"
@@ -821,12 +821,48 @@ function updateLinesTotalSum() {
   calculateModalAdvanceDiff(); // внутри пересчитывает и блок оплаты (updatePaymentSummary)
 }
 
+// Отличает реально введённые пользователем позиции от стартовой заготовки, которой форма
+// нового заказа предзаполняется сама (см. btnAdd ниже). Нужен, чтобы применение шаблона к
+// пустому новому заказу не спрашивало "заменить введённое?" — там нечего заменять по сути.
+let linesTouchedByUser = false;
+
 function addLine(){
   currentLines.push({id:'l'+Date.now(), label: getVisibleCatalog('types')[0] || 'Презентация', type: getVisibleCatalog('units')[0] || 'Слайд', qty:1, pomoHours:0, rate:0, ignorePrice:false, ready:false});
+  linesTouchedByUser = true;
   renderLines();
 }
-function removeLine(id){ currentLines = currentLines.filter(l=>l.id!==id); renderLines(); }
+function removeLine(id){ currentLines = currentLines.filter(l=>l.id!==id); linesTouchedByUser = true; renderLines(); }
 document.getElementById('btnAddLine').addEventListener('click', addLine);
+
+/* ---------- Шаблоны заказов ----------
+ * Готовый набор позиций (см. Справочники → "Шаблоны заказов" / settings.js) — позволяет
+ * не набирать одни и те же Презентация+Рабочий лист+Карточка в каждом заказе заново. */
+function populateOrderTemplateSelect() {
+  const sel = document.getElementById('f_applyTemplate');
+  if (!sel) return;
+  const templates = appSettings.orderTemplates || [];
+  sel.innerHTML = `<option value="">Вставить шаблон...</option>` +
+    templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+}
+
+function applyOrderTemplate(templateId) {
+  if (!templateId) return;
+  const t = (appSettings.orderTemplates || []).find(x => x.id === templateId);
+  if (!t) return;
+
+  // Уже введённые позиции не выкидываем молча — но стартовая заготовка нового заказа
+  // (linesTouchedByUser === false) реальным вводом не считается, спрашивать не о чем.
+  if (linesTouchedByUser && !confirm(`Заменить текущий состав заказа позициями шаблона «${t.name}»? Уже введённые позиции будут удалены.`)) return;
+
+  currentLines = t.lines.map(l => ({
+    id: 'l' + Date.now() + Math.random().toString(36).slice(2, 7),
+    label: l.label, type: l.type, qty: l.qty, rate: l.rate,
+    pomoHours: 0, ignorePrice: false, ready: false
+  }));
+  linesTouchedByUser = true; // повторное применение другого шаблона поверх этого уже спросит
+  renderLines();
+  updateLinesTotalSum(); // пересчитает и налоговую сумму, и блок оплаты (calculateModalAdvanceDiff)
+}
 
 /* MODAL STATE ORDER FORM */
 const overlay = document.getElementById('overlay');
@@ -865,6 +901,9 @@ document.getElementById('btnAdd').addEventListener('click', ()=>{
   document.getElementById('f_advanceUsed').value = '';
   document.getElementById('f_quarter').value = '';
   currentLines = [{id:'l0', label: getVisibleCatalog('types')[0] || 'Презентация', type: getVisibleCatalog('units')[0] || 'Слайд', qty:10, pomoHours:0, rate:500, ignorePrice:false, ready:false}];
+  // Это стартовая заготовка формы, а не то, что реально ввёл пользователь — применение
+  // шаблона к пустому новому заказу не должно спрашивать "заменить введённое?".
+  linesTouchedByUser = false;
   renderLines();
   openModal(false);
   populateLinkedLessonSelect('');
@@ -955,6 +994,9 @@ function editOrder(id){
   document.getElementById('f_taxType').value = o.taxType || 'none';
 
   currentLines = (o.lines&&o.lines.length) ? JSON.parse(JSON.stringify(o.lines)) : [];
+  // Редактируем существующий заказ — его позиции настоящие (не форма-заготовка),
+  // поэтому применение шаблона поверх них должно спрашивать подтверждение.
+  linesTouchedByUser = currentLines.length > 0;
   renderLines();
   updateModalAdvanceInfo();
   warnIfAdvanceExceedsOrder();

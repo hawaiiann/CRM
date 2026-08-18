@@ -224,6 +224,7 @@
         <div class="finance-tabs">
           <button class="finance-tab active" id="finTabOverview" onclick="switchFinanceTab('overview')">Обзор финансов</button>
           <button class="finance-tab" id="finTabAdvances" onclick="switchFinanceTab('advances')">Баланс авансов по клиентам</button>
+          <button class="finance-tab" id="finTabTimeReport" onclick="switchFinanceTab('timereport')">Отчёт по времени</button>
         </div>
 
         <div id="financeOverviewTab">
@@ -287,6 +288,57 @@
                   </tr>
                 </thead>
                 <tbody id="advancesRegistryBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="financeTimeReportTab" style="display:none;">
+          <div class="card panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h3>Отчёт по времени</h3>
+                <div class="sub" style="margin-bottom:0;">Сколько часов реально отработано за период — по данным таймера. Для обоснования стоимости работ клиенту.</div>
+              </div>
+              <button class="btn secondary small" onclick="exportTimeReportCSV()">Экспорт в CSV</button>
+            </div>
+
+            <div class="row3" style="margin-top:16px;">
+              <div class="field" style="margin-bottom:0;">
+                <label>С</label>
+                <input type="date" id="tr_from" onchange="renderTimeReport()">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>По</label>
+                <input type="date" id="tr_to" onchange="renderTimeReport()">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Группировать</label>
+                <select id="tr_groupBy" onchange="renderTimeReport()">
+                  <option value="client">По клиенту</option>
+                  <option value="subject">По предмету</option>
+                  <option value="order">По заказу</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="overflow-x:auto; margin-top:16px;">
+              <table class="finance-table">
+                <thead>
+                  <tr>
+                    <th id="tr_groupHeader">Клиент</th>
+                    <th>Часов</th>
+                    <th>Заказов</th>
+                  </tr>
+                </thead>
+                <tbody id="timeReportBody"></tbody>
+                <tfoot>
+                  <tr style="font-weight:800;">
+                    <td>Итого</td>
+                    <td id="timeReportTotalHours">0 ч 0 мин</td>
+                    <td id="timeReportTotalOrders">0</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -426,6 +478,14 @@
             <div id="dashboardMetricsList" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
             <button class="btn secondary small" style="margin-top:12px" onclick="addDashboardMetric()">+ Добавить показатель</button>
             <button class="btn secondary small" style="margin-top:8px" onclick="runSyncSelfCheck()" title="Сверяет данные в приложении с тем, что реально лежит в облаке, и показывает расхождения. Только чтение — ничего не меняет">☁ Проверить синхронизацию</button>
+          </div>
+
+          <!-- ШАБЛОНЫ ЗАКАЗОВ -->
+          <div class="card panel">
+            <h3>Шаблоны заказов</h3>
+            <div class="sub">Готовые наборы позиций для быстрого создания заказа — выбираются в форме заказа рядом с "Состав заказа".</div>
+            <div id="orderTemplatesList" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
+            <button class="btn secondary small" style="margin-top:12px" onclick="openTemplateEditor()">+ Новый шаблон</button>
           </div>
 
           <!-- НАСТРОЙКИ АВТОБЭКАПА С ПОЛНЫМ ПУТЕМ -->
@@ -600,7 +660,12 @@
       </div>
 
       <div class="field">
-        <label>Состав заказа (Тип, Ед.изм, Кол-во, Часы, Ставка)</label>
+        <label style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <span>Состав заказа (Тип, Ед.изм, Кол-во, Часы, Ставка)</span>
+          <select id="f_applyTemplate" style="width:auto; text-transform:none; font-weight:600;" onchange="applyOrderTemplate(this.value); this.value='';">
+            <option value="">Вставить шаблон...</option>
+          </select>
+        </label>
 
         <div class="lines-table">
           <div class="lines-head">
@@ -644,6 +709,42 @@
         <button type="submit" class="btn btn-accent">Сохранить</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- MODAL: РЕДАКТОР ШАБЛОНА ЗАКАЗА -->
+<div class="overlay" id="templateOverlay">
+  <div class="modal" style="max-width:640px;">
+    <button class="close-x" onclick="closeTemplateEditor()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="templateModalTitle">Новый шаблон</h2>
+    <input type="hidden" id="templateId">
+
+    <div class="field">
+      <label>Название шаблона</label>
+      <input type="text" id="tpl_name" placeholder="Например: Стандартный урок">
+    </div>
+
+    <div class="field">
+      <label>Позиции</label>
+      <div class="lines-table">
+        <div class="lines-head tpl-lines-head">
+          <div>Тип</div>
+          <div>Ед. изм.</div>
+          <div>Кол-во</div>
+          <div>Ставка (₽)</div>
+          <div></div>
+        </div>
+        <div id="templateLinesBody"></div>
+      </div>
+      <button type="button" class="btn secondary small" onclick="addTemplateLine()">+ Добавить позицию</button>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" onclick="closeTemplateEditor()">Отмена</button>
+      <button type="button" class="btn btn-accent" onclick="saveTemplateFromEditor()">Сохранить шаблон</button>
+    </div>
   </div>
 </div>
 

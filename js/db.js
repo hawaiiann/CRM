@@ -142,6 +142,7 @@ function applySettingsMigrations(parsed) {
   if(!appSettings.subjects) appSettings.subjects = ['Математика', 'Русский язык', 'Литература', 'Дизайн'];
   if(!appSettings.classes) appSettings.classes = ['5 класс', '6 класс', '7 класс', 'Без класса'];
   if(!appSettings.hiddenEntries) appSettings.hiddenEntries = { clients: [], types: [], units: [], subjects: [], classes: [] };
+  if(!appSettings.orderTemplates) appSettings.orderTemplates = [];
   ['clients','types','units','subjects','classes'].forEach(k => { if (!appSettings.hiddenEntries[k]) appSettings.hiddenEntries[k] = []; });
 
   // Миграция: "Слайды" и "Чистый доход" стали доп. показателями внутри "Презентации"

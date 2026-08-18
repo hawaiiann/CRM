@@ -38,6 +38,109 @@ function renderSettings(){
   document.getElementById('lastBackupTimeDisplay').textContent = backupSettings.lastBackup ? new Date(backupSettings.lastBackup).toLocaleString('ru') : 'Еще не производился';
 
   renderDashboardMetricsSettings();
+  renderOrderTemplatesSettings();
+}
+
+/* ---------- Шаблоны заказов ----------
+ * Готовый набор позиций (тип/ед.изм/кол-во/ставка) для быстрого создания заказа —
+ * применяется через выпадающий список "Вставить шаблон" в форме заказа (см. orders.js
+ * applyOrderTemplate/populateOrderTemplateSelect). Черновик редактора живёт в
+ * currentTemplateLines по тому же принципу, что currentLines для позиций заказа. */
+let currentTemplateLines = [];
+
+function renderOrderTemplatesSettings() {
+  const list = document.getElementById('orderTemplatesList');
+  if (!list) return;
+  const templates = appSettings.orderTemplates || [];
+  list.innerHTML = templates.length ? templates.map(t => `
+    <div class="order-template-row">
+      <div>
+        <div class="order-template-row-name">${escapeHtml(t.name)}</div>
+        <div class="order-template-row-lines">${(t.lines || []).map(l => escapeHtml(l.label || '?')).join(', ') || 'нет позиций'}</div>
+      </div>
+      <div class="order-template-row-actions">
+        <button type="button" class="btn secondary small" onclick="openTemplateEditor('${t.id}')">Изменить</button>
+        <button type="button" class="btn danger small" onclick="deleteOrderTemplate('${t.id}')">Удалить</button>
+      </div>
+    </div>
+  `).join('') : `<div style="font-size:12.5px; color:var(--text-faint);">Шаблонов пока нет.</div>`;
+}
+
+function openTemplateEditor(id) {
+  const t = id ? (appSettings.orderTemplates || []).find(x => x.id === id) : null;
+  document.getElementById('templateId').value = t ? t.id : '';
+  document.getElementById('templateModalTitle').textContent = t ? 'Изменить шаблон' : 'Новый шаблон';
+  document.getElementById('tpl_name').value = t ? t.name : '';
+  currentTemplateLines = t ? JSON.parse(JSON.stringify(t.lines || [])) : [];
+  if (!currentTemplateLines.length) addTemplateLine(); // хотя бы одна пустая строка для старта
+  else renderTemplateLinesEditor();
+  const ov = document.getElementById('templateOverlay');
+  ov.classList.add('show');
+  ov.scrollTop = 0; // см. openModal() в orders.js — та же защита от "открылось прокрученным"
+}
+
+function closeTemplateEditor() {
+  document.getElementById('templateOverlay').classList.remove('show');
+}
+
+function addTemplateLine() {
+  currentTemplateLines.push({ id: 'tl_' + Date.now() + Math.random().toString(36).slice(2, 7), label: '', type: '', qty: 1, rate: 0 });
+  renderTemplateLinesEditor();
+}
+
+function removeTemplateLine(id) {
+  currentTemplateLines = currentTemplateLines.filter(l => l.id !== id);
+  renderTemplateLinesEditor();
+}
+
+function updateTemplateLineField(id, field, value) {
+  const l = currentTemplateLines.find(x => x.id === id);
+  if (l) l[field] = value;
+}
+
+function renderTemplateLinesEditor() {
+  const body = document.getElementById('templateLinesBody');
+  if (!body) return;
+  body.innerHTML = currentTemplateLines.map(l => `
+    <div class="tpl-line-row" data-id="${l.id}">
+      ${renderComboField(`tplLabel-${l.id}`, l.label, 'Тип...', catalogWithCurrent('types', l.label), `updateTemplateLineField('${l.id}','label',this.value);`)}
+      ${renderComboField(`tplUnit-${l.id}`, l.type, 'Ед. изм...', catalogWithCurrent('units', l.type), `updateTemplateLineField('${l.id}','type',this.value);`)}
+      <input type="text" inputmode="decimal" value="${l.qty}" placeholder="1" oninput="updateTemplateLineField('${l.id}','qty',this.value);">
+      <input type="text" inputmode="decimal" value="${l.rate}" placeholder="0 ₽" oninput="updateTemplateLineField('${l.id}','rate',this.value);">
+      <button type="button" class="line-rm" onclick="removeTemplateLine('${l.id}')">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+function saveTemplateFromEditor() {
+  const name = document.getElementById('tpl_name').value.trim();
+  if (!name) { alert('Введите название шаблона.'); return; }
+  const lines = currentTemplateLines
+    .filter(l => (l.label || '').trim() !== '')
+    .map(l => ({ id: l.id, label: l.label.trim(), type: (l.type || '').trim(), qty: parseNum(l.qty) || 1, rate: parseNum(l.rate) || 0 }));
+  if (!lines.length) { alert('Добавьте хотя бы одну позицию с названием.'); return; }
+
+  const id = document.getElementById('templateId').value;
+  if (id) {
+    const t = appSettings.orderTemplates.find(x => x.id === id);
+    if (t) { t.name = name; t.lines = lines; }
+  } else {
+    appSettings.orderTemplates.push({ id: 'tpl_' + Date.now() + Math.random().toString(36).slice(2, 7), name, lines });
+  }
+  saveData();
+  renderOrderTemplatesSettings();
+  populateOrderTemplateSelect();
+  closeTemplateEditor();
+}
+
+function deleteOrderTemplate(id) {
+  if (!confirm('Удалить этот шаблон? Уже созданные заказы это не затронет.')) return;
+  appSettings.orderTemplates = (appSettings.orderTemplates || []).filter(t => t.id !== id);
+  saveData();
+  renderOrderTemplatesSettings();
+  populateOrderTemplateSelect();
 }
 
 function renderDashboardMetricsSettings() {
@@ -324,6 +427,7 @@ function fillSelects(){
   }
 
   document.getElementById('clientsDatalist').innerHTML = getVisibleCatalog('clients').map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  populateOrderTemplateSelect();
 }
 
 /* ORDERS LIST WITH ARCHIVE SECTION */

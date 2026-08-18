@@ -6,9 +6,97 @@ function switchFinanceTab(tab) {
   activeFinanceTab = tab;
   document.getElementById('finTabOverview').classList.toggle('active', tab==='overview');
   document.getElementById('finTabAdvances').classList.toggle('active', tab==='advances');
+  document.getElementById('finTabTimeReport').classList.toggle('active', tab==='timereport');
   document.getElementById('financeOverviewTab').style.display = tab==='overview' ? 'block' : 'none';
   document.getElementById('financeAdvancesTab').style.display = tab==='advances' ? 'block' : 'none';
+  document.getElementById('financeTimeReportTab').style.display = tab==='timereport' ? 'block' : 'none';
   renderFinance();
+}
+
+/* ---------- Отчёт по времени ----------
+ * Часы — единственный показатель, что до сих пор живёт в журнале активности (см. js/stats.js:
+ * выручка и количества считаются напрямую из заказов, а часы пишет таймер по ходу работы и
+ * восстановить их из состояния заказов нельзя — это настоящий временной ряд). Отчёт группирует
+ * их по клиенту/предмету/заказу за произвольный период — обосновать клиенту, сколько времени
+ * реально ушло на работу, было нечем: сами часы были только внутри карточки каждого заказа. */
+function timeReportRows() {
+  const fromEl = document.getElementById('tr_from');
+  const toEl = document.getElementById('tr_to');
+  const groupEl = document.getElementById('tr_groupBy');
+  if (!fromEl || !toEl || !groupEl) return { rows: [], totalHours: 0, totalOrders: 0, groupBy: 'client' };
+
+  // По умолчанию — текущий месяц, но только если поля ещё пустые (первое открытие вкладки).
+  // При каждой обычной перерисовке (после любого изменения данных, пока открыта эта вкладка)
+  // уже выбранный пользователем период трогать нельзя.
+  if (!fromEl.value) fromEl.value = dateKey(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  if (!toEl.value) toEl.value = dateKey(new Date());
+
+  const from = fromEl.value, to = toEl.value, groupBy = groupEl.value;
+
+  const hoursByOrder = {};
+  activityLog.forEach(e => {
+    if (e.field !== 'hours' || !e.orderId) return;
+    if (e.date < from || e.date > to) return;
+    hoursByOrder[e.orderId] = (hoursByOrder[e.orderId] || 0) + e.delta;
+  });
+
+  const groups = {};
+  let totalOrders = 0;
+  Object.keys(hoursByOrder).forEach(orderId => {
+    const hours = hoursByOrder[orderId];
+    if (Math.abs(hours) < 0.001) return; // откат ("Готово" снято обратно) может дать чистый ноль
+    totalOrders++;
+    const o = orders.find(x => x.id === orderId);
+    let key, label;
+    if (groupBy === 'order') {
+      key = orderId;
+      label = o ? (o.title || [o.subject, o.grade, o.quarter, o.lesson ? 'Урок ' + o.lesson : ''].filter(Boolean).join(', ') || 'Без названия') : 'Удалённый заказ';
+    } else if (groupBy === 'subject') {
+      key = label = (o && o.subject) || '—';
+    } else {
+      key = label = (o && o.client) || '—';
+    }
+    if (!groups[key]) groups[key] = { label, hours: 0, orderIds: new Set() };
+    groups[key].hours += hours;
+    groups[key].orderIds.add(orderId);
+  });
+
+  const rows = Object.values(groups).sort((a, b) => b.hours - a.hours);
+  const totalHours = rows.reduce((s, r) => s + r.hours, 0);
+  return { rows, totalHours, totalOrders, groupBy };
+}
+
+function renderTimeReport() {
+  const body = document.getElementById('timeReportBody');
+  if (!body) return;
+  const { rows, totalHours, totalOrders, groupBy } = timeReportRows();
+
+  document.getElementById('tr_groupHeader').textContent = groupBy === 'order' ? 'Заказ' : groupBy === 'subject' ? 'Предмет' : 'Клиент';
+  body.innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.label)}</td>
+      <td>${fmtHours(r.hours)}</td>
+      <td>${r.orderIds.size}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="3" style="color:var(--text-faint); text-align:center; padding:20px;">Нет данных за выбранный период</td></tr>`;
+  document.getElementById('timeReportTotalHours').textContent = fmtHours(totalHours);
+  document.getElementById('timeReportTotalOrders').textContent = totalOrders;
+}
+
+function exportTimeReportCSV() {
+  const { rows, totalHours, totalOrders, groupBy } = timeReportRows();
+  const groupLabel = groupBy === 'order' ? 'Заказ' : groupBy === 'subject' ? 'Предмет' : 'Клиент';
+  const header = [groupLabel, 'Часов', 'Заказов'];
+  const dataRows = rows.map(r => [r.label, fmtHours(r.hours), r.orderIds.size]);
+  dataRows.push(['Итого', fmtHours(totalHours), totalOrders]);
+  const csvLines = [header, ...dataRows].map(row => row.map(csvEscape).join(';'));
+  const csvStr = '﻿' + csvLines.join('\r\n');
+  const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'time-report-' + dateKey(new Date()) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /* КАРТОЧКА КЛИЕНТА — сводка по одному заказчику: заказы, выручка, баланс аванса */
@@ -221,6 +309,7 @@ function renderFinance() {
     `;
   }).join('') || `<tr><td colspan="7" style="text-align:center; color:var(--text-faint);">Авансы еще не вносились</td></tr>`;
 
+  renderTimeReport();
   resizeFinanceTable();
 }
 
