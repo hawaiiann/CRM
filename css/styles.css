@@ -6,16 +6,21 @@
     --border-dark: #C0C0C0;
     --text: #1E1E1E;
     --text-soft: #5C5C5C;
-    --text-faint: #8A8A8A;
+    /* text-faint/green/amber/rose здесь темнее, чем "чистый" акцентный оттенок —
+       на белых/светло-тонированных фонах (подписи полей, бейджи оплаты/статуса) исходные
+       значения давали контраст текста 2.0–3.5:1 против требуемых WCAG AA 4.5:1: "К доплате"
+       и "Оплачено" читались едва-едва. В тёмной теме те же токены светлые и на тёмном фоне
+       контраст и так в порядке — там не трогаем, см. body.dark-theme ниже. */
+    --text-faint: #767676;
     --primary: #1E1E1E;
     --primary-soft: #E3E3E1;
     --accent-yellow: #A8E10C;
     --accent-yellow-hover: #93C70A;
     --accent-blue: #EDEBFF;
     --accent-blue-text: #6C63FF;
-    --green: #7CB518; --green-soft: #E3F5C4;
-    --amber: #F5A623; --amber-soft: rgba(245, 166, 35, 0.18);
-    --rose: #E4483F; --rose-soft: #FBE1DF;
+    --green: #4A6D0E; --green-soft: #E3F5C4;
+    --amber: #8E6014; --amber-soft: rgba(245, 166, 35, 0.18);
+    --rose: #B23831; --rose-soft: #FBE1DF;
     --slate: #8A8A8A; --slate-soft: #EFEFED;
     --feature-blue: #4C8DF5;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
@@ -38,7 +43,7 @@
     --border-dark: #45464C;
     --text: #F2F2F0;
     --text-soft: #A6A6A6;
-    --text-faint: #6E6E6E;
+    --text-faint: #8A8A8A;
     --primary: #F2F2F0;
     --primary-soft: #2C2D31;
     --accent-yellow: #A8E10C;
@@ -1182,12 +1187,11 @@
   body:not(.dark-theme) .order-card-compact.is-priority .details-meta-box {
     background: var(--rose-soft);
   }
-  body:not(.dark-theme) .order-card-compact.is-priority .details-mini-card,
-  body:not(.dark-theme) .order-card-compact.is-priority .details-sum-card,
   body:not(.dark-theme) .order-card-compact.is-priority .item-subcard-icon {
     background: #FEF8F7;
     border-color: rgba(228, 72, 63, 0.2);
   }
+  body:not(.dark-theme) .order-card-compact.is-priority .details-sum-card,
   body:not(.dark-theme) .order-card-compact.is-priority .details-sum-footer {
     border-top-color: rgba(228, 72, 63, 0.25);
   }
@@ -1337,11 +1341,14 @@
   .details-client-name { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 6px; }
   .details-client-sub { font-size: 12.5px; color: var(--text-soft); margin-top: 2px; }
 
-  .details-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .details-mini-card { background: var(--surface); border-radius: 12px; padding: 10px 12px; }
+  /* Раньше mini-card/sum-card были залитыми "белыми" карточками ВНУТРИ уже затонированной
+     .details-meta-box — правая колонка читалась как коробка в коробке в коробке. Теперь
+     это плоские блоки: группировка идёт через сетку/отступ и разделитель у итога, а не
+     через повторную заливку той же поверхности ещё одним слоем. */
+  .details-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .details-mini-value { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 3px; }
 
-  .details-sum-card { background: var(--surface); border-radius: 12px; padding: 12px 14px; }
+  .details-sum-card { padding-top: 14px; border-top: 1px dashed var(--border); }
   .details-sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .details-tax-label { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
   .details-sum-value { font-size: 19px; font-weight: 700; color: var(--text); margin-top: 4px; }

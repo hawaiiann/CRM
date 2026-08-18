@@ -49,7 +49,12 @@ function goToOrderCard(orderId) {
     renderOrders();
 
     setTimeout(() => {
-      // Сворачиваем ВСЕ остальные карточки — открытой должна остаться только целевая
+      // Сворачиваем ВСЕ остальные карточки — открытой должна остаться только целевая.
+      // expandedOrderIds синхронизируем тем же набором — иначе следующая же перерисовка
+      // (клик по бейджу оплаты и т.п., см. renderOrderCard) откатила бы фокус-режим к тому,
+      // что было развёрнуто ДО перехода из Финансов.
+      expandedOrderIds.clear();
+      expandedOrderIds.add(orderId);
       document.querySelectorAll('.order-card-compact.expanded').forEach(el => {
         if (el.id !== 'occ-' + orderId) el.classList.remove('expanded');
       });
@@ -223,7 +228,7 @@ function renderOrderCard(o){
   }).join('');
 
   return `
-  <div class="order-card-compact ${o.priority ? 'is-priority' : ''}" id="occ-${o.id}">
+  <div class="order-card-compact ${o.priority ? 'is-priority' : ''} ${expandedOrderIds.has(o.id) ? 'expanded' : ''}" id="occ-${o.id}">
     <div class="occ-main" onclick="toggleOrderCard('${o.id}')">
       <div class="occ-info">
         <div class="occ-title-row">
@@ -314,8 +319,17 @@ function renderOrderCard(o){
   </div>`;
 }
 
+// Какие карточки сейчас развёрнуты — переживает renderOrders(). Список пересобирается
+// целиком (innerHTML) при любом изменении данных, даже локальном (клик по бейджу оплаты,
+// остановка таймера, смена статуса) — без этого состояние "expanded" просто терялось
+// на каждой такой перерисовке: разворачиваете карточку, кликаете "Оплачено" — и карточка
+// молча схлопывается, хотя вы её не трогали.
+const expandedOrderIds = new Set();
+
 function toggleOrderCard(id){
-  document.getElementById('occ-'+id).classList.toggle('expanded');
+  const el = document.getElementById('occ-'+id);
+  const nowExpanded = el.classList.toggle('expanded');
+  if (nowExpanded) expandedOrderIds.add(id); else expandedOrderIds.delete(id);
   // Ручной клик по любой карточке — выходим из режима "в фокусе одного заказа"
   const list = document.getElementById('orderList');
   if (list) list.classList.remove('focus-mode');
