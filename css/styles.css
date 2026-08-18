@@ -2204,8 +2204,17 @@
   }
   .payment-row input { width: 100%; background: var(--surface); padding: 8px 10px; font-size: 12.5px; border-radius: 10px; border: 1px solid var(--border); box-sizing: border-box; }
   @media (max-width: 760px) {
-    .payment-row { grid-template-columns: 1fr 1fr; }
-    .payment-row input:nth-child(3) { grid-column: 1 / -1; }
+    /* Раньше примечание растягивалось на всю ширину отдельной строкой, а кнопка удаления
+       падала на СВОЮ строку одна — маленький крестик слева в пустоте. Теперь удаление —
+       в той же строке, что и примечание, справа, как на десктопе. */
+    .payment-row {
+      grid-template-columns: 1fr 1fr 32px;
+      grid-template-areas: "amount date date" "note note remove";
+    }
+    .payment-row input:nth-child(1) { grid-area: amount; }
+    .payment-row input:nth-child(2) { grid-area: date; }
+    .payment-row input:nth-child(3) { grid-area: note; }
+    .payment-row button { grid-area: remove; }
   }
 
   /* Список платежей в развёрнутой карточке заказа */
