@@ -30,7 +30,7 @@ function normalizeOrder(o){
     notes:o.notes||'', createdAt:o.createdAt||Date.now(),
     linkedLessonId: o.linkedLessonId || null,
     // Дата, когда заказ отметили оплаченным. Нужна, чтобы выручка попадала в статистику
-    // днём поступления денег, а не датой заказа (см. rebuildRevenueLog).
+    // днём поступления денег, а не датой заказа (см. js/stats.js).
     paidAt: o.paidAt || null
   };
 }
@@ -64,8 +64,13 @@ function getOrderDisplayHours(o) {
   return parseNum(o.estimatedHours) || 0;
 }
 
-// Сравнивает старую и новую версии заказа и записывает в журнал активности
-// только РАЗНИЦУ (дельту) по часам/слайдам/страницам/выручке, с сегодняшней датой.
+// Пишет в журнал активности разницу по ЧАСАМ — и только по ним.
+//
+// Выручка, чистый доход и количества материалов больше сюда не пишутся: они считаются
+// напрямую из заказов и реестра авансов (js/stats.js). Пока они хранились и здесь тоже,
+// это был второй источник правды — журнал накапливал поправки, расходился с реальностью
+// и требовал кнопки пересчёта. Часы — другое дело: их набивает таймер по ходу работы,
+// из текущего состояния заказа их не восстановить, поэтому это настоящий временной ряд.
 function recordActivityChanges(oldOrder, newOrder, onDate) {
   const today = onDate || dateKey(new Date());
 
@@ -73,95 +78,7 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
   const newHours = getOrderDisplayHours(newOrder);
   const hoursDelta = newHours - oldHours;
 
-  const oldUnits = splitLineUnits(oldOrder ? oldOrder.lines : []);
-  const newUnits = splitLineUnits(newOrder.lines);
-  const slidesDelta = newUnits.slides - oldUnits.slides;
-  const pagesDelta = newUnits.pages - oldUnits.pages;
-
-  const oldTypes = splitLineTypes(oldOrder ? oldOrder.lines : []);
-  const newTypes = splitLineTypes(newOrder.lines);
-  const presentationsDelta = newTypes.presentations - oldTypes.presentations;
-  const worksheetsDelta = newTypes.worksheets - oldTypes.worksheets;
-
-  const oldRec = oldOrder ? orderRecognizedRevenue(oldOrder) : { revenue: 0, net: 0 };
-  const newRec = orderRecognizedRevenue(newOrder);
-  const revenueDelta = newRec.revenue - oldRec.revenue;
-  const netDelta = newRec.net - oldRec.net;
-
   if (hoursDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'hours', delta: hoursDelta });
-  if (slidesDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'slides', delta: slidesDelta });
-  if (pagesDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'pages', delta: pagesDelta });
-  if (presentationsDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'presentations', delta: presentationsDelta });
-  if (worksheetsDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'worksheets', delta: worksheetsDelta });
-  if (revenueDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'revenue', delta: revenueDelta });
-  if (netDelta) activityLog.push({ date: today, orderId: newOrder.id, field: 'netRevenue', delta: netDelta });
-}
-
-// "Бегущий итог" накопительных показателей (Презентации/Рабочие листы/Слайды/Страницы на
-// Дашборде) считается суммой дельт в activityLog — а не пересчётом с нуля по факту. Если
-// когда-либо часть заказов попала в базу в обход recordActivityChanges (импорт JSON, миграция
-// схемы подсчёта, откат гонки при синхронизации) — итог в журнале расходится с реальным
-// текущим количеством и больше не самовыправляется. Эта функция сверяет их и добавляет ОДНУ
-// корректирующую запись на показатель, если расхождение есть.
-//
-// Выручка/чистый доход — НЕ накопительный показатель (считается за период, не общим итогом),
-// но принцип сверки тот же: сумма ВСЕХ когда-либо записанных изменений по каждому показателю
-// должна равняться текущей признанной выручке по факту (orderRecognizedRevenue) — если где-то
-// "застряла" незакрытая пара (плюс без компенсирующего минуса от отката), сумма разойдётся.
-// Не трогает сами заказы/финансы — только записи в журнале статистики.
-function reconcileCumulativeStats() {
-  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0;
-  orders.forEach(o => {
-    const types = splitLineTypes(o.lines);
-    const units = splitLineUnits(o.lines);
-    realPresentations += types.presentations;
-    realWorksheets += types.worksheets;
-    realSlides += units.slides;
-    realPages += units.pages;
-  });
-  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0 };
-  activityLog.forEach(e => { if (e.field in logged) logged[e.field] += e.delta; });
-
-  const today = dateKey(new Date());
-  const real = { presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages };
-  let fixedFields = [];
-  // Накопительные показатели — бегущий итог, поэтому одной общей поправкой "сегодня"
-  // конечное значение выправляется корректно.
-  Object.keys(real).forEach(field => {
-    const diff = Math.round((real[field] - logged[field]) * 100) / 100;
-    if (diff !== 0) {
-      activityLog.push({ date: today, orderId: null, field, delta: diff });
-      fixedFields.push(`${field}: ${logged[field]} → ${real[field]}`);
-    }
-  });
-
-  // Часы — тоже потоковый показатель, но, в отличие от выручки, восстановить их "по факту"
-  // можно только суммарно: расписания работы по дням у нас нет. Недостающие часы относим
-  // к дате самого заказа — работа действительно растянута по его срокам.
-  let hoursFixes = 0;
-  orders.forEach(o => {
-    const realHours = getOrderDisplayHours(o);
-    let loggedHours = 0;
-    activityLog.forEach(e => { if (e.orderId === o.id && e.field === 'hours') loggedHours += e.delta; });
-    const hoursDiff = Math.round((realHours - loggedHours) * 10000) / 10000;
-    if (hoursDiff !== 0) { activityLog.push({ date: orderSeedDate(o), orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
-  });
-  if (hoursFixes) fixedFields.push(`часы: поправлено заказов — ${hoursFixes}`);
-
-  // Выручку не "подправляем" по расхождению, а полностью пересобираем из заказов и реестра
-  // авансов — она из них однозначно выводится, и это надёжнее, чем накапливать поправки.
-  // Сообщаем об этом только если результат реально отличается от того, что было, иначе
-  // кнопка всегда рапортовала бы о "расхождении", даже когда всё в порядке.
-  const revenueKey = (log) => JSON.stringify(
-    log.filter(e => e.field === 'revenue' || e.field === 'netRevenue')
-       .map(e => [e.date, e.orderId, e.field, Math.round(e.delta * 100) / 100])
-       .sort()
-  );
-  const revenueBefore = revenueKey(activityLog);
-  rebuildRevenueLog();
-  if (revenueKey(activityLog) !== revenueBefore) fixedFields.push('выручка пересобрана по датам поступления денег');
-
-  return fixedFields;
 }
 
 // Разовый перевод старой булевой оплаты в сумму: галочка "оплачен полностью" означала
@@ -178,55 +95,6 @@ function migratePaidFlagToAmount() {
     }
   });
   return migrated;
-}
-
-// Дата, когда деньги по авансу реально поступили — берём из реестра авансов клиента
-// (самый ранний аванс). Именно она, а не дата заказа, честно отражает движение денег.
-function clientAdvanceDate(client) {
-  const list = (advances || []).filter(a => a.client === client && a.date).sort((a, b) => a.date < b.date ? -1 : 1);
-  return list.length ? list[0].date : null;
-}
-
-// Полная пересборка записей выручки/чистого дохода из самих заказов и реестра авансов.
-// Выручка целиком выводится из них, поэтому журнал можно смело собрать заново — это
-// надёжнее, чем чинить накопившиеся расхождения точечными поправками.
-//
-// Правило даты — "по поступлению денег":
-//   • часть, покрытая авансом  -> дата аванса этого клиента;
-//   • остаток (доплата)        -> дата отметки "Оплачено" (paidAt).
-// Чистый доход делится в той же пропорции, что и выручка (за вычетом налога).
-function rebuildRevenueLog() {
-  activityLog = activityLog.filter(e => e.field !== 'revenue' && e.field !== 'netRevenue');
-
-  let entriesAdded = 0;
-  orders.forEach(o => {
-    const fullExact = orderTotal(o);
-    const full = Math.round(fullExact);
-    const base = orderBaseTotal(o);
-    if (full <= 0) return;
-
-    const advUsed = Math.min(parseNum(o.advanceUsed), full);
-    const netForAdvance = fullExact > 0 ? advUsed * (base / fullExact) : 0;
-
-    if (advUsed > 0) {
-      const date = clientAdvanceDate(o.client) || o.start || orderSeedDate(o);
-      activityLog.push({ date, orderId: o.id, field: 'revenue', delta: Math.round(advUsed * 100) / 100 });
-      activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: Math.round(netForAdvance * 100) / 100 });
-      entriesAdded += 2;
-    }
-
-    // Полученные ДЕНЬГАМИ (помимо аванса) — датой оплаты. Берём именно сумму, а не флаг:
-    // при частичной оплате признаём только её часть, остаток висит в "к доплате".
-    const paidMoney = Math.min(parseNum(o.paidAmount), Math.max(0, full - advUsed));
-    if (paidMoney > 0) {
-      const netForMoney = fullExact > 0 ? paidMoney * (base / fullExact) : 0;
-      const date = o.paidAt || o.deadline || dateKey(new Date());
-      activityLog.push({ date, orderId: o.id, field: 'revenue', delta: Math.round(paidMoney * 100) / 100 });
-      activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: Math.round(netForMoney * 100) / 100 });
-      entriesAdded += 2;
-    }
-  });
-  return entriesAdded;
 }
 
 /* Data Loading & Saving — источник истины теперь Supabase (см. cloudSync.js),
@@ -291,24 +159,24 @@ function orderSeedDate(o) {
   return dateKey(new Date());
 }
 
-// Досчитывает журнал активности "с нуля" по текущим заказам — используется и при
-// облачной загрузке, и в локальном фолбэке, когда журнал пуст, а заказы уже есть.
+// Досчитывает часы по текущим заказам, если журнал пуст (первый вход, импорт в пустую базу).
+// Только часы: остальные показатели считаются напрямую из заказов и в журнале не хранятся.
 function seedActivityLogIfEmpty() {
   if (activityLog.length) return;
   orders.forEach(o => recordActivityChanges(null, o, orderSeedDate(o)));
 }
 
-// Разовая довставка: журнал уже существовал (создан до того, как в него добавили
-// учёт выручки), но в нём совсем нет записей о выручке — досчитываем её по всем заказам,
-// тоже по дате самого заказа, а не одним днём "сегодня".
-function backfillRevenueInActivityLog() {
-  if (!activityLog.length || activityLog.some(e => e.field === 'revenue')) return;
-  orders.forEach(o => {
-    const rec = orderRecognizedRevenue(o);
-    const date = orderSeedDate(o);
-    if (rec.revenue) activityLog.push({ date, orderId: o.id, field: 'revenue', delta: rec.revenue });
-    if (rec.net) activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: rec.net });
-  });
+// Разовая чистка: выручка, чистый доход и количества материалов больше не хранятся в журнале
+// (считаются напрямую — см. js/stats.js). Записи, накопившиеся за время, пока источников
+// правды было два, теперь просто мусор: они ни на что не влияют, но сбивают с толку при
+// разборе и занимают место. Выкидываем их из журнала и из облака — идемпотентно, при
+// повторном заходе удалять уже нечего.
+const JOURNAL_OBSOLETE_FIELDS = ['revenue', 'netRevenue', 'presentations', 'worksheets', 'slides', 'pages'];
+
+function purgeObsoleteJournalFields() {
+  const before = activityLog.length;
+  activityLog = activityLog.filter(e => !JOURNAL_OBSOLETE_FIELDS.includes(e.field));
+  return before - activityLog.length;
 }
 
 // Старая логика чтения из localStorage — теперь только аварийный фолбэк на случай,
@@ -337,8 +205,8 @@ function loadFromLocalStorageFallback() {
 
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
   activityLog = rawLog ? JSON.parse(rawLog) : [];
+  purgeObsoleteJournalFields();
   seedActivityLogIfEmpty();
-  backfillRevenueInActivityLog();
 
   syncPlanningWithOrders();
 }
@@ -360,10 +228,12 @@ async function loadData(){
     const migratedPaid = migratePaidFlagToAmount();
 
     activityLog = cloud.activityLog || [];
+    const purged = purgeObsoleteJournalFields();
     const beforeSeedLen = activityLog.length;
     seedActivityLogIfEmpty();
-    backfillRevenueInActivityLog();
     if (activityLog.length !== beforeSeedLen || migratedPaid) scheduleCloudSync(); // досчитанное сразу же отправляем в облако
+    // Устаревшие записи чистим и в облаке, иначе они вернутся при следующей загрузке.
+    if (purged) await deleteObsoleteJournalFieldsFromCloud(JOURNAL_OBSOLETE_FIELDS);
 
     syncPlanningWithOrders();
 
