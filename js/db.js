@@ -23,7 +23,10 @@ function normalizeOrder(o){
       ready: !!l.ready
     })) : [{id:'l0',label: getVisibleCatalog('types')[0] || 'Презентация',type:getVisibleCatalog('units')[0] || 'Слайд',qty:10,pomoHours:0,rate:500,ignorePrice:false,ready:false}],
     notes:o.notes||'', createdAt:o.createdAt||Date.now(),
-    linkedLessonId: o.linkedLessonId || null
+    linkedLessonId: o.linkedLessonId || null,
+    // Дата, когда заказ отметили оплаченным. Нужна, чтобы выручка попадала в статистику
+    // днём поступления денег, а не датой заказа (см. rebuildRevenueLog).
+    paidAt: o.paidAt || null
   };
 }
 
@@ -127,58 +130,73 @@ function reconcileCumulativeStats() {
     }
   });
 
-  // Выручка/чистый доход — ПОТОКОВЫЕ показатели (считаются за период, а не бегущим итогом),
-  // поэтому важна не только сумма, но и дата: общая поправка "сегодня" нарисовала бы ложный
-  // всплеск за сегодня вместо исправления истории. Сверяем по КАЖДОМУ заказу отдельно и
-  // ставим поправку его собственной датой. Записи по уже удалённым заказам не трогаем —
-  // они остаются историческим фактом (см. "оставить статистику" при удалении заказа).
-  // Прежние ОБЩИЕ поправки по выручке (orderId: null) — их добавляла версия кнопки из
-  // v1.20.3. Пер-заказная сверка ниже их не видит (они ни к одному заказу не привязаны),
-  // поэтому они оставались "лишним слагаемым" в итоге навсегда: пер-заказные поправки
-  // приводили сумму по каждому заказу к правильной, а сверху висел неучтённый общий сдвиг.
-  // Гасим их встречной записью той же датой — идемпотентно, при повторном запуске уже 0.
-  let strayFixes = 0;
-  ['revenue', 'netRevenue'].forEach(field => {
-    const strayByDate = {};
-    activityLog.forEach(e => {
-      if (e.field === field && !e.orderId) strayByDate[e.date] = (strayByDate[e.date] || 0) + e.delta;
-    });
-    Object.keys(strayByDate).forEach(date => {
-      const sum = Math.round(strayByDate[date] * 100) / 100;
-      if (sum !== 0) { activityLog.push({ date, orderId: null, field, delta: -sum }); strayFixes++; }
-    });
-  });
-  if (strayFixes) fixedFields.push(`убрано общих поправок выручки — ${strayFixes}`);
-
-  let revenueFixes = 0, netFixes = 0, hoursFixes = 0;
+  // Часы — тоже потоковый показатель, но, в отличие от выручки, восстановить их "по факту"
+  // можно только суммарно: расписания работы по дням у нас нет. Недостающие часы относим
+  // к дате самого заказа — работа действительно растянута по его срокам.
+  let hoursFixes = 0;
   orders.forEach(o => {
-    const rec = orderRecognizedRevenue(o);
     const realHours = getOrderDisplayHours(o);
-    let loggedRev = 0, loggedNet = 0, loggedHours = 0;
-    activityLog.forEach(e => {
-      if (e.orderId !== o.id) return;
-      if (e.field === 'revenue') loggedRev += e.delta;
-      else if (e.field === 'netRevenue') loggedNet += e.delta;
-      else if (e.field === 'hours') loggedHours += e.delta;
-    });
-    // Часы — это работа, растянутая по срокам заказа, поэтому недостающие часы разумно
-    // отнести к дате самого заказа. Выручка — наоборот, разовое событие "пришли деньги":
-    // недостающая сумма означает "признано, но не записано", и честная дата для неё —
-    // сегодня (день, когда мы это учли), а не дата начала заказа. Иначе деньги
-    // "разъезжаются" по старым датам и график выручки выглядит пустым.
-    const workDate = orderSeedDate(o);
-    const revDiff = Math.round((rec.revenue - loggedRev) * 100) / 100;
-    const netDiff = Math.round((rec.net - loggedNet) * 100) / 100;
+    let loggedHours = 0;
+    activityLog.forEach(e => { if (e.orderId === o.id && e.field === 'hours') loggedHours += e.delta; });
     const hoursDiff = Math.round((realHours - loggedHours) * 10000) / 10000;
-    if (revDiff !== 0) { activityLog.push({ date: today, orderId: o.id, field: 'revenue', delta: revDiff }); revenueFixes++; }
-    if (netDiff !== 0) { activityLog.push({ date: today, orderId: o.id, field: 'netRevenue', delta: netDiff }); netFixes++; }
-    if (hoursDiff !== 0) { activityLog.push({ date: workDate, orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
+    if (hoursDiff !== 0) { activityLog.push({ date: orderSeedDate(o), orderId: o.id, field: 'hours', delta: hoursDiff }); hoursFixes++; }
   });
-  if (revenueFixes) fixedFields.push(`выручка: поправлено заказов — ${revenueFixes}`);
-  if (netFixes) fixedFields.push(`чистый доход: поправлено заказов — ${netFixes}`);
   if (hoursFixes) fixedFields.push(`часы: поправлено заказов — ${hoursFixes}`);
 
+  // Выручку не "подправляем" по расхождению, а полностью пересобираем из заказов и реестра
+  // авансов — она из них однозначно выводится, и это надёжнее, чем накапливать поправки.
+  const revenueEntries = rebuildRevenueLog();
+  fixedFields.push(`выручка пересобрана заново — записей: ${revenueEntries}`);
+
   return fixedFields;
+}
+
+// Дата, когда деньги по авансу реально поступили — берём из реестра авансов клиента
+// (самый ранний аванс). Именно она, а не дата заказа, честно отражает движение денег.
+function clientAdvanceDate(client) {
+  const list = (advances || []).filter(a => a.client === client && a.date).sort((a, b) => a.date < b.date ? -1 : 1);
+  return list.length ? list[0].date : null;
+}
+
+// Полная пересборка записей выручки/чистого дохода из самих заказов и реестра авансов.
+// Выручка целиком выводится из них, поэтому журнал можно смело собрать заново — это
+// надёжнее, чем чинить накопившиеся расхождения точечными поправками.
+//
+// Правило даты — "по поступлению денег":
+//   • часть, покрытая авансом  -> дата аванса этого клиента;
+//   • остаток (доплата)        -> дата отметки "Оплачено" (paidAt).
+// Чистый доход делится в той же пропорции, что и выручка (за вычетом налога).
+function rebuildRevenueLog() {
+  activityLog = activityLog.filter(e => e.field !== 'revenue' && e.field !== 'netRevenue');
+
+  let entriesAdded = 0;
+  orders.forEach(o => {
+    const fullExact = orderTotal(o);
+    const full = Math.round(fullExact);
+    const base = orderBaseTotal(o);
+    if (full <= 0) return;
+
+    const advUsed = Math.min(parseNum(o.advanceUsed), full);
+    const netForAdvance = fullExact > 0 ? advUsed * (base / fullExact) : 0;
+
+    if (advUsed > 0) {
+      const date = clientAdvanceDate(o.client) || o.start || orderSeedDate(o);
+      activityLog.push({ date, orderId: o.id, field: 'revenue', delta: Math.round(advUsed * 100) / 100 });
+      activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: Math.round(netForAdvance * 100) / 100 });
+      entriesAdded += 2;
+    }
+
+    if (o.isPaid) {
+      const rest = Math.round((full - advUsed) * 100) / 100;
+      const netRest = Math.round((base - netForAdvance) * 100) / 100;
+      if (rest !== 0 || netRest !== 0) {
+        const date = o.paidAt || o.deadline || dateKey(new Date());
+        if (rest !== 0) { activityLog.push({ date, orderId: o.id, field: 'revenue', delta: rest }); entriesAdded++; }
+        if (netRest !== 0) { activityLog.push({ date, orderId: o.id, field: 'netRevenue', delta: netRest }); entriesAdded++; }
+      }
+    }
+  });
+  return entriesAdded;
 }
 
 /* Data Loading & Saving — источник истины теперь Supabase (см. cloudSync.js),

@@ -217,7 +217,8 @@ function orderToRow(o) {
     tax_type: o.taxType || 'none', start_date: o.start || null, deadline: o.deadline || null,
     estimated_hours: String(o.estimatedHours ?? ''), actual_hours: String(o.actualHours ?? ''),
     lines: o.lines || [], notes: o.notes || '', created_at: o.createdAt || Date.now(),
-    linked_lesson_id: o.linkedLessonId || null
+    linked_lesson_id: o.linkedLessonId || null,
+    paid_at: o.paidAt || null
   };
 }
 function rowToOrder(r) {
@@ -228,7 +229,10 @@ function rowToOrder(r) {
     taxType: r.tax_type || 'none', start: r.start_date || '', deadline: r.deadline || '',
     estimatedHours: r.estimated_hours ?? '', actualHours: r.actual_hours ?? '',
     lines: r.lines || [], notes: r.notes || '', createdAt: r.created_at || Date.now(),
-    linkedLessonId: r.linked_lesson_id || null
+    linkedLessonId: r.linked_lesson_id || null,
+    // Разовая доустановка для заказов, оплаченных ДО появления поля: дату оплаты берём из
+    // времени последней правки записи — лучший доступный признак "когда его закрыли".
+    paidAt: r.paid_at || (r.is_paid && r.updated_at ? dateKey(new Date(r.updated_at)) : null)
   };
 }
 

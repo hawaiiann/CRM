@@ -8,6 +8,8 @@ function togglePaymentStatus(id, event) {
   if(o) {
     const before = JSON.parse(JSON.stringify(o));
     o.isPaid = !o.isPaid;
+    // Дата поступления денег: ставим при отметке, снимаем при откате статуса.
+    o.paidAt = o.isPaid ? dateKey(new Date()) : null;
     recordActivityChanges(before, o);
     saveData();
     renderCurrent();
@@ -991,6 +993,11 @@ form.addEventListener('submit', (e)=>{
     createdAt: id ? (orders.find(o=>o.id===id)||{}).createdAt || Date.now() : Date.now(),
     linkedLessonId: document.getElementById('f_linkedLessonId').value || null
   };
+
+  // Дата поступления денег: проставляем в момент, когда заказ впервые стал оплаченным
+  // (через форму), и убираем, если оплату сняли. Уже проставленную дату не перетираем.
+  const prevOrder = id ? orders.find(o => o.id === id) : null;
+  data.paidAt = data.isPaid ? ((prevOrder && prevOrder.paidAt) || dateKey(new Date())) : null;
 
   // Похожий заказ (тот же клиент/предмет/класс/четверть/номер урока) уже существует —
   // частая случайность при повторном сохранении или сбитой нумерации при дублировании.
