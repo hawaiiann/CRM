@@ -425,6 +425,16 @@ function addPeriod(d, period, n) {
 
 // Возвращает массив сумм показателя по "корзинам" выбранного периода — последняя корзина текущая (сегодня/эта неделя/этот месяц/этот год)
 function getMetricSeriesForPeriod(activityField, period, cumulative) {
+  // Выручка, чистый доход и количества материалов считаются НАПРЯМУЮ из заказов и реестра
+  // авансов (js/stats.js) — они из них однозначно выводятся, и это убирает второй источник
+  // правды, из-за которого Дашборд расходился с Финансами. Заодно признак "накопительный"
+  // теперь живёт в одном месте, а не дублируется здесь и в DASHBOARD_METRIC_TYPES.
+  // Из журнала по-прежнему берутся только часы: их пишет таймер по ходу работы,
+  // и восстановить их из текущего состояния заказов невозможно.
+  if (typeof isDerivedMetric === 'function' && isDerivedMetric(activityField)) {
+    return computeDerivedSeries(activityField, getPeriodBucketRanges(period), orders, advances);
+  }
+
   const counts = { day: 14, week: 10, month: 8, year: 5 };
   const N = counts[period] || 14;
   const curStart = getPeriodStart(new Date(), period);
