@@ -92,12 +92,17 @@ function recordActivityChanges(oldOrder, newOrder, onDate) {
 // "Бегущий итог" накопительных показателей (Презентации/Рабочие листы/Слайды/Страницы на
 // Дашборде) считается суммой дельт в activityLog — а не пересчётом с нуля по факту. Если
 // когда-либо часть заказов попала в базу в обход recordActivityChanges (импорт JSON, миграция
-// схемы подсчёта — как объединение "Карточка с вопросами" в один показатель с "Рабочий лист"
-// в v1.16.1) — итог в журнале расходится с реальным текущим количеством и больше не
-// самовыправляется. Эта функция сверяет их и добавляет ОДНУ корректирующую запись на
-// показатель, если расхождение есть. Не трогает сами заказы/финансы — только статистику.
+// схемы подсчёта, откат гонки при синхронизации) — итог в журнале расходится с реальным
+// текущим количеством и больше не самовыправляется. Эта функция сверяет их и добавляет ОДНУ
+// корректирующую запись на показатель, если расхождение есть.
+//
+// Выручка/чистый доход — НЕ накопительный показатель (считается за период, не общим итогом),
+// но принцип сверки тот же: сумма ВСЕХ когда-либо записанных изменений по каждому показателю
+// должна равняться текущей признанной выручке по факту (orderRecognizedRevenue) — если где-то
+// "застряла" незакрытая пара (плюс без компенсирующего минуса от отката), сумма разойдётся.
+// Не трогает сами заказы/финансы — только записи в журнале статистики.
 function reconcileCumulativeStats() {
-  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0;
+  let realPresentations = 0, realWorksheets = 0, realSlides = 0, realPages = 0, realRevenue = 0, realNet = 0;
   orders.forEach(o => {
     const types = splitLineTypes(o.lines);
     const units = splitLineUnits(o.lines);
@@ -105,15 +110,21 @@ function reconcileCumulativeStats() {
     realWorksheets += types.worksheets;
     realSlides += units.slides;
     realPages += units.pages;
+    const rec = orderRecognizedRevenue(o);
+    realRevenue += rec.revenue;
+    realNet += rec.net;
   });
-  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0 };
+  const logged = { presentations: 0, worksheets: 0, slides: 0, pages: 0, revenue: 0, netRevenue: 0 };
   activityLog.forEach(e => { if (e.field in logged) logged[e.field] += e.delta; });
 
   const today = dateKey(new Date());
-  const real = { presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages };
+  const real = {
+    presentations: realPresentations, worksheets: realWorksheets, slides: realSlides, pages: realPages,
+    revenue: realRevenue, netRevenue: realNet
+  };
   let fixedFields = [];
   Object.keys(real).forEach(field => {
-    const diff = Math.round((real[field] - logged[field]) * 10000) / 10000;
+    const diff = Math.round((real[field] - logged[field]) * 100) / 100;
     if (diff !== 0) {
       activityLog.push({ date: today, orderId: null, field, delta: diff });
       fixedFields.push(`${field}: ${logged[field]} → ${real[field]}`);
