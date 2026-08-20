@@ -40,7 +40,7 @@ export function SidebarTimerCard() {
         Таймер
       </div>
 
-      <div className="relative mb-2.5 flex flex-col items-center justify-center rounded-xl bg-[#17181A] py-3.5">
+      <div className="timer-display-accent relative mb-2.5 flex flex-col items-center justify-center overflow-hidden rounded-xl py-3.5">
         <div
           className="pointer-events-none absolute top-2 right-2 size-4 rounded-full"
           style={{ background: `conic-gradient(rgba(255,255,255,0.85) ${progress * 360}deg, rgba(255,255,255,0.15) ${progress * 360}deg)` }}

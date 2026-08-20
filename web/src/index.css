@@ -406,6 +406,17 @@
         linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
 }
 
+/* Timer display block (SidebarTimerCard) — always a near-black readout
+   regardless of app theme (like a real digital timer screen), so this
+   doesn't need a .dark variant the way .glass-surface-accent does. Same
+   corner-glow recipe, just layered straight onto a solid base color
+   instead of a glass sheen. */
+.timer-display-accent {
+    background:
+        radial-gradient(130% 130% at 0% 0%, color-mix(in oklab, var(--cta) 45%, transparent) 0%, transparent 80%),
+        #17181A;
+}
+
 /* Thin scrollbars for the dashboard/sidebar dark-glass scope — the default
    OS scrollbar reads chunky and light against the glass. */
 .dark {
