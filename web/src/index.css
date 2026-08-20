@@ -69,6 +69,12 @@
     --color-cta: var(--cta);
     --color-cta-foreground: var(--cta-foreground);
 
+    /* The warm half of that same hover-glow duo, pulled out the same way —
+       a second accent for sections that would otherwise sit right next to
+       a --cta one and read as more of the same blue. Decorative only, not
+       tied to --warning's "needs attention" meaning. */
+    --color-accent-warm: var(--accent-warm);
+
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -154,6 +160,11 @@
 
     --cta: #2E7BF6;
     --cta-foreground: #FFFFFF;
+
+    /* Same warm tone the hover-glow already uses (rgba(255,169,77,…)) — one
+       value works for both themes there via alpha alone, so no .dark
+       override is needed here either; it inherits through :root. */
+    --accent-warm: #FFA94D;
 }
 
 .dark {
@@ -365,6 +376,32 @@
 .dark .glass-surface-accent:hover::before {
     background:
         radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--cta) 47%, transparent) 0%, transparent 66%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
+}
+
+/* Warm twin of .glass-surface-accent — identical recipe, --accent-warm
+   instead of --cta. A second accent color so a section sitting right next
+   to a blue-accented one (e.g. Активность below Доход по месяцам) doesn't
+   just read as "more blue" — same restraint rules apply: one tile/section
+   per group, tint not fill. */
+.glass-surface-accent-warm::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--accent-warm) 36%, transparent) 0%, transparent 88%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.dark .glass-surface-accent-warm::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--accent-warm) 40%, transparent) 0%, transparent 88%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.glass-surface-accent-warm:hover::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--accent-warm) 42%, transparent) 0%, transparent 66%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.dark .glass-surface-accent-warm:hover::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--accent-warm) 47%, transparent) 0%, transparent 66%),
         linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
 }
 

@@ -97,7 +97,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="glass-surface rounded-xl p-4.5">
+      <div className="glass-surface glass-surface-accent-warm rounded-xl p-4.5 ring-1 ring-accent-warm/25">
         <ActivityMetricsGrid />
       </div>
     </div>
