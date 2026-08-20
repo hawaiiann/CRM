@@ -166,7 +166,7 @@ export function FinancePage() {
       />
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="overview">Обзор финансов</TabsTrigger>
           <TabsTrigger value="advances">Баланс авансов по клиентам</TabsTrigger>
           <TabsTrigger value="timereport">Отчёт по времени</TabsTrigger>
@@ -187,9 +187,9 @@ export function FinancePage() {
                 <h3 className="text-[15px] font-bold">Финансовая статистика по заказам</h3>
                 <div className="text-[12px] text-muted-foreground">Кликните по названию для перехода к заказу. Кликните по статусу для смены оплаты.</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>
-                  <SelectTrigger size="sm" className="w-56"><SelectValue /></SelectTrigger>
+                  <SelectTrigger size="sm" className="w-full sm:w-56"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Сортировка: по умолчанию</SelectItem>
                     <SelectItem value="status">По статусу оплаты</SelectItem>

@@ -27,7 +27,7 @@ export function PaginationBar({
   const currentPage = Math.min(page, totalPages - 1)
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-5.5">
+    <div className="flex flex-wrap items-center justify-start gap-x-5.5 gap-y-2.5 sm:justify-end">
       <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
         <span>Строк на странице</span>
         <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>

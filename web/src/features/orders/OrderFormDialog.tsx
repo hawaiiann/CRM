@@ -253,7 +253,7 @@ export function OrderFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[88vh] w-full flex-col overflow-hidden sm:max-w-2xl">
+      <DialogContent className="flex max-h-[88vh] w-full flex-col overflow-x-hidden overflow-y-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editingOrder ? "Изменить заказ" : "Новый заказ"}</DialogTitle>
         </DialogHeader>

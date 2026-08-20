@@ -61,7 +61,13 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "glass-panel fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-white/10 p-4 text-sm text-foreground shadow-xl duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          // max-h + overflow-y are a safety net, not decoration: the content is
+          // `fixed` and vertically centered, so anything taller than the viewport
+          // gets clipped at BOTH ends with no way to scroll to it (the title and
+          // first fields become unreachable). Hit this on BoardFormDialog at
+          // 375x667. Dialogs that manage their own scrolling (OrderFormDialog)
+          // override both via tailwind-merge.
+          "glass-panel fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border border-white/10 p-4 text-sm text-foreground shadow-xl duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           isDark && "dark",
           className
         )}

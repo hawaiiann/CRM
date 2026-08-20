@@ -118,7 +118,7 @@ export function TimelinePage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon-sm" onClick={() => navigate(-1)}><ChevronLeft /></Button>
           <div className="min-w-[130px] text-center text-[12.5px] font-bold">
             {rangeStart.getDate()} {MONTH_SHORT[rangeStart.getMonth()]} — {rangeEnd.getDate()} {MONTH_SHORT[rangeEnd.getMonth()]}

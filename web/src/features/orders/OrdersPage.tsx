@@ -526,7 +526,7 @@ export function OrdersPage() {
         <div className="text-[12.5px] text-muted-foreground">
           {selected.size} из {totalRows} строк выбрано
         </div>
-        <div className="flex items-center gap-5.5">
+        <div className="flex flex-wrap items-center gap-x-5.5 gap-y-2.5">
           <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
             <span>Строк на странице</span>
             <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
