@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { HashRouter, Routes, Route } from "react-router-dom"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppShell } from "@/components/layout/AppShell"
 import { AuthGate } from "@/components/auth/AuthGate"
@@ -24,9 +24,16 @@ function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <AuthGate>
-        {/* В проде приложение живёт не в корне домена, а на /CRM/app/, поэтому
-            basename берём из base сборки: в dev это "/", в проде — "/CRM/app/". */}
-        <BrowserRouter basename={import.meta.env.BASE_URL}>
+        {/* HashRouter, а не BrowserRouter: GitHub Pages — статика и про
+            клиентский роутинг не знает, поэтому F5 на /CRM/app/orders — это
+            запрос несуществующего файла. Обычное лекарство (404.html рядом с
+            приложением) здесь не работает: Pages берёт 404.html только из
+            корня сайта, а корень занят ванильной версией, и трогать её
+            поведение ради этого не хочется. С hash-навигацией сервер вообще
+            не участвует — путь живёт после #, обновление страницы работает
+            всегда. Проверено вживую: с 404.html deep-link отдавал страницу
+            "Page not found" от GitHub. */}
+        <HashRouter>
           <Routes>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
@@ -39,7 +46,7 @@ function App() {
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>
-        </BrowserRouter>
+        </HashRouter>
       </AuthGate>
     </TooltipProvider>
   )

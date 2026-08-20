@@ -1,24 +1,7 @@
-import fs from "node:fs"
 import path from "node:path"
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-
-// GitHub Pages отдаёт статику и не знает про клиентский роутинг: заход на
-// /CRM/app/orders или F5 на нём — это запрос несуществующего файла, то есть
-// 404. Приём стандартный: положить рядом 404.html — копию index.html. Pages
-// отдаст её, приложение загрузится, а BrowserRouter разберёт настоящий путь
-// из адресной строки сам.
-function spaFallback(): Plugin {
-  return {
-    name: "spa-fallback-404",
-    closeBundle() {
-      const outDir = path.resolve(import.meta.dirname, "../app")
-      const index = path.join(outDir, "index.html")
-      if (fs.existsSync(index)) fs.copyFileSync(index, path.join(outDir, "404.html"))
-    },
-  }
-}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -30,7 +13,7 @@ export default defineConfig({
     outDir: '../app',
     emptyOutDir: true,
   },
-  plugins: [react(), tailwindcss(), spaFallback()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
