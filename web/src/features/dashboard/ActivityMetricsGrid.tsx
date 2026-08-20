@@ -11,9 +11,9 @@ import {
   type MetricPeriod,
 } from "@/lib/dashboardMetrics"
 
-// One color for every chart on the dashboard — same light gray as the
-// revenue line and progress rings, not a different hue or shade per metric.
-const GLASS_METRIC_COLOR = "var(--foreground)"
+// One color for every chart in this grid — the warm accent of the panel
+// they sit in (.glass-surface-accent-warm), not a different hue per metric.
+const GLASS_METRIC_COLOR = "var(--accent-warm)"
 import {
   ChartContainer,
   ChartTooltip,
