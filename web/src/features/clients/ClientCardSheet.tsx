@@ -91,7 +91,7 @@ export function ClientCardSheet({
             <SheetFooter>
               <Button
                 onClick={() => onDeposit(clientName)}
-                className="w-full bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis"
+                className="w-full bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"
               >
                 Внести аванс от этого клиента
               </Button>

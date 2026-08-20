@@ -95,7 +95,7 @@ export function TimelinePage() {
         title="Таймлайн"
         subtitle="Визуализация нахлеста и параллельных заказов"
         actions={
-          <Button onClick={() => { setEditingOrder(null); setFormOpen(true) }} className="bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis">
+          <Button onClick={() => { setEditingOrder(null); setFormOpen(true) }} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
             <Plus />
             Новый заказ
           </Button>

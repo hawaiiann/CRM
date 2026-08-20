@@ -209,7 +209,7 @@ export function BoardFormDialog({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
-            <Button type="submit" className="bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis">Сохранить</Button>
+            <Button type="submit" className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">Сохранить</Button>
           </DialogFooter>
         </form>
       </DialogContent>

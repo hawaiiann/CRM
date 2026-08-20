@@ -335,7 +335,7 @@ export function OrdersPage() {
           </DropdownMenu>
           <Button
             onClick={openNewOrder}
-            className="bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis"
+            className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"
           >
             <Plus />
             Новый заказ

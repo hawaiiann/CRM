@@ -60,6 +60,15 @@
     --color-emphasis-foreground: var(--emphasis-foreground);
     --color-overlay: var(--overlay);
 
+    /* One accent, reserved for primary CTA buttons only (Новый заказ,
+       Сохранить, Внести аванс…) — the cool half of the card hover-glow duo,
+       pulled out to full strength. Everything else that used to share the
+       white "emphasis" pill with these buttons (active nav, checked state,
+       "today") stays emphasis, so a click-me action now reads differently
+       from a plain status indicator. */
+    --color-cta: var(--cta);
+    --color-cta-foreground: var(--cta-foreground);
+
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -142,6 +151,9 @@
     --emphasis: #17181B;
     --emphasis-foreground: #FFFFFF;
     --overlay: #000000;
+
+    --cta: #2E7BF6;
+    --cta-foreground: #FFFFFF;
 }
 
 .dark {
@@ -196,6 +208,9 @@
     --emphasis: #FFFFFF;
     --emphasis-foreground: #121316;
     --overlay: #FFFFFF;
+
+    --cta: #4C9AFF;
+    --cta-foreground: #121316;
 }
 
 /* Liquid-glass card — frosted panel, light-mode recipe by default (sits on
@@ -324,6 +339,33 @@
 }
 @media (prefers-reduced-motion: reduce) {
     .glass-surface:hover::after { animation: none; }
+}
+
+/* Accent variant of .glass-surface — same frosted-glass card, plus a resting
+   (not hover-only) wash of the CTA blue bleeding from one corner, so the
+   tile reads as "the headline number" among a row of otherwise-neutral
+   ones. Reserved for one tile per group (e.g. the primary stat in a row of
+   four) — spread across every card it stops meaning anything. Deliberately
+   capped well under full saturation ("не на 100%"): it's a tint, not a fill. */
+.glass-surface-accent::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--cta) 36%, transparent) 0%, transparent 88%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.dark .glass-surface-accent::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--cta) 40%, transparent) 0%, transparent 88%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.glass-surface-accent:hover::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--cta) 42%, transparent) 0%, transparent 66%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.dark .glass-surface-accent:hover::before {
+    background:
+        radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--cta) 47%, transparent) 0%, transparent 66%),
+        linear-gradient(125deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 34%);
 }
 
 /* Thin scrollbars for the dashboard/sidebar dark-glass scope — the default

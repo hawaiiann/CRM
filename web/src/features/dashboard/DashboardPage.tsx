@@ -127,15 +127,13 @@ function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl p-4.5",
-        featured
-          ? "glass-surface ring-1 ring-overlay/20"
-          : "glass-surface"
+        "glass-surface rounded-xl p-4.5",
+        featured && "glass-surface-accent ring-1 ring-cta/25"
       )}
     >
       <div className="flex items-start justify-between">
         <span className={cn("text-[12.5px] font-semibold", featured ? "text-foreground" : "text-muted-foreground")}>{label}</span>
-        <div className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", featured ? "bg-overlay/12 text-foreground" : tone ? toneClasses[tone] : "bg-muted text-muted-foreground")}>
+        <div className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", featured ? "bg-cta/15 text-cta" : tone ? toneClasses[tone] : "bg-muted text-muted-foreground")}>
           <Icon className="size-3.5" strokeWidth={2} />
         </div>
       </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { Plus, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Select,
   SelectTrigger,
@@ -157,7 +158,7 @@ export function FinancePage() {
         title="Финансы"
         subtitle="Учет доходов, чистой прибыли, налоговых отчислений и управления авансами"
         actions={
-          <Button onClick={() => setDepositOpen(true)} className="bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis">
+          <Button onClick={() => setDepositOpen(true)} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
             <Plus />
             Внести аванс
           </Button>
@@ -174,7 +175,7 @@ export function FinancePage() {
         <TabsContent value="overview" className="mt-4">
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             <StatTile num={fmtMoney(totals.totalRevenue)} lbl="Выручка (с налогом)" sub="Оплачено + покрыто авансом" tone="success" />
-            <StatTile num={fmtMoney(totals.totalNet)} lbl="Чистый доход" sub="За вычетом налогов" />
+            <StatTile num={fmtMoney(totals.totalNet)} lbl="Чистый доход" sub="За вычетом налогов" accent />
             <StatTile num={fmtMoney(totals.totalTax)} lbl="Налог к уплате" sub="Справочно по ставкам" tone="destructive" />
             <StatTile num={fmtMoney(totals.totalAdvancesIn)} lbl="Всего авансов внесено" sub={`Остаток доступен: ${fmtMoney(totals.totalAdvAvailable)}`} tone="warning" />
             <StatTile num={fmtMoney(totals.totalPending)} lbl="Остаток к получению" sub="Ожидает доплаты клиентов" />
@@ -391,9 +392,9 @@ export function FinancePage() {
   )
 }
 
-function StatTile({ num, lbl, sub }: { num: string; lbl: string; sub: string; tone?: "success" | "warning" | "destructive" }) {
+function StatTile({ num, lbl, sub, accent }: { num: string; lbl: string; sub: string; tone?: "success" | "warning" | "destructive"; accent?: boolean }) {
   return (
-    <div className="glass-surface rounded-xl p-4">
+    <div className={cn("glass-surface rounded-xl p-4", accent && "glass-surface-accent ring-1 ring-cta/25")}>
       <div className="font-heading text-[26px] font-bold tabular-nums">{num}</div>
       <div className="mt-1 text-[12px] font-bold text-muted-foreground">{lbl}</div>
       <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>

@@ -55,7 +55,7 @@ export function PlanningPage() {
                 <SelectItem value="deadline">Сортировка: по дедлайну</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => { setEditingBoard(null); setBoardFormOpen(true) }} className="bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis">
+            <Button onClick={() => { setEditingBoard(null); setBoardFormOpen(true) }} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
               <Plus />
               Добавить класс
             </Button>
@@ -69,7 +69,7 @@ export function PlanningPage() {
         <div className="rounded-xl border border-dashed border-border bg-card/50 py-16 text-center">
           <div className="text-[14px] font-bold">Список планирования пуст</div>
           <p className="mt-1.5 text-[12.5px] text-muted-foreground">Создайте первый класс для ведения уроков.</p>
-          <Button onClick={() => setBoardFormOpen(true)} className="mt-4 bg-emphasis/90 font-extrabold text-emphasis-foreground">
+          <Button onClick={() => setBoardFormOpen(true)} className="mt-4 bg-cta/90 font-extrabold text-cta-foreground">
             Добавить класс
           </Button>
         </div>

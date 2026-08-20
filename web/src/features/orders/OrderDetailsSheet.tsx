@@ -121,7 +121,7 @@ export function OrderDetailsSheet({
             <SheetFooter>
               <Button
                 onClick={() => onEdit(order)}
-                className="w-full bg-emphasis/90 font-extrabold text-emphasis-foreground hover:bg-emphasis"
+                className="w-full bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"
               >
                 Редактировать заказ
               </Button>
