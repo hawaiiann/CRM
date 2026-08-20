@@ -214,7 +214,7 @@ export function OrdersPage() {
           </CardContent>
         </Card>
 
-        <Card className="glass-surface ring-0">
+        <Card className="glass-surface glass-surface-accent ring-1 ring-cta/25">
           <CardHeader>
             <CardDescription>Активные заказы</CardDescription>
             <CardTitle className="font-heading text-[34px] font-bold tabular-nums">
