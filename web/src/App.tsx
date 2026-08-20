@@ -13,7 +13,12 @@ import { SettingsPage } from "@/features/settings/SettingsPage"
 import { DashboardPreviewHarness } from "@/features/dashboard/DashboardPreviewHarness"
 
 function App() {
-  if (window.location.pathname === "/__dashboard-preview") {
+  // Dev-only. Раньше харнесс был доступен и в проде: он подменяет стор
+  // мок-данными, а любое действие внутри него вызывает saveData(), которая
+  // пишет эти моки в БОЕВЫЕ ключи localStorage (design_crm_orders_v10 и др.)
+  // и попадает в автобэкап. Облако спасал только незаданный cloudUserId.
+  // Если облачная загрузка потом падала, из кэша поднимались фейковые заказы.
+  if (import.meta.env.DEV && window.location.pathname === "/__dashboard-preview") {
     return <DashboardPreviewHarness />
   }
   return (
