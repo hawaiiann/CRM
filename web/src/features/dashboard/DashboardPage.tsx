@@ -71,10 +71,12 @@ export function DashboardPage() {
             <StatCard label="Ожидает оплаты" value={fmtMoney(stats.activeRev)} icon={Clock3} tone="destructive" />
           </div>
 
-          <div className="glass-surface flex-1 rounded-xl p-4.5">
+          <div className="glass-surface flex flex-1 flex-col rounded-xl p-4.5">
             <h3 className="text-[16px] font-bold">Прогресс по классам</h3>
             <div className="mb-1 text-[12.5px] text-muted-foreground">Завершение выработки материалов</div>
-            <ClassProgressDonuts />
+            <div className="flex flex-1 items-center">
+              <ClassProgressDonuts />
+            </div>
           </div>
         </div>
 
