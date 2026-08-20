@@ -24,7 +24,9 @@ function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <AuthGate>
-        <BrowserRouter>
+        {/* В проде приложение живёт не в корне домена, а на /CRM/app/, поэтому
+            basename берём из base сборки: в dev это "/", в проде — "/CRM/app/". */}
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
           <Routes>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
