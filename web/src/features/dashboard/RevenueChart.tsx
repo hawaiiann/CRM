@@ -15,7 +15,7 @@ const MONTH_NAMES = ["янв", "фев", "мар", "апр", "май", "июн",
 const chartConfig = {
   revenue: {
     label: "Выручка",
-    color: "var(--foreground)",
+    color: "var(--cta)",
   },
 } satisfies ChartConfig
 

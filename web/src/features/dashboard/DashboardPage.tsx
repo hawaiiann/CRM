@@ -90,7 +90,7 @@ export function DashboardPage() {
           <WeekPlanningWidget />
         </div>
 
-        <div className="glass-surface rounded-xl p-4.5">
+        <div className="glass-surface glass-surface-accent rounded-xl p-4.5 ring-1 ring-cta/25">
           <h3 className="text-[16px] font-bold">Доход по месяцам</h3>
           <div className="mb-3 text-[12.5px] text-muted-foreground">За последние 6 месяцев по завершённым проектам</div>
           <RevenueChart />
@@ -120,9 +120,9 @@ function StatCard({
   tone?: "success" | "warning" | "destructive"
 }) {
   const toneClasses = {
-    success: "bg-overlay/10 text-foreground/80",
-    warning: "bg-overlay/10 text-foreground/80",
-    destructive: "bg-overlay/10 text-foreground/80",
+    success: "bg-success text-success-foreground",
+    warning: "bg-warning text-warning-foreground",
+    destructive: "bg-destructive/12 text-destructive",
   }
   return (
     <div
