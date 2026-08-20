@@ -161,10 +161,11 @@
     --cta: #2E7BF6;
     --cta-foreground: #FFFFFF;
 
-    /* Same warm tone the hover-glow already uses (rgba(255,169,77,…)) — one
-       value works for both themes there via alpha alone, so no .dark
-       override is needed here either; it inherits through :root. */
-    --accent-warm: #FFA94D;
+    /* Muted, closer to brown than the hover-glow's brighter orange — reads
+       calmer as a permanent chart/glow color than as a fleeting hover tint.
+       One value works for both themes via alpha alone, so no .dark override
+       is needed here either; it inherits through :root. */
+    --accent-warm: #B87A44;
 }
 
 .dark {
