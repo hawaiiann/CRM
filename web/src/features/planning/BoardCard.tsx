@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDown, Settings, Archive, ArchiveRestore, X, CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
@@ -47,6 +47,24 @@ export function BoardCard({
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
   const [collapsed, setCollapsed] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
+  const [deleteArmedId, setDeleteArmedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!deleteArmedId) return
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest(`[data-lesson-id="${deleteArmedId}"]`)) setDeleteArmedId(null)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDeleteArmedId(null)
+    }
+    document.addEventListener("click", onDocClick)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("click", onDocClick)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [deleteArmedId])
 
   const lessons = board.lessons || []
   let totalItems = 0
@@ -92,6 +110,10 @@ export function BoardCard({
     const baseItems = (board.baseTemplate || []).map((t) => ({ id: randId("i"), text: t, done: false }))
     const lesson: PlanningLesson = { id: randId("l"), num: maxNum + 1, title: `Урок ${maxNum + 1}`, color: "gray", items: baseItems, colorLocked: false, orderLinked: false, notes: "" }
     updateBoard({ lessons: [...lessons, lesson] })
+  }
+  function deleteLesson(id: string) {
+    updateBoard({ lessons: lessons.filter((l) => l.id !== id) })
+    setDeleteArmedId(null)
   }
 
   let hiddenCompletedCount = 0
@@ -156,15 +178,21 @@ export function BoardCard({
             {lessons.map((lesson) => {
               const colorClass = lessonColorClass(lesson, lesson.colorLocked, lesson.orderLinked)
               if (colorClass === "green-3" && !showCompleted) { hiddenCompletedCount++; return null }
+              const armed = deleteArmedId === lesson.id
               return (
                 <button
                   key={lesson.id}
                   type="button"
-                  title={lesson.title || `Урок ${lesson.num}`}
-                  onClick={() => onOpenLesson(lesson)}
-                  className={cn("flex size-11 items-center justify-center rounded-[13px] text-[14.5px] font-bold transition-transform hover:brightness-105 active:scale-[0.93]", CELL_STYLE[colorClass])}
+                  data-lesson-id={lesson.id}
+                  title={armed ? "Удалить урок" : lesson.title || `Урок ${lesson.num}`}
+                  onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
+                  onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
+                  className={cn(
+                    "flex size-11 items-center justify-center rounded-[13px] text-[14.5px] font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
+                    armed ? "bg-destructive text-white" : CELL_STYLE[colorClass]
+                  )}
                 >
-                  {lesson.num}
+                  {armed ? <X className="size-4.5" strokeWidth={2.5} /> : lesson.num}
                 </button>
               )
             })}

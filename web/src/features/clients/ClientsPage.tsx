@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { AlertTriangle } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, Clock } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,6 +15,7 @@ import { fmtMoney, isOrderOverdue, orderPaymentState } from "@/lib/money"
 import { getClientAdvanceStats } from "@/lib/advances"
 import { ClientCardSheet } from "./ClientCardSheet"
 import { DepositDialog } from "@/features/finance/DepositDialog"
+import { PaginationBar } from "@/components/ui/pagination-bar"
 
 type SortMode = "name" | "due_desc" | "advance_desc" | "orders_desc"
 
@@ -27,6 +28,8 @@ export function ClientsPage() {
   const [sort, setSort] = useState<SortMode>("name")
   const [activeClient, setActiveClient] = useState<string | null>(null)
   const [depositClient, setDepositClient] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
 
   const rows = useMemo(() => {
     const names = new Set((appSettings.clients || []).filter(Boolean))
@@ -52,6 +55,14 @@ export function ClientsPage() {
     return list
   }, [orders, advances, appSettings.clients, search, sort])
 
+  useEffect(() => { setPage(0) }, [search, sort, pageSize])
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const currentPage = Math.min(page, totalPages - 1)
+  const pagedRows = useMemo(
+    () => rows.slice(currentPage * pageSize, currentPage * pageSize + pageSize),
+    [rows, currentPage, pageSize]
+  )
+
   return (
     <div>
       <PageHeader title="Клиенты" subtitle="Все заказчики: активные заказы, остаток аванса, сумма к доплате" />
@@ -74,7 +85,7 @@ export function ClientsPage() {
         {rows.length === 0 && (
           <div className="py-10 text-center text-[13px] text-muted-foreground">{search ? "Ничего не найдено" : "Клиентов пока нет"}</div>
         )}
-        {rows.map((r) => (
+        {pagedRows.map((r) => (
           <button key={r.name} type="button" onClick={() => setActiveClient(r.name)} className="glass-surface rounded-xl p-3.5 text-left">
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-[14px] font-bold">{r.name}</span>
@@ -84,7 +95,7 @@ export function ClientsPage() {
                   Просрочка
                 </span>
               ) : r.activeCount ? (
-                <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-overlay/20 px-2.5 text-[11px] font-bold text-foreground/90">В работе</span>
+                <span className="inline-flex h-6 shrink-0 items-center rounded-full gap-1.5 bg-warning px-2.5 text-[11px] font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
               ) : null}
             </div>
             <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border pt-2.5 text-left">
@@ -121,7 +132,7 @@ export function ClientsPage() {
             {rows.length === 0 && (
               <TableRow className="hover:bg-transparent"><TableCell colSpan={5} className="py-10 text-center whitespace-normal text-muted-foreground">{search ? "Ничего не найдено" : "Клиентов пока нет"}</TableCell></TableRow>
             )}
-            {rows.map((r) => (
+            {pagedRows.map((r) => (
               <TableRow key={r.name} onClick={() => setActiveClient(r.name)} className="cursor-pointer">
                 <TableCell className="pl-4 font-bold">{r.name}</TableCell>
                 <TableCell className="text-right tabular-nums">{r.activeCount}</TableCell>
@@ -134,7 +145,7 @@ export function ClientsPage() {
                       Есть просрочка
                     </span>
                   ) : r.activeCount ? (
-                    <span className="inline-flex h-6 items-center rounded-full bg-overlay/20 px-2.5 text-[11px] font-bold text-foreground/90">В работе</span>
+                    <span className="inline-flex h-6 items-center rounded-full gap-1.5 bg-warning px-2.5 text-[11px] font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
                   ) : (
                     "—"
                   )}
@@ -144,6 +155,12 @@ export function ClientsPage() {
           </TableBody>
         </table>
       </div>
+
+      {rows.length > 0 && (
+        <div className="mt-3.5">
+          <PaginationBar page={currentPage} pageSize={pageSize} totalItems={rows.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        </div>
+      )}
 
       <ClientCardSheet
         clientName={activeClient}

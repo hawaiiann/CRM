@@ -58,7 +58,13 @@ function fakeTasks(): Task[] {
 }
 
 function fakeAdvances(): Advance[] {
-  return [{ id: "a1", client: "Иванова Мария Петровна", amount: 15000, date: dateKey(new Date()), note: "Предоплата за август" }]
+  return Array.from({ length: 14 }, (_, i) => ({
+    id: "a" + i,
+    client: "Клиент " + (i + 1),
+    amount: 5000 + i * 1000,
+    date: dateKey(new Date(Date.now() - i * 86400000)),
+    note: i % 3 === 0 ? "Предоплата" : "",
+  }))
 }
 
 function fakeBoard(): PlanningBoard {
@@ -88,11 +94,9 @@ export function DashboardPreviewHarness() {
   useEffect(() => {
     useAppStore.setState({
       orders: [
-        fakeOrder(2, 32000, "done"),
-        fakeOrder(0, 39000, "progress"),
-        fakeOrder(-1, 19500, "progress"),
-        fakeOrder(1, 19500, "progress"),
-        fakeOrder(-3, 12000, "queue", "Издательство «Просвещение»"),
+        ...Array.from({ length: 16 }, (_, i) =>
+          fakeOrder(i - 5, 15000 + i * 1500, i % 6 === 0 ? "done" : "progress", "Клиент " + (i + 1))
+        ),
       ],
       tasks: fakeTasks(),
       advances: fakeAdvances(),

@@ -154,7 +154,7 @@ export function AppShell() {
           >
             <Menu className="size-5" />
           </button>
-          <div className="size-6 shrink-0 rounded-[7px] bg-emphasis/90" />
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-emphasis/90 font-heading text-[11px] font-extrabold text-emphasis-foreground">Д</div>
           <div className="font-heading text-[14px] font-extrabold tracking-tight">Дизайн · CRM</div>
         </div>
 

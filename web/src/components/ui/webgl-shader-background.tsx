@@ -27,8 +27,13 @@ void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
 
   float t = uTime * 0.06;
-  vec2 center = vec2(sin(t * 0.7) * 0.3, -0.85 + sin(t * 0.5) * 0.08);
-  float radius = 1.05 + sin(t * 0.9) * 0.05;
+  // Anchored higher than before (was -0.85) — the brightest part of the arc
+  // used to land in the empty lower half of short pages (Задачи, Клиенты,
+  // Планирование), reading as "page didn't finish loading" rather than
+  // ambient light. Keeping it near the top/header band, where there's
+  // always real content, means short pages stay calm below the fold.
+  vec2 center = vec2(sin(t * 0.7) * 0.3, -0.45 + sin(t * 0.5) * 0.08);
+  float radius = 1.0 + sin(t * 0.9) * 0.05;
 
   float glow = arcGlow(uv, center, radius, 0.0045);
   float glowWide = arcGlow(uv, center, radius, 0.04) * 0.28;

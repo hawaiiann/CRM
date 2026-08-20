@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, X } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -35,33 +35,49 @@ export function BoardFormDialog({
   const [title, setTitle] = useState("")
   const [quarter, setQuarter] = useState("")
   const [deadline, setDeadline] = useState("")
-  const [startNum, setStartNum] = useState(1)
-  const [count, setCount] = useState(24)
+  const [lessonNums, setLessonNums] = useState<number[]>([])
+  const [rangeFrom, setRangeFrom] = useState(1)
+  const [rangeTo, setRangeTo] = useState(24)
   const [template, setTemplate] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) return
     if (board) {
+      const nums = board.lessons.map((l) => l.num).sort((a, b) => a - b)
       setSubject(board.subject || "")
       setTitle(board.title || "")
       setQuarter(board.quarter || "")
       setDeadline(board.deadline || "")
-      setStartNum(board.lessons[0]?.num || 1)
-      setCount(board.lessons.length || 24)
+      setLessonNums(nums)
+      setRangeFrom((nums[nums.length - 1] || 0) + 1)
+      setRangeTo((nums[nums.length - 1] || 0) + 8)
       setTemplate(board.baseTemplate?.length ? [...board.baseTemplate] : ["Презентация", "Рабочий лист"])
     } else {
       setSubject(appSettings.subjects[0] || "Математика")
       setTitle(appSettings.classes[0] || "5 класс")
       setQuarter("1 четверть")
       setDeadline("")
-      setStartNum(1)
-      setCount(24)
+      setLessonNums(Array.from({ length: 24 }, (_, i) => i + 1))
+      setRangeFrom(25)
+      setRangeTo(32)
       setTemplate(["Презентация", "Рабочий лист"])
     }
   }, [open, board, appSettings.subjects, appSettings.classes])
 
+  function addRange() {
+    const from = Math.max(1, Math.min(rangeFrom, rangeTo))
+    const to = Math.max(rangeFrom, rangeTo)
+    const nums = new Set(lessonNums)
+    for (let n = from; n <= to; n++) nums.add(n)
+    setLessonNums([...nums].sort((a, b) => a - b))
+  }
+  function removeLessonNum(n: number) {
+    setLessonNums((prev) => prev.filter((x) => x !== n))
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (lessonNums.length === 0) { alert("Добавьте хотя бы один урок — укажите диапазон и нажмите «Добавить диапазон»."); return }
     const templateItems = template.map((s) => s.trim()).filter(Boolean)
 
     const nextSettings = { ...appSettings }
@@ -76,20 +92,17 @@ export function BoardFormDialog({
           if (b.id !== board.id) return b
           const oldTemplate = b.baseTemplate || []
           const removedItems = oldTemplate.filter((old) => !templateItems.some((t) => t.toLowerCase() === old.toLowerCase()))
-          let lessons = b.lessons
-          if (lessons.length !== count) {
-            if (count > lessons.length) {
-              const addCount = count - lessons.length
-              const maxNum = lessons.reduce((m, l) => Math.max(m, l.num || 0), startNum - 1)
-              const added: PlanningLesson[] = Array.from({ length: addCount }, (_, i) => ({
-                id: randId("l"), num: maxNum + 1 + i, title: `Урок ${maxNum + 1 + i}`, color: "gray",
-                items: templateItems.map((t) => ({ id: randId("i"), text: t, done: false })), colorLocked: false, orderLinked: false, notes: "",
-              }))
-              lessons = [...lessons, ...added]
-            } else {
-              lessons = lessons.slice(0, count)
-            }
-          }
+          // Точечный diff по номерам уроков: уроки, чей номер остался в lessonNums,
+          // сохраняют id/прогресс; убранные номера удаляются; новые номера создаются с нуля.
+          const keepSet = new Set(lessonNums)
+          let lessons = b.lessons.filter((l) => keepSet.has(l.num))
+          const existingNums = new Set(lessons.map((l) => l.num))
+          const addedNums = lessonNums.filter((n) => !existingNums.has(n))
+          const added: PlanningLesson[] = addedNums.map((n) => ({
+            id: randId("l"), num: n, title: `Урок ${n}`, color: "gray",
+            items: templateItems.map((t) => ({ id: randId("i"), text: t, done: false })), colorLocked: false, orderLinked: false, notes: "",
+          }))
+          lessons = [...lessons, ...added].sort((a, c) => a.num - c.num)
           lessons = lessons.map((l) => {
             let items = (l.items || []).filter((item) => !removedItems.some((rem) => rem.toLowerCase() === item.text.trim().toLowerCase()))
             templateItems.forEach((t) => {
@@ -101,8 +114,8 @@ export function BoardFormDialog({
         })
       )
     } else {
-      const lessons: PlanningLesson[] = Array.from({ length: count }, (_, i) => ({
-        id: randId("l"), num: startNum + i, title: `Урок ${startNum + i}`, color: "gray",
+      const lessons: PlanningLesson[] = lessonNums.map((n) => ({
+        id: randId("l"), num: n, title: `Урок ${n}`, color: "gray",
         items: templateItems.map((t) => ({ id: randId("i"), text: t, done: false })), colorLocked: false, orderLinked: false, notes: "",
       }))
       const newBoard: PlanningBoard = { id: randId("pb"), subject, title, quarter, deadline, baseTemplate: templateItems, collapsed: false, archived: false, lessons }
@@ -130,20 +143,47 @@ export function BoardFormDialog({
               <datalist id="board-classes-list">{appSettings.classes.map((c) => <option key={c} value={c} />)}</datalist>
             </Field>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Четверть">
               <Input value={quarter} onChange={(e) => setQuarter(e.target.value)} placeholder="1 четверть" />
             </Field>
-            <Field label="Старт. № урока">
-              <Input type="number" min={1} value={startNum} onChange={(e) => setStartNum(parseInt(e.target.value) || 1)} required />
-            </Field>
-            <Field label="Кол-во уроков">
-              <Input type="number" min={1} value={count} onChange={(e) => setCount(parseInt(e.target.value) || 1)} required />
+            <Field label="Дедлайн класса">
+              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </Field>
           </div>
-          <Field label="Дедлайн класса">
-            <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-          </Field>
+
+          <div>
+            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Уроки класса</Label>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-muted-foreground">От</span>
+                <Input type="number" min={1} value={rangeFrom} onChange={(e) => setRangeFrom(parseInt(e.target.value) || 1)} className="w-20" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-muted-foreground">До</span>
+                <Input type="number" min={1} value={rangeTo} onChange={(e) => setRangeTo(parseInt(e.target.value) || 1)} className="w-20" />
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addRange}>
+                <Plus />Добавить диапазон
+              </Button>
+            </div>
+
+            {lessonNums.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {lessonNums.map((n) => (
+                  <span key={n} className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pr-1 pl-2.5 text-[12px] font-bold">
+                    {n}
+                    <button type="button" onClick={() => removeLessonNum(n)} className="flex size-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              {lessonNums.length} {lessonNums.length === 1 ? "урок" : "уроков"} в классе. Уже существующие уроки сохранят прогресс, если их номер остаётся в списке — уберите крестиком только те, что нужно удалить.
+            </div>
+          </div>
           <div>
             <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Базовое наполнение уроков</Label>
             <div className="flex flex-col gap-1.5">

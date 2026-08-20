@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Search,
   Plus,
@@ -86,6 +86,8 @@ export function OrdersPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [duplicateFrom, setDuplicateFrom] = useState<Order | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null)
+  const [pageSize, setPageSize] = useState(10)
+  const [page, setPage] = useState(0)
 
   function openNewOrder() {
     setEditingOrder(null)
@@ -137,6 +139,17 @@ export function OrdersPage() {
   const visibleArchived = useMemo(() => archived.filter(matchesSearch), [archived, q])
 
   const totalRows = active.length + archived.length
+
+  useEffect(() => {
+    setPage(0)
+  }, [filter, q, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(visibleActive.length / pageSize))
+  const currentPage = Math.min(page, totalPages - 1)
+  const pagedActive = useMemo(
+    () => visibleActive.slice(currentPage * pageSize, currentPage * pageSize + pageSize),
+    [visibleActive, currentPage, pageSize]
+  )
 
   function toggleRow(id: string, checked: boolean) {
     setSelected((prev) => {
@@ -337,7 +350,7 @@ export function OrdersPage() {
             {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
           </div>
         )}
-        {visibleActive.map(({ order, pay, overdue }) => (
+        {pagedActive.map(({ order, pay, overdue }) => (
           <OrderCard
             key={order.id}
             order={order}
@@ -415,12 +428,12 @@ export function OrdersPage() {
                 />
               </TableHead>
               <TableHead className="px-3">Заказ</TableHead>
-              {showClass && <TableHead className="px-3">Класс / предмет</TableHead>}
-              {showClient && <TableHead className="px-3">Клиент</TableHead>}
-              <TableHead className="px-3">Срок сдачи</TableHead>
-              <TableHead className="px-3">Статус</TableHead>
-              <TableHead className="px-3 text-right">Сумма</TableHead>
-              {showDue && <TableHead className="px-3 text-right">К доплате</TableHead>}
+              {showClass && <TableHead className="px-4">Класс / предмет</TableHead>}
+              {showClient && <TableHead className="px-4">Клиент</TableHead>}
+              <TableHead className="px-4">Срок сдачи</TableHead>
+              <TableHead className="px-4">Статус</TableHead>
+              <TableHead className="px-4 text-right">Сумма</TableHead>
+              {showDue && <TableHead className="px-4 text-right">К доплате</TableHead>}
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -432,7 +445,7 @@ export function OrdersPage() {
                 </TableCell>
               </TableRow>
             )}
-            {visibleActive.map(({ order, pay, overdue }) => (
+            {pagedActive.map(({ order, pay, overdue }) => (
               <OrderRow
                 key={order.id}
                 order={order}
@@ -516,7 +529,7 @@ export function OrdersPage() {
         <div className="flex items-center gap-5.5">
           <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
             <span>Строк на странице</span>
-            <Select defaultValue="10">
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
               <SelectTrigger size="sm" className="w-[68px]">
                 <SelectValue />
               </SelectTrigger>
@@ -527,18 +540,18 @@ export function OrdersPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="text-[12.5px] font-bold">Страница 1 из 1</div>
+          <div className="text-[12.5px] font-bold">Страница {currentPage + 1} из {totalPages}</div>
           <div className="flex gap-1.5">
-            <Button variant="outline" size="icon-sm" disabled>
+            <Button variant="outline" size="icon-sm" disabled={currentPage === 0} onClick={() => setPage(0)}>
               <ChevronsLeft />
             </Button>
-            <Button variant="outline" size="icon-sm" disabled>
+            <Button variant="outline" size="icon-sm" disabled={currentPage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
               <ChevronLeft />
             </Button>
-            <Button variant="outline" size="icon-sm" disabled>
+            <Button variant="outline" size="icon-sm" disabled={currentPage >= totalPages - 1} onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}>
               <ChevronRight />
             </Button>
-            <Button variant="outline" size="icon-sm" disabled>
+            <Button variant="outline" size="icon-sm" disabled={currentPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
               <ChevronsRight />
             </Button>
           </div>
@@ -656,7 +669,7 @@ function OrderRow({
         <Checkbox checked={checked} onCheckedChange={(c) => onCheckedChange(!!c)} />
       </TableCell>
       <TableCell className="min-w-0 whitespace-normal px-3">
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 max-w-[340px] items-center gap-1.5">
           <OrderTimerButton order={order} />
           <button
             type="button"
@@ -670,14 +683,14 @@ function OrderRow({
         </div>
       </TableCell>
       {showClass && (
-        <TableCell className="min-w-0 px-3 text-[12.5px] text-muted-foreground">
+        <TableCell className="min-w-0 px-4 text-[12.5px] text-muted-foreground">
           {(order.subject || order.grade) ? (
             <span className="block truncate">{[order.subject, order.grade].filter(Boolean).join(" · ")}</span>
           ) : "—"}
         </TableCell>
       )}
       {showClient && (
-        <TableCell className="min-w-0 px-3">
+        <TableCell className="min-w-0 px-4">
           {order.client ? (
             <span className="flex min-w-0 items-center gap-1.5">
               <Avatar className="size-4.5 shrink-0">
@@ -690,19 +703,19 @@ function OrderRow({
           ) : <span className="text-[12.5px] text-muted-foreground">—</span>}
         </TableCell>
       )}
-      <TableCell className={cn("px-3 text-[12.5px]", overdue ? "font-bold text-destructive" : "text-muted-foreground")}>
+      <TableCell className={cn("px-4 text-[12.5px]", overdue ? "font-bold text-destructive" : "text-muted-foreground")}>
         {fmtDeadline(order.deadline)}
       </TableCell>
-      <TableCell className="px-3">
+      <TableCell className="px-4">
         <StatusBadge status={order.status} />
       </TableCell>
-      <TableCell className={cn("px-3 text-right font-heading text-[13px] font-bold tabular-nums", muted && "text-muted-foreground")}>
+      <TableCell className={cn("px-4 text-right font-heading text-[13px] font-bold tabular-nums", muted && "text-muted-foreground")}>
         {fmtMoney(sum)}
       </TableCell>
       {showDue && (
         <TableCell
           className={cn(
-            "px-3 text-right font-heading text-[13px] font-bold tabular-nums",
+            "px-4 text-right font-heading text-[13px] font-bold tabular-nums",
             due === 0 && "text-muted-foreground font-semibold"
           )}
         >

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { Plus, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
@@ -33,6 +33,7 @@ import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
+import { PaginationBar } from "@/components/ui/pagination-bar"
 import type { Order } from "@/types/models"
 
 type SortMode = "default" | "status" | "price_desc" | "price_asc" | "pending_desc" | "adv_desc"
@@ -65,6 +66,10 @@ export function FinancePage() {
 
   const [sort, setSort] = useState<SortMode>("default")
   const [depositOpen, setDepositOpen] = useState(false)
+  const [finPage, setFinPage] = useState(0)
+  const [finPageSize, setFinPageSize] = useState(10)
+  const [advPage, setAdvPage] = useState(0)
+  const [advPageSize, setAdvPageSize] = useState(10)
 
   const totals = useMemo(() => {
     let totalRevenue = 0, totalNet = 0, totalPending = 0
@@ -88,6 +93,22 @@ export function FinancePage() {
   }, [orders, advances])
 
   const finList = useMemo(() => sortedFinanceList(orders, sort), [orders, sort])
+
+  useEffect(() => { setFinPage(0) }, [sort, finPageSize])
+  const finTotalPages = Math.max(1, Math.ceil(finList.length / finPageSize))
+  const finCurrentPage = Math.min(finPage, finTotalPages - 1)
+  const pagedFinList = useMemo(
+    () => finList.slice(finCurrentPage * finPageSize, finCurrentPage * finPageSize + finPageSize),
+    [finList, finCurrentPage, finPageSize]
+  )
+
+  useEffect(() => { setAdvPage(0) }, [advPageSize])
+  const advTotalPages = Math.max(1, Math.ceil(advances.length / advPageSize))
+  const advCurrentPage = Math.min(advPage, advTotalPages - 1)
+  const pagedAdvances = useMemo(
+    () => advances.slice(advCurrentPage * advPageSize, advCurrentPage * advPageSize + advPageSize),
+    [advances, advCurrentPage, advPageSize]
+  )
 
   function togglePayment(o: Order) {
     const pay = orderPaymentState(o)
@@ -184,7 +205,7 @@ export function FinancePage() {
             {/* mobile — stacked cards */}
             <div className="flex flex-col gap-2.5 sm:hidden">
               {finList.length === 0 && <div className="py-8 text-center text-muted-foreground">Нет данных</div>}
-              {finList.map((o) => {
+              {pagedFinList.map((o) => {
                 const base = orderBaseTotal(o)
                 const full = orderTotal(o)
                 const tax = full - base
@@ -247,7 +268,7 @@ export function FinancePage() {
                   {finList.length === 0 && (
                     <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">Нет данных</TableCell></TableRow>
                   )}
-                  {finList.map((o) => {
+                  {pagedFinList.map((o) => {
                     const base = orderBaseTotal(o)
                     const full = orderTotal(o)
                     const tax = full - base
@@ -269,6 +290,12 @@ export function FinancePage() {
                 </TableBody>
               </table>
             </div>
+
+            {finList.length > 0 && (
+              <div className="mt-3.5 border-t border-border pt-3.5">
+                <PaginationBar page={finCurrentPage} pageSize={finPageSize} totalItems={finList.length} onPageChange={setFinPage} onPageSizeChange={setFinPageSize} />
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -279,7 +306,7 @@ export function FinancePage() {
             {/* mobile — stacked cards */}
             <div className="flex flex-col gap-2.5 sm:hidden">
               {advances.length === 0 && <div className="py-8 text-center text-muted-foreground">Авансы ещё не вносились</div>}
-              {advances.map((a) => {
+              {pagedAdvances.map((a) => {
                 const stats = getClientAdvanceStats(a.client, advances, orders)
                 return (
                   <div key={a.id} className="rounded-xl bg-muted/60 p-3.5">
@@ -326,7 +353,7 @@ export function FinancePage() {
                   {advances.length === 0 && (
                     <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">Авансы ещё не вносились</TableCell></TableRow>
                   )}
-                  {advances.map((a) => {
+                  {pagedAdvances.map((a) => {
                     const stats = getClientAdvanceStats(a.client, advances, orders)
                     return (
                       <TableRow key={a.id}>
@@ -345,6 +372,12 @@ export function FinancePage() {
                 </TableBody>
               </table>
             </div>
+
+            {advances.length > 0 && (
+              <div className="mt-3.5 border-t border-border pt-3.5">
+                <PaginationBar page={advCurrentPage} pageSize={advPageSize} totalItems={advances.length} onPageChange={setAdvPage} onPageSizeChange={setAdvPageSize} />
+              </div>
+            )}
           </div>
         </TabsContent>
 
