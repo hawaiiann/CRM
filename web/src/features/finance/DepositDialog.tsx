@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { parseNum, dateKey } from "@/lib/money"
@@ -66,7 +67,7 @@ export function DepositDialog({
           <div>
             <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Заказчик / клиент</Label>
             <Input list="deposit-clients-list" value={client} onChange={(e) => setClient(e.target.value)} required placeholder="Выберите или впишите клиента..." />
-            <datalist id="deposit-clients-list">{appSettings.clients.map((c) => <option key={c} value={c} />)}</datalist>
+            <datalist id="deposit-clients-list">{catalogWithCurrent(appSettings, "clients", client).map((c) => <option key={c} value={c} />)}</datalist>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

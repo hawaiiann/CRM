@@ -19,6 +19,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
+import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder } from "@/lib/cloudSync"
 import { recordActivityChanges } from "@/lib/activity"
@@ -91,7 +92,7 @@ export function OrderFormDialog({
   const setActivityLog = useAppStore((s) => s.setActivityLog)
   const setAppSettings = useAppStore((s) => s.setAppSettings)
 
-  const defaults = { type: appSettings.types[0] || "Презентация", unit: appSettings.units[0] || "Слайд" }
+  const defaults = { type: getVisibleCatalog(appSettings, "types")[0] || "Презентация", unit: getVisibleCatalog(appSettings, "units")[0] || "Слайд" }
   const [draft, setDraft] = useState<Order>(() => emptyDraft(defaults))
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -277,7 +278,7 @@ export function OrderFormDialog({
               <Field label="Клиент / заказчик">
                 <Input list="clients-list" value={draft.client} onChange={(e) => setDraft((d) => ({ ...d, client: e.target.value }))} placeholder="Введите или выберите..." />
                 <datalist id="clients-list">
-                  {appSettings.clients.map((c) => <option key={c} value={c} />)}
+                  {catalogWithCurrent(appSettings, "clients", draft.client).map((c) => <option key={c} value={c} />)}
                 </datalist>
               </Field>
               <Field label={<div className="flex items-center justify-between"><span>Статус</span>
@@ -298,11 +299,11 @@ export function OrderFormDialog({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Предмет">
                 <Input list="subjects-list" value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} />
-                <datalist id="subjects-list">{appSettings.subjects.map((s) => <option key={s} value={s} />)}</datalist>
+                <datalist id="subjects-list">{catalogWithCurrent(appSettings, "subjects", draft.subject).map((s) => <option key={s} value={s} />)}</datalist>
               </Field>
               <Field label="Класс">
                 <Input list="classes-list" value={draft.grade} onChange={(e) => setDraft((d) => ({ ...d, grade: e.target.value }))} />
-                <datalist id="classes-list">{appSettings.classes.map((c) => <option key={c} value={c} />)}</datalist>
+                <datalist id="classes-list">{catalogWithCurrent(appSettings, "classes", draft.grade).map((c) => <option key={c} value={c} />)}</datalist>
               </Field>
               <Field label="Четверть">
                 <Input value={draft.quarter} onChange={(e) => setDraft((d) => ({ ...d, quarter: e.target.value }))} placeholder="1 четверть" />
@@ -467,8 +468,8 @@ export function OrderFormDialog({
                   </div>
                 ))}
               </div>
-              <datalist id="types-list">{appSettings.types.map((t) => <option key={t} value={t} />)}</datalist>
-              <datalist id="units-list">{appSettings.units.map((u) => <option key={u} value={u} />)}</datalist>
+              <datalist id="types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
+              <datalist id="units-list">{getVisibleCatalog(appSettings, "units").map((u) => <option key={u} value={u} />)}</datalist>
 
               <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addLine}><Plus />Добавить позицию</Button>
 

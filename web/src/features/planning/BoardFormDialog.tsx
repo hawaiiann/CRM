@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
@@ -53,8 +54,8 @@ export function BoardFormDialog({
       setRangeTo((nums[nums.length - 1] || 0) + 8)
       setTemplate(board.baseTemplate?.length ? [...board.baseTemplate] : ["Презентация", "Рабочий лист"])
     } else {
-      setSubject(appSettings.subjects[0] || "Математика")
-      setTitle(appSettings.classes[0] || "5 класс")
+      setSubject(getVisibleCatalog(appSettings, "subjects")[0] || "Математика")
+      setTitle(getVisibleCatalog(appSettings, "classes")[0] || "5 класс")
       setQuarter("1 четверть")
       setDeadline("")
       setLessonNums(Array.from({ length: 24 }, (_, i) => i + 1))
@@ -136,11 +137,11 @@ export function BoardFormDialog({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Предмет">
               <Input list="board-subjects-list" value={subject} onChange={(e) => setSubject(e.target.value)} required />
-              <datalist id="board-subjects-list">{appSettings.subjects.map((s) => <option key={s} value={s} />)}</datalist>
+              <datalist id="board-subjects-list">{catalogWithCurrent(appSettings, "subjects", subject).map((s) => <option key={s} value={s} />)}</datalist>
             </Field>
             <Field label="Класс">
               <Input list="board-classes-list" value={title} onChange={(e) => setTitle(e.target.value)} required />
-              <datalist id="board-classes-list">{appSettings.classes.map((c) => <option key={c} value={c} />)}</datalist>
+              <datalist id="board-classes-list">{catalogWithCurrent(appSettings, "classes", title).map((c) => <option key={c} value={c} />)}</datalist>
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -201,7 +202,7 @@ export function BoardFormDialog({
                 </div>
               ))}
             </div>
-            <datalist id="board-types-list">{appSettings.types.map((t) => <option key={t} value={t} />)}</datalist>
+            <datalist id="board-types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setTemplate((prev) => [...prev, ""])}>
               <Plus />Добавить материал
             </Button>

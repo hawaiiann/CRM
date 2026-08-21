@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getVisibleCatalog } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { parseNum } from "@/lib/money"
@@ -108,8 +109,8 @@ export function TemplateEditorDialog({
                 </div>
               ))}
             </div>
-            <datalist id="tpl-types-list">{appSettings.types.map((t) => <option key={t} value={t} />)}</datalist>
-            <datalist id="tpl-units-list">{appSettings.units.map((u) => <option key={u} value={u} />)}</datalist>
+            <datalist id="tpl-types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
+            <datalist id="tpl-units-list">{getVisibleCatalog(appSettings, "units").map((u) => <option key={u} value={u} />)}</datalist>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setLines((prev) => [...prev, { id: randId("tl"), label: "", type: "", qty: 1, rate: 0 }])}>
               <Plus />Добавить позицию
             </Button>
