@@ -297,8 +297,14 @@ async function pruneOldBackups(dir) {
   try {
     for await (const entry of dir.values()) {
       if (entry.kind !== 'file') continue;
-      const m = /^crm-.+-(\d{4}-\d{2}-\d{2})(?:-.*)?\.json$/.exec(entry.name);
-      if (m && m[1] < cutoffKey) { try { await dir.removeEntry(entry.name); } catch (e) {} }
+      // Шаблон намеренно строгий. Широкий вариант сносил бы и ручные выгрузки
+      // crm-backup-<дата>.json (в том числе файл от 18.08.2026 с единственной
+      // уцелевшей историей часов), и аварийные «-ВНИМАНИЕ-данных-меньше-» —
+      // то есть ровно те, что нужны дольше всех. Автоочистка, стирающая
+      // невосстановимое, хуже, чем её отсутствие.
+      if (entry.name.indexOf('crm-backup-') === 0) continue;
+      const m = /^crm-(.+)-(\d{4}-\d{2}-\d{2})\.json$/.exec(entry.name);
+      if (m && m[2] < cutoffKey) { try { await dir.removeEntry(entry.name); } catch (e) {} }
     }
   } catch (e) { /* перебор недоступен — чистка не критична */ }
 }

@@ -212,31 +212,7 @@ function purgeObsoleteJournalFields() {
 // записей в день, ~60 000 в год. При этом ничто в приложении не читает журнал детальнее,
 // чем "сколько часов за день по заказу" (отчёт по времени, js/finance.js) — поминутная
 // точность нигде не используется. Схлопываем записи одного поля 'hours' с одинаковыми
-// (дата, заказ) в одну, суммируя дельты: количество данных то же самое, записей — на
-// порядки меньше. Вызывается при каждой загрузке — идемпотентно, повторный запуск схлопывать
-// уже нечего (compactHoursJournal вернёт 0).
-function compactHoursJournal() {
-  const compacted = [];
-  const indexByKey = {};
-  let merged = 0;
-  activityLog.forEach(e => {
-    if (e.field !== 'hours') { compacted.push(e); return; }
-    const key = e.date + '|' + (e.orderId || '');
-    if (indexByKey[key] !== undefined) {
-      const target = compacted[indexByKey[key]];
-      target.delta = Math.round((target.delta + e.delta) * 10000) / 10000;
-      merged++;
-    } else {
-      indexByKey[key] = compacted.length;
-      // entryId сбрасываем: если запись уже была отправлена в облако с меньшей суммой,
-      // а после слияния сумма выросла, её нужно переслать заново, а не считать "уже
-      // отправленной" по старому entryId (см. вызов в loadData — там же чистим и облако).
-      compacted.push({ ...e, entryId: undefined });
-    }
-  });
-  if (merged) activityLog = compacted;
-  return merged;
-}
+// Схлопывание журнала часов удалено — см. комментарий в loadFromLocalStorage.
 
 // Старая логика чтения из localStorage — теперь только аварийный фолбэк на случай,
 // если Supabase недоступен (нет сети и т.п.), чтобы приложением можно было пользоваться офлайн.
@@ -266,7 +242,11 @@ function loadFromLocalStorageFallback() {
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY);
   activityLog = rawLog ? JSON.parse(rawLog) : [];
   purgeObsoleteJournalFields();
-  compactHoursJournal(); // офлайн-фолбэк — сжимаем только локально, в облако писать некуда
+  // Схлопывание убрано и отсюда: оно обнуляет entryId у объединённых записей, а
+  // отправка в облако считает такие записи неотправленными и зальёт их поверх
+  // уже лежащих там оригиналов — часы задвоятся. Раньше это прикрывалось сносом
+  // всех записей 'hours' из облака, но именно тот снос 20.08.2026 уничтожил
+  // журнал, так что возвращать его нельзя.
   seedActivityLogIfEmpty();
 
   syncPlanningWithOrders();

@@ -4,7 +4,7 @@
 import { useAppStore } from "@/store/useAppStore"
 import { BACKUP_CFG_KEY } from "./storageKeys"
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase"
-import { getKnownAccounts, updateAccountTokens } from "./accountSwitcher"
+import { getKnownAccounts } from "./accountSwitcher"
 
 const BACKUP_HANDLE_DB = "design_crm_dirhandle_db"
 const BACKUP_HANDLE_STORE = "handles"
@@ -138,8 +138,16 @@ async function readBackupFile(dir: FileSystemDirectoryHandle, name: string): Pro
   }
 }
 
-// Удаляет свои же файлы старше RETENTION_DAYS. Трогает только имена вида
-// crm-<аккаунт>-<дата>.json — чужие файлы в папке не затрагиваются.
+// Удаляет старые ДНЕВНЫЕ автобэкапы. Всё остальное не трогает — и это критично.
+//
+// Прежний шаблон /^crm-.+-(дата)(-.*)?\.json$/ был слишком широким и сносил бы:
+//   • ручные выгрузки crm-backup-<дата>.json — включая файл от 18.08.2026 с
+//     единственной уцелевшей историей часов;
+//   • аварийные файлы «-ВНИМАНИЕ-данных-меньше-» — то есть ровно те, что
+//     сигнализируют о потере данных и нужны дольше всех.
+// Автоочистка, стирающая невосстановимое, хуже, чем её отсутствие: удаляем
+// только точное совпадение «crm-<аккаунт>-<дата>.json», без суффиксов, и
+// отдельно исключаем префикс crm-backup-.
 async function pruneOldBackups(dir: FileSystemDirectoryHandle) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - RETENTION_DAYS)
@@ -147,8 +155,10 @@ async function pruneOldBackups(dir: FileSystemDirectoryHandle) {
   try {
     for await (const entry of (dir as any).values()) {
       if (entry.kind !== "file") continue
-      const m = /^crm-.+-(\d{4}-\d{2}-\d{2})(?:-.*)?\.json$/.exec(entry.name)
-      if (m && m[1] < cutoffKey) {
+      if (entry.name.startsWith("crm-backup-")) continue // ручная выгрузка — не наша
+      const m = /^crm-(.+)-(\d{4}-\d{2}-\d{2})\.json$/.exec(entry.name)
+      if (!m) continue // с суффиксом (в т.ч. «ВНИМАНИЕ») — не трогаем никогда
+      if (m[2] < cutoffKey) {
         try { await (dir as any).removeEntry(entry.name) } catch { /* файл занят — не беда */ }
       }
     }
@@ -248,36 +258,22 @@ async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
     const slug = accountSlug(acc.email, userId)
     const name = `crm-${slug}-${dayKey()}.json`
 
-    // access_token живёт около часа, поэтому одного сохранённого токена мало:
-    // без обновления бэкап чужого аккаунта переставал работать через час после
-    // последнего входа в него на этой машине. Держим токен в переменной и по
-    // первому 401 меняем его на свежий через refresh_token.
-    let token = acc.access_token
-    let refreshed = false
-    const refresh = async (): Promise<boolean> => {
-      if (refreshed || !acc.refresh_token) return false
-      refreshed = true
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-        method: "POST",
-        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: acc.refresh_token }),
-      })
-      if (!r.ok) return false
-      const s = await r.json()
-      if (!s?.access_token) return false
-      token = s.access_token
-      // Новые токены сразу кладём обратно: refresh_token одноразовый, и если
-      // его не сохранить, следующее обновление уже не пройдёт.
-      updateAccountTokens(userId, s.access_token, s.refresh_token || acc.refresh_token)
-      return true
-    }
-
+    // ЗДЕСЬ НЕЛЬЗЯ ОБНОВЛЯТЬ ТОКЕН. Раньше по 401 вызывался refresh_token, и это
+    // было опасно: refresh_token одноразовый и общий с сессией самого владельца
+    // аккаунта. Обновив его здесь, мы отбираем сессию у человека, который прямо
+    // сейчас работает под этим аккаунтом на другом компьютере, — его просто
+    // выкидывает из приложения. Проверено на живой связке: ровно так сломался
+    // бэкап по refresh_token, когда браузер и скрипт делили один токен.
+    //
+    // Поэтому берём только уже сохранённый access_token. Он живёт около часа,
+    // так что чужой аккаунт снимется, если в него недавно заходили на этой
+    // машине, а если нет — молча пропустится. Пропущенный бэкап чужого аккаунта
+    // не страшен: свой у каждой машины снимается всегда.
     const grab = async (table: string): Promise<any> => {
-      const call = () => fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
-        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + token },
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token },
       })
-      let r = await call()
-      if (r.status === 401 && await refresh()) r = await call()
+      if (r.status === 401) throw new Error("токен устарел — аккаунт пропущен (сессию владельца не трогаем)")
       if (!r.ok) throw new Error(`${table}: HTTP ${r.status}`)
       return r.json()
     }

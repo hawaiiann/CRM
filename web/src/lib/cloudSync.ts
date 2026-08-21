@@ -565,24 +565,13 @@ function purgeObsoleteJournalFields(activityLog: ActivityLogEntry[]): { log: Act
   return { log, purged: before - log.length }
 }
 
-function compactHoursJournal(activityLog: ActivityLogEntry[]): { log: ActivityLogEntry[]; merged: number } {
-  const compacted: ActivityLogEntry[] = []
-  const indexByKey: Record<string, number> = {}
-  let merged = 0
-  activityLog.forEach((e) => {
-    if (e.field !== "hours") { compacted.push(e); return }
-    const key = e.date + "|" + (e.orderId || "")
-    if (indexByKey[key] !== undefined) {
-      const target = compacted[indexByKey[key]]
-      target.delta = Math.round((target.delta + e.delta) * 10000) / 10000
-      merged++
-    } else {
-      indexByKey[key] = compacted.length
-      compacted.push({ ...e, entryId: undefined })
-    }
-  })
-  return { log: merged ? compacted : activityLog, merged }
-}
+// Схлопывание журнала часов удалено целиком. Оно обнуляло entryId у объединённых
+// записей, а syncActivityLog считает записи без entryId неотправленными — когда
+// облако снова становилось доступно, они уезжали туда как новые поверх уже
+// лежащих оригиналов, и часы задваивались. Раньше это прикрывалось сносом всех
+// записей 'hours' из облака, но именно тот снос 20.08.2026 уничтожил журнал
+// (45 настоящих записей), так что возвращать его нельзя. Само схлопывание было
+// косметикой — те же данные, просто меньше строк.
 
 // migratePaidFlagToAmount + migratePaidAmountToPayments folded into one step —
 // same two-stage history as db.js, applied to a fresh orders array.
@@ -690,7 +679,6 @@ function loadFromLocalStorageFallback() {
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY)
   let activityLog: ActivityLogEntry[] = rawLog ? JSON.parse(rawLog) : []
   activityLog = purgeObsoleteJournalFields(activityLog).log
-  activityLog = compactHoursJournal(activityLog).log // офлайн — сжимаем только локально
   activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog)
 
   store.setAppSettings(settings)
