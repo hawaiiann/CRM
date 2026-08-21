@@ -75,6 +75,15 @@ const PERIOD_LABELS: Record<PeriodFilter, string> = {
   year: "Этот год",
 }
 
+type AdvSort = "date_desc" | "date_asc" | "amount_desc" | "client"
+
+const ADV_SORT_LABELS: Record<AdvSort, string> = {
+  date_desc: "Сначала свежие",
+  date_asc: "Сначала старые",
+  amount_desc: "По сумме: больше сверху",
+  client: "По клиенту (А–Я)",
+}
+
 function orderDateKey(o: Order): string {
   return o.deadline || o.start || ""
 }
@@ -154,6 +163,9 @@ export function FinancePage() {
   const [finPageSize, setFinPageSize] = useState(10)
   const [advPage, setAdvPage] = useState(0)
   const [advPageSize, setAdvPageSize] = useState(10)
+  const [advSearch, setAdvSearch] = useState("")
+  const [advClient, setAdvClient] = useState("all")
+  const [advSort, setAdvSort] = useState<AdvSort>("date_desc")
 
   const totals = useMemo(() => {
     let totalRevenue = 0, totalNet = 0, totalPending = 0
@@ -209,12 +221,37 @@ export function FinancePage() {
     [finList, finCurrentPage, finPageSize]
   )
 
-  useEffect(() => { setAdvPage(0) }, [advPageSize])
-  const advTotalPages = Math.max(1, Math.ceil(advances.length / advPageSize))
+  // В реестре авансов не было ничего: ни поиска, ни сортировки — только
+  // страницы. При десятке поступлений найти нужное можно было лишь листая,
+  // а порядок задавался тем, как записи легли в базу.
+  const advList = useMemo(() => {
+    const q = advSearch.trim().toLowerCase()
+    const list = advances.filter((a) => {
+      if (advClient !== "all" && a.client !== advClient) return false
+      if (q && !`${a.client} ${a.note || ""}`.toLowerCase().includes(q)) return false
+      return true
+    })
+    list.sort((a, b) => {
+      if (advSort === "amount_desc") return parseNum(b.amount) - parseNum(a.amount) || (b.date || "").localeCompare(a.date || "")
+      if (advSort === "client") return (a.client || "").localeCompare(b.client || "", "ru") || (b.date || "").localeCompare(a.date || "")
+      if (advSort === "date_asc") return (a.date || "").localeCompare(b.date || "")
+      return (b.date || "").localeCompare(a.date || "") // date_desc — свежие сверху
+    })
+    return list
+  }, [advances, advSearch, advClient, advSort])
+
+  const advClientOptions = useMemo(
+    () => [...new Set(advances.map((a) => a.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
+    [advances]
+  )
+  const advSum = useMemo(() => advList.reduce((s, a) => s + parseNum(a.amount), 0), [advList])
+
+  useEffect(() => { setAdvPage(0) }, [advPageSize, advSearch, advClient, advSort])
+  const advTotalPages = Math.max(1, Math.ceil(advList.length / advPageSize))
   const advCurrentPage = Math.min(advPage, advTotalPages - 1)
   const pagedAdvances = useMemo(
-    () => advances.slice(advCurrentPage * advPageSize, advCurrentPage * advPageSize + advPageSize),
-    [advances, advCurrentPage, advPageSize]
+    () => advList.slice(advCurrentPage * advPageSize, advCurrentPage * advPageSize + advPageSize),
+    [advList, advCurrentPage, advPageSize]
   )
 
   function togglePayment(o: Order) {
@@ -472,9 +509,39 @@ export function FinancePage() {
           <div className="glass-surface rounded-xl p-4.5">
             <h3 className="text-[15px] font-bold">Реестр полученных авансов и депозитов</h3>
             <div className="mb-3 text-[12px] text-muted-foreground">История поступлений авансов от клиентов и их доступный остаток</div>
+
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Input
+                value={advSearch}
+                onChange={(e) => setAdvSearch(e.target.value)}
+                placeholder="Поиск по клиенту или примечанию..."
+                className="col-span-2 h-9 sm:col-span-1"
+              />
+              <Select value={advClient} onValueChange={setAdvClient}>
+                <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Клиент: любой</SelectItem>
+                  {advClientOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={advSort} onValueChange={(v) => setAdvSort(v as AdvSort)}>
+                <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ADV_SORT_LABELS) as AdvSort[]).map((k) => (
+                    <SelectItem key={k} value={k}>{ADV_SORT_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mb-3 text-[12px] text-muted-foreground">
+              Показано <b className="text-foreground">{advList.length}</b> из {advances.length} · на сумму{" "}
+              <b className="text-foreground">{fmtMoney(advSum)}</b>
+            </div>
+
             {/* mobile — stacked cards */}
             <div className="flex flex-col gap-2.5 sm:hidden">
-              {advances.length === 0 && <div className="py-8 text-center text-muted-foreground">Авансы ещё не вносились</div>}
+              {advList.length === 0 && <div className="py-8 text-center text-muted-foreground">{advances.length ? "Ничего не найдено" : "Авансы ещё не вносились"}</div>}
               {pagedAdvances.map((a) => {
                 const stats = getClientAdvanceStats(a.client, advances, orders)
                 return (
@@ -519,8 +586,8 @@ export function FinancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.length === 0 && (
-                    <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">Авансы ещё не вносились</TableCell></TableRow>
+                  {advList.length === 0 && (
+                    <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">{advances.length ? "Ничего не найдено" : "Авансы ещё не вносились"}</TableCell></TableRow>
                   )}
                   {pagedAdvances.map((a) => {
                     const stats = getClientAdvanceStats(a.client, advances, orders)
@@ -544,7 +611,7 @@ export function FinancePage() {
 
             {advances.length > 0 && (
               <div className="mt-3.5 border-t border-border pt-3.5">
-                <PaginationBar page={advCurrentPage} pageSize={advPageSize} totalItems={advances.length} onPageChange={setAdvPage} onPageSizeChange={setAdvPageSize} />
+                <PaginationBar page={advCurrentPage} pageSize={advPageSize} totalItems={advList.length} onPageChange={setAdvPage} onPageSizeChange={setAdvPageSize} />
               </div>
             )}
           </div>

@@ -19,6 +19,16 @@ import { PaginationBar } from "@/components/ui/pagination-bar"
 
 type SortMode = "name" | "due_desc" | "advance_desc" | "orders_desc"
 
+type StateFilter = "all" | "debt" | "overdue" | "advance" | "active"
+
+const STATE_LABELS: Record<StateFilter, string> = {
+  all: "Состояние: любое",
+  debt: "Есть долг",
+  overdue: "Есть просрочка",
+  advance: "Есть остаток аванса",
+  active: "Есть активные заказы",
+}
+
 export function ClientsPage() {
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
@@ -26,6 +36,7 @@ export function ClientsPage() {
 
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState<SortMode>("name")
+  const [state, setState] = useState<StateFilter>("all")
   const [activeClient, setActiveClient] = useState<string | null>(null)
   const [depositClient, setDepositClient] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -47,15 +58,29 @@ export function ClientsPage() {
     const q = search.trim().toLowerCase()
     if (q) list = list.filter((r) => r.name.toLowerCase().includes(q))
 
+    // Отбор по состоянию. Раньше был только поиск по имени: чтобы понять,
+    // «кто должен» или «у кого кончается аванс», приходилось глазами
+    // просматривать весь список — а бейджи для этого уже считались.
+    if (state === "debt") list = list.filter((r) => r.totalDue > 0)
+    else if (state === "overdue") list = list.filter((r) => r.hasOverdue)
+    else if (state === "advance") list = list.filter((r) => r.available > 0)
+    else if (state === "active") list = list.filter((r) => r.activeCount > 0)
+
     if (sort === "due_desc") list.sort((a, b) => b.totalDue - a.totalDue)
     else if (sort === "advance_desc") list.sort((a, b) => b.available - a.available)
     else if (sort === "orders_desc") list.sort((a, b) => b.activeCount - a.activeCount)
     else list.sort((a, b) => a.name.localeCompare(b.name, "ru"))
+    // Вторичный ключ — имя: без него клиенты с равными суммами (а нулевых
+    // обычно большинство) вставали в произвольном порядке.
+    if (sort !== "name") {
+      const key = sort === "due_desc" ? "totalDue" : sort === "advance_desc" ? "available" : "activeCount"
+      list.sort((a, b) => (b[key] as number) - (a[key] as number) || a.name.localeCompare(b.name, "ru"))
+    }
 
     return list
-  }, [orders, advances, appSettings.clients, search, sort])
+  }, [orders, advances, appSettings.clients, search, sort, state])
 
-  useEffect(() => { setPage(0) }, [search, sort, pageSize])
+  useEffect(() => { setPage(0) }, [search, sort, pageSize, state])
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
   const currentPage = Math.min(page, totalPages - 1)
   const pagedRows = useMemo(
@@ -78,6 +103,17 @@ export function ClientsPage() {
             <SelectItem value="orders_desc">По числу активных заказов</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={state} onValueChange={(v) => setState(v as StateFilter)}>
+          <SelectTrigger size="sm" className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(Object.keys(STATE_LABELS) as StateFilter[]).map((k) => (
+              <SelectItem key={k} value={k}>{STATE_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-[12px] text-muted-foreground">
+          Показано <b className="text-foreground">{rows.length}</b>
+        </span>
       </div>
 
       {/* mobile — stacked cards */}

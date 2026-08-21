@@ -70,12 +70,29 @@ function orderDisplayTitle(o: Order): string {
 
 type StatusFilter = "all" | "progress" | "unpaid" | "overdue"
 
+// Сортировки на этом экране не было вовсе — при десятке заказов порядок
+// определялся тем, в каком они заведены, и найти нужный можно было только
+// глазами. По умолчанию — ближайший срок сверху: это то, чем список
+// открывают чаще всего («что горит»).
+type OrderSort = "deadline_asc" | "deadline_desc" | "debt_desc" | "total_desc" | "client" | "created_desc"
+
+const ORDER_SORT_LABELS: Record<OrderSort, string> = {
+  deadline_asc: "Ближайший срок сверху",
+  deadline_desc: "Дальний срок сверху",
+  debt_desc: "Сначала с долгом",
+  total_desc: "По сумме: больше сверху",
+  client: "По клиенту (А–Я)",
+  created_desc: "Сначала добавленные позже",
+}
+
 export function OrdersPage() {
   const orders = useAppStore((s) => s.orders)
   const setOrders = useAppStore((s) => s.setOrders)
   const [search, setSearch] = useState("")
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>("all")
+  const [sort, setSort] = useState<OrderSort>("deadline_asc")
+  const [clientFilter, setClientFilter] = useState("all")
   const [showClass, setShowClass] = useState(true)
   const [showClient, setShowClient] = useState(true)
   const [showDue, setShowDue] = useState(true)
@@ -135,14 +152,45 @@ export function OrdersPage() {
     return true
   }
 
-  const visibleActive = useMemo(() => active.filter((r) => matchesFilter(r) && matchesSearch(r)), [active, filter, q])
-  const visibleArchived = useMemo(() => archived.filter(matchesSearch), [archived, q])
+  type Row = (typeof rows)[number]
+  const dl = (r: Row) => r.order.deadline || r.order.start || ""
+  function applySort(list: Row[]): Row[] {
+    const out = list.slice()
+    out.sort((a, b) => {
+      let p = 0
+      if (sort === "deadline_asc") p = dl(a).localeCompare(dl(b))
+      else if (sort === "deadline_desc") p = dl(b).localeCompare(dl(a))
+      else if (sort === "debt_desc") p = b.pay.remaining - a.pay.remaining
+      else if (sort === "total_desc") p = b.pay.full - a.pay.full
+      else if (sort === "client") p = (a.order.client || "").localeCompare(b.order.client || "", "ru")
+      else if (sort === "created_desc") p = (b.order.createdAt || 0) - (a.order.createdAt || 0)
+      // Вторичный ключ — срок, иначе равные значения встают случайно.
+      return p !== 0 ? p : dl(a).localeCompare(dl(b))
+    })
+    return out
+  }
+
+  const matchesClient = (r: Row) => clientFilter === "all" || (r.order.client || "") === clientFilter
+
+  const visibleActive = useMemo(
+    () => applySort(active.filter((r) => matchesFilter(r) && matchesSearch(r) && matchesClient(r))),
+    [active, filter, q, sort, clientFilter]
+  )
+  const visibleArchived = useMemo(
+    () => applySort(archived.filter((r) => matchesSearch(r) && matchesClient(r))),
+    [archived, q, sort, clientFilter]
+  )
+
+  const clientOptions = useMemo(
+    () => [...new Set(orders.map((o) => o.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
+    [orders]
+  )
 
   const totalRows = active.length + archived.length
 
   useEffect(() => {
     setPage(0)
-  }, [filter, q, pageSize])
+  }, [filter, q, pageSize, sort, clientFilter])
 
   const totalPages = Math.max(1, Math.ceil(visibleActive.length / pageSize))
   const currentPage = Math.min(page, totalPages - 1)
@@ -310,6 +358,23 @@ export function OrdersPage() {
               </button>
             ))}
           </div>
+          {/* Сортировка и отбор по клиенту. Быстрые виды слева отвечают за
+              «что показать», эти два — за «в каком порядке» и «чьё». */}
+          <Select value={sort} onValueChange={(v) => setSort(v as OrderSort)}>
+            <SelectTrigger size="sm" className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(ORDER_SORT_LABELS) as OrderSort[]).map((k) => (
+                <SelectItem key={k} value={k}>{ORDER_SORT_LABELS[k]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={clientFilter} onValueChange={setClientFilter}>
+            <SelectTrigger size="sm" className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Клиент: любой</SelectItem>
+              {clientOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2">
