@@ -4,7 +4,7 @@
 import { useAppStore } from "@/store/useAppStore"
 import { BACKUP_CFG_KEY } from "./storageKeys"
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase"
-import { getKnownAccounts } from "./accountSwitcher"
+import { getKnownAccounts, updateAccountTokens } from "./accountSwitcher"
 
 const BACKUP_HANDLE_DB = "design_crm_dirhandle_db"
 const BACKUP_HANDLE_STORE = "handles"
@@ -247,9 +247,37 @@ async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
     if (excluded.has(userId)) continue // отключён в настройках (напр. тестовый аккаунт)
     const slug = accountSlug(acc.email, userId)
     const name = `crm-${slug}-${dayKey()}.json`
-    const headers = { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token }
-    const grab = async (table: string) => {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, { headers })
+
+    // access_token живёт около часа, поэтому одного сохранённого токена мало:
+    // без обновления бэкап чужого аккаунта переставал работать через час после
+    // последнего входа в него на этой машине. Держим токен в переменной и по
+    // первому 401 меняем его на свежий через refresh_token.
+    let token = acc.access_token
+    let refreshed = false
+    const refresh = async (): Promise<boolean> => {
+      if (refreshed || !acc.refresh_token) return false
+      refreshed = true
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: acc.refresh_token }),
+      })
+      if (!r.ok) return false
+      const s = await r.json()
+      if (!s?.access_token) return false
+      token = s.access_token
+      // Новые токены сразу кладём обратно: refresh_token одноразовый, и если
+      // его не сохранить, следующее обновление уже не пройдёт.
+      updateAccountTokens(userId, s.access_token, s.refresh_token || acc.refresh_token)
+      return true
+    }
+
+    const grab = async (table: string): Promise<any> => {
+      const call = () => fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + token },
+      })
+      let r = await call()
+      if (r.status === 401 && await refresh()) r = await call()
       if (!r.ok) throw new Error(`${table}: HTTP ${r.status}`)
       return r.json()
     }

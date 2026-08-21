@@ -31,6 +31,16 @@ export function rememberAccount(session: Session) {
   saveKnownAccountsMap(map)
 }
 
+// Обновляет только токены, не трогая остальное. Нужно бэкапу: access_token
+// живёт около часа, и без обновления бэкап чужого аккаунта переставал
+// работать через час после последнего входа в него на этой машине.
+export function updateAccountTokens(userId: string, accessToken: string, refreshToken: string) {
+  const map = getKnownAccounts()
+  if (!map[userId]) return
+  map[userId] = { ...map[userId], access_token: accessToken, refresh_token: refreshToken }
+  saveKnownAccountsMap(map)
+}
+
 export function forgetAccount(userId: string) {
   const map = getKnownAccounts()
   delete map[userId]
