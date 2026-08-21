@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -276,10 +277,7 @@ export function OrderFormDialog({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Клиент / заказчик">
-                <Input list="clients-list" value={draft.client} onChange={(e) => setDraft((d) => ({ ...d, client: e.target.value }))} placeholder="Введите или выберите..." />
-                <datalist id="clients-list">
-                  {catalogWithCurrent(appSettings, "clients", draft.client).map((c) => <option key={c} value={c} />)}
-                </datalist>
+                <ComboInput value={draft.client} onChange={(v) => setDraft((d) => ({ ...d, client: v }))} options={catalogWithCurrent(appSettings, "clients", draft.client)} placeholder="Введите или выберите..." />
               </Field>
               <Field label={<div className="flex items-center justify-between"><span>Статус</span>
                 <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-destructive normal-case">
@@ -298,12 +296,10 @@ export function OrderFormDialog({
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Предмет">
-                <Input list="subjects-list" value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} />
-                <datalist id="subjects-list">{catalogWithCurrent(appSettings, "subjects", draft.subject).map((s) => <option key={s} value={s} />)}</datalist>
+                <ComboInput value={draft.subject} onChange={(v) => setDraft((d) => ({ ...d, subject: v }))} options={catalogWithCurrent(appSettings, "subjects", draft.subject)} />
               </Field>
               <Field label="Класс">
-                <Input list="classes-list" value={draft.grade} onChange={(e) => setDraft((d) => ({ ...d, grade: e.target.value }))} />
-                <datalist id="classes-list">{catalogWithCurrent(appSettings, "classes", draft.grade).map((c) => <option key={c} value={c} />)}</datalist>
+                <ComboInput value={draft.grade} onChange={(v) => setDraft((d) => ({ ...d, grade: v }))} options={catalogWithCurrent(appSettings, "classes", draft.grade)} />
               </Field>
               <Field label="Четверть">
                 <Input value={draft.quarter} onChange={(e) => setDraft((d) => ({ ...d, quarter: e.target.value }))} placeholder="1 четверть" />
@@ -431,8 +427,8 @@ export function OrderFormDialog({
                   <div key={line.id} className="rounded-lg border border-border p-2">
                     {/* desktop / wide dialog — one compact row */}
                     <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[1.3fr_1fr_60px_80px_90px_80px_28px]">
-                      <Input list="types-list" value={line.label} onChange={(e) => updateLine(line.id, { label: e.target.value })} placeholder="Тип" className="h-8" />
-                      <Input list="units-list" value={line.type} onChange={(e) => updateLine(line.id, { type: e.target.value })} placeholder="Ед. изм." className="h-8" />
+                      <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" inputClassName="h-8" />
+                      <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} placeholder="Ед. изм." inputClassName="h-8" />
                       <Input inputMode="decimal" value={line.qty} onChange={(e) => updateLine(line.id, { qty: parseNum(e.target.value) })} className="h-8" />
                       <Input inputMode="decimal" value={line.pomoHours} onChange={(e) => updateLine(line.id, { pomoHours: parseNum(e.target.value) })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
                       <Input inputMode="decimal" value={line.rate} onChange={(e) => updateLine(line.id, { rate: parseNum(e.target.value) })} className="h-8" />
@@ -443,12 +439,12 @@ export function OrderFormDialog({
                     {/* mobile — stacked, labeled fields so nothing needs to scroll sideways */}
                     <div className="flex flex-col gap-2 sm:hidden">
                       <div className="flex items-center gap-2">
-                        <Input list="types-list" value={line.label} onChange={(e) => updateLine(line.id, { label: e.target.value })} placeholder="Тип" className="h-8 flex-1" />
+                        <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" className="flex-1" inputClassName="h-8" />
                         <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         <MiniField label="Ед. изм.">
-                          <Input list="units-list" value={line.type} onChange={(e) => updateLine(line.id, { type: e.target.value })} className="h-8" />
+                          <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} inputClassName="h-8" />
                         </MiniField>
                         <MiniField label="Кол-во">
                           <Input inputMode="decimal" value={line.qty} onChange={(e) => updateLine(line.id, { qty: parseNum(e.target.value) })} className="h-8" />
@@ -468,8 +464,6 @@ export function OrderFormDialog({
                   </div>
                 ))}
               </div>
-              <datalist id="types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
-              <datalist id="units-list">{getVisibleCatalog(appSettings, "units").map((u) => <option key={u} value={u} />)}</datalist>
 
               <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addLine}><Plus />Добавить позицию</Button>
 

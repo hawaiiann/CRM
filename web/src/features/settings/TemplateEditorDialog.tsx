@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
-import { getVisibleCatalog } from "@/lib/catalog"
+import { catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { parseNum } from "@/lib/money"
@@ -83,8 +84,8 @@ export function TemplateEditorDialog({
                 <div key={l.id} className="rounded-lg border border-border p-2 sm:border-0 sm:p-0">
                   {/* desktop — one compact row */}
                   <div className="hidden sm:grid sm:grid-cols-[1.4fr_1fr_80px_100px_28px] sm:gap-1.5">
-                    <Input list="tpl-types-list" value={l.label} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, label: e.target.value } : x)))} placeholder="Тип..." />
-                    <Input list="tpl-units-list" value={l.type} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: e.target.value } : x)))} placeholder="Ед. изм..." />
+                    <ComboInput value={l.label} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, label: v } : x)))} options={catalogWithCurrent(appSettings, "types", l.label)} placeholder="Тип..." />
+                    <ComboInput value={l.type} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: v } : x)))} options={catalogWithCurrent(appSettings, "units", l.type)} placeholder="Ед. изм..." />
                     <Input inputMode="decimal" value={l.qty} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: parseNum(e.target.value) } : x)))} placeholder="1" />
                     <Input inputMode="decimal" value={l.rate} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: parseNum(e.target.value) } : x)))} placeholder="0 ₽" />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => setLines((prev) => prev.filter((x) => x.id !== l.id))}>
@@ -95,13 +96,13 @@ export function TemplateEditorDialog({
                   {/* mobile — stacked, labeled */}
                   <div className="flex flex-col gap-2 sm:hidden">
                     <div className="flex items-center gap-2">
-                      <Input list="tpl-types-list" value={l.label} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, label: e.target.value } : x)))} placeholder="Тип..." className="flex-1" />
+                      <ComboInput className="flex-1" value={l.label} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, label: v } : x)))} options={catalogWithCurrent(appSettings, "types", l.label)} placeholder="Тип..." />
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => setLines((prev) => prev.filter((x) => x.id !== l.id))}>
                         <Trash2 className="text-muted-foreground" />
                       </Button>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
-                      <Input list="tpl-units-list" value={l.type} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: e.target.value } : x)))} placeholder="Ед. изм..." />
+                      <ComboInput value={l.type} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: v } : x)))} options={catalogWithCurrent(appSettings, "units", l.type)} placeholder="Ед. изм..." />
                       <Input inputMode="decimal" value={l.qty} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: parseNum(e.target.value) } : x)))} placeholder="1" />
                       <Input inputMode="decimal" value={l.rate} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: parseNum(e.target.value) } : x)))} placeholder="0 ₽" />
                     </div>
@@ -109,8 +110,6 @@ export function TemplateEditorDialog({
                 </div>
               ))}
             </div>
-            <datalist id="tpl-types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
-            <datalist id="tpl-units-list">{getVisibleCatalog(appSettings, "units").map((u) => <option key={u} value={u} />)}</datalist>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setLines((prev) => [...prev, { id: randId("tl"), label: "", type: "", qty: 1, rate: 0 }])}>
               <Plus />Добавить позицию
             </Button>

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
@@ -136,12 +137,10 @@ export function BoardFormDialog({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Предмет">
-              <Input list="board-subjects-list" value={subject} onChange={(e) => setSubject(e.target.value)} required />
-              <datalist id="board-subjects-list">{catalogWithCurrent(appSettings, "subjects", subject).map((s) => <option key={s} value={s} />)}</datalist>
+              <ComboInput value={subject} onChange={setSubject} options={catalogWithCurrent(appSettings, "subjects", subject)} />
             </Field>
             <Field label="Класс">
-              <Input list="board-classes-list" value={title} onChange={(e) => setTitle(e.target.value)} required />
-              <datalist id="board-classes-list">{catalogWithCurrent(appSettings, "classes", title).map((c) => <option key={c} value={c} />)}</datalist>
+              <ComboInput value={title} onChange={setTitle} options={catalogWithCurrent(appSettings, "classes", title)} />
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -190,10 +189,11 @@ export function BoardFormDialog({
             <div className="flex flex-col gap-1.5">
               {template.map((val, idx) => (
                 <div key={idx} className="flex gap-1.5">
-                  <Input
-                    list="board-types-list"
+                  <ComboInput
+                    className="flex-1"
                     value={val}
-                    onChange={(e) => setTemplate((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))}
+                    onChange={(v) => setTemplate((prev) => prev.map((x, i) => (i === idx ? v : x)))}
+                    options={catalogWithCurrent(appSettings, "types", val)}
                     placeholder="Выберите тип работы или введите..."
                   />
                   <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTemplate((prev) => prev.filter((_, i) => i !== idx))}>
@@ -202,7 +202,6 @@ export function BoardFormDialog({
                 </div>
               ))}
             </div>
-            <datalist id="board-types-list">{getVisibleCatalog(appSettings, "types").map((t) => <option key={t} value={t} />)}</datalist>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setTemplate((prev) => [...prev, ""])}>
               <Plus />Добавить материал
             </Button>

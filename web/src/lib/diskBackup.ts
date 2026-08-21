@@ -217,6 +217,26 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
   return { savedToDisk: true }
 }
 
+/**
+ * Ручной бэкап кнопкой «Скачать бэкап»: если папка автобэкапа подтверждена,
+ * файл кладётся сразу туда (с датой в имени, рядом с автоматическими) и в
+ * «Загрузки» не идёт. Если доступа к папке нет — возвращаем false, и вызывающий
+ * код скачивает файл обычным способом, чтобы бэкап не потерялся вовсе.
+ */
+export async function saveManualBackupToFolder(jsonStr: string, fileName: string): Promise<boolean> {
+  if (!directoryHandle) return false
+  try {
+    let perm = await directoryHandle.queryPermission({ mode: "readwrite" })
+    if (perm !== "granted") perm = await directoryHandle.requestPermission({ mode: "readwrite" })
+    if (perm !== "granted") return false
+    await writeBackupFile(directoryHandle, fileName, jsonStr)
+    return true
+  } catch (err) {
+    console.error("Не удалось сохранить бэкап в папку", err)
+    return false
+  }
+}
+
 async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
   const state = useAppStore.getState()
   const currentId = state.cloudUserId

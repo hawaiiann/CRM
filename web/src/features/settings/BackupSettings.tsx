@@ -12,7 +12,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData, runSyncSelfCheck } from "@/lib/cloudSync"
 import { dateKey } from "@/lib/money"
 import { normalizeOrder, normalizeTask, normalizeAdvance, applySettingsMigrations } from "@/lib/normalize"
-import { selectBackupDirectory, hasDirectoryAccess, backupPathSupported } from "@/lib/diskBackup"
+import { selectBackupDirectory, hasDirectoryAccess, backupPathSupported, saveManualBackupToFolder } from "@/lib/diskBackup"
 import { getKnownAccounts } from "@/lib/accountSwitcher"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -26,6 +26,7 @@ export function BackupSettings() {
   const store = useAppStore
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [checking, setChecking] = useState(false)
+  const [exportNote, setExportNote] = useState<string | null>(null)
   const [, forceRender] = useState(0)
 
   async function pickDirectory() {
@@ -45,7 +46,7 @@ export function BackupSettings() {
     localStorage.setItem("design_crm_backup_cfg", JSON.stringify(next))
   }
 
-  function exportJson() {
+  async function exportJson() {
     const s = store.getState()
     const backupData = {
       orders: s.orders,
@@ -54,16 +55,28 @@ export function BackupSettings() {
       advances: s.advances,
       planning: s.planningBoards,
       activityLog: s.activityLog,
+      account: s.cloudUserEmail || null,
       timestamp: Date.now(),
     }
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "crm-backup-" + dateKey(new Date()) + ".json"
-    a.click()
-    URL.revokeObjectURL(url)
+    const json = JSON.stringify(backupData, null, 2)
+    const fileName = "crm-backup-" + dateKey(new Date()) + ".json"
+
+    // Сначала пробуем положить в папку автобэкапа — там файл окажется рядом с
+    // остальными и попадёт в приватный репозиторий. В «Загрузки» скачиваем
+    // только если доступа к папке нет, чтобы бэкап не потерялся совсем.
+    const savedToFolder = await saveManualBackupToFolder(json, fileName)
+    if (!savedToFolder) {
+      const blob = new Blob([json], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(url)
+    }
     updateSetting({ lastBackup: Date.now() })
+    setExportNote(savedToFolder ? `Сохранён в папку: ${fileName}` : "Папка не подтверждена — файл ушёл в «Загрузки»")
+    setTimeout(() => setExportNote(null), 6000)
   }
 
   function importJson(file: File) {
@@ -190,6 +203,7 @@ export function BackupSettings() {
         <div className="text-[12.5px]">
           <span className="font-bold">Последний бэкап: </span>
           <span className="text-muted-foreground">{backupSettings.lastBackup ? new Date(backupSettings.lastBackup).toLocaleString("ru") : "Ещё не производился"}</span>
+          {exportNote && <div className="mt-1 text-[11.5px] font-bold text-foreground/80">{exportNote}</div>}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={selfCheck} disabled={checking}>
