@@ -57,11 +57,27 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
           const isHidden = hidden.includes(val)
           return (
             <div key={idx} className={cn("flex items-center gap-1", isHidden && "opacity-50")}>
-              <div className="flex flex-col">
-                <button type="button" disabled={idx === 0} onClick={() => move(idx, -1)} className="flex size-4 items-center justify-center text-muted-foreground disabled:opacity-30">
+              {/* Стрелки перестановки. Сама иконка маленькая — иначе строка
+                  справочника разъезжается, — но область нажатия расширена до
+                  24×20 через отрицательные отступы: 16×16 пальцем не попасть,
+                  а на телефоне это основной способ ввода. */}
+              <div className="-my-1 flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  aria-label="Переместить выше"
+                  disabled={idx === 0}
+                  onClick={() => move(idx, -1)}
+                  className="flex h-5 w-6 items-center justify-center text-muted-foreground disabled:opacity-30"
+                >
                   <ChevronUp className="size-3" />
                 </button>
-                <button type="button" disabled={idx === list.length - 1} onClick={() => move(idx, 1)} className="flex size-4 items-center justify-center text-muted-foreground disabled:opacity-30">
+                <button
+                  type="button"
+                  aria-label="Переместить ниже"
+                  disabled={idx === list.length - 1}
+                  onClick={() => move(idx, 1)}
+                  className="flex h-5 w-6 items-center justify-center text-muted-foreground disabled:opacity-30"
+                >
                   <ChevronDown className="size-3" />
                 </button>
               </div>
