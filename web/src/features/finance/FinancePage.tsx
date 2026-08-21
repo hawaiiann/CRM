@@ -12,6 +12,7 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { useAppStore } from "@/store/useAppStore"
@@ -37,24 +38,101 @@ import { DepositDialog } from "./DepositDialog"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import type { Order } from "@/types/models"
 
-type SortMode = "default" | "status" | "price_desc" | "price_asc" | "pending_desc" | "adv_desc"
+// Сортировка переработана. Прежний набор был неудобен для денег:
+//   • «по умолчанию» — это просто порядок создания, ничего не значащий;
+//   • сортировка по статусу ставила ОПЛАЧЕННЫЕ сверху, хотя в финансах
+//     смотрят ровно на обратное — кто ещё должен;
+//   • сортировки по сроку не было вообще, хотя для денег это основное.
+// Теперь по умолчанию — свежие по сроку сдачи, а у каждой сортировки есть
+// вторичный ключ (срок), чтобы равные значения не выстраивались случайно.
+type SortMode = "deadline_desc" | "deadline_asc" | "debt_desc" | "total_desc" | "total_asc" | "advance_desc" | "client"
 
-function sortedFinanceList(orders: Order[], sort: SortMode): Order[] {
-  const list = orders.slice()
-  if (sort === "status") {
-    list.sort((a, b) => {
-      const score = (o: Order) => {
-        const p = orderPaymentState(o)
-        if (p.isFullyPaid) return 1
-        if (p.covered > 0) return 2
-        return 3
-      }
-      return score(a) - score(b)
-    })
-  } else if (sort === "price_desc") list.sort((a, b) => orderTotal(b) - orderTotal(a))
-  else if (sort === "price_asc") list.sort((a, b) => orderTotal(a) - orderTotal(b))
-  else if (sort === "pending_desc") list.sort((a, b) => orderPaymentState(b).remaining - orderPaymentState(a).remaining)
-  else if (sort === "adv_desc") list.sort((a, b) => parseNum(b.advanceUsed) - parseNum(a.advanceUsed))
+const SORT_LABELS: Record<SortMode, string> = {
+  deadline_desc: "Сначала свежие (по сроку)",
+  deadline_asc: "Сначала старые (по сроку)",
+  debt_desc: "Сначала с долгом",
+  total_desc: "По сумме: больше сверху",
+  total_asc: "По сумме: меньше сверху",
+  advance_desc: "По списанному авансу",
+  client: "По клиенту (А–Я)",
+}
+
+type PayFilter = "all" | "debt" | "paid" | "partial"
+
+const PAY_FILTER_LABELS: Record<PayFilter, string> = {
+  all: "Оплата: любая",
+  debt: "Есть долг",
+  partial: "Оплачено частично",
+  paid: "Оплачено полностью",
+}
+
+type PeriodFilter = "all" | "month" | "prev_month" | "year"
+
+const PERIOD_LABELS: Record<PeriodFilter, string> = {
+  all: "Период: весь",
+  month: "Этот месяц",
+  prev_month: "Прошлый месяц",
+  year: "Этот год",
+}
+
+function orderDateKey(o: Order): string {
+  return o.deadline || o.start || ""
+}
+
+function inPeriod(o: Order, period: PeriodFilter): boolean {
+  if (period === "all") return true
+  const d = orderDateKey(o)
+  if (!d) return false
+  const [y, m] = d.split("-").map(Number)
+  const now = new Date()
+  if (period === "year") return y === now.getFullYear()
+  if (period === "month") return y === now.getFullYear() && m - 1 === now.getMonth()
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return y === prev.getFullYear() && m - 1 === prev.getMonth()
+}
+
+function matchesPayFilter(o: Order, f: PayFilter): boolean {
+  if (f === "all") return true
+  const p = orderPaymentState(o)
+  if (f === "paid") return p.isFullyPaid
+  if (f === "debt") return !p.isFullyPaid
+  return !p.isFullyPaid && (p.covered > 0 || p.advUsed > 0) // частично
+}
+
+function filteredSortedFinanceList(
+  orders: Order[],
+  opts: { sort: SortMode; pay: PayFilter; period: PeriodFilter; client: string; search: string; showCancelled: boolean }
+): Order[] {
+  const q = opts.search.trim().toLowerCase()
+  const list = orders.filter((o) => {
+    // Отменённые по умолчанию скрыты: итоги наверху их тоже не считают, и
+    // раньше таблица расходилась с этими цифрами.
+    if (!opts.showCancelled && o.status === "cancelled") return false
+    if (opts.client !== "all" && (o.client || "") !== opts.client) return false
+    if (!inPeriod(o, opts.period)) return false
+    if (!matchesPayFilter(o, opts.pay)) return false
+    if (q) {
+      const hay = [o.title, o.client, o.subject, o.grade].filter(Boolean).join(" ").toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+
+  const byDeadlineDesc = (a: Order, b: Order) => orderDateKey(b).localeCompare(orderDateKey(a))
+  const s = opts.sort
+  list.sort((a, b) => {
+    let primary = 0
+    if (s === "deadline_desc") primary = byDeadlineDesc(a, b)
+    else if (s === "deadline_asc") primary = orderDateKey(a).localeCompare(orderDateKey(b))
+    else if (s === "debt_desc") primary = orderPaymentState(b).remaining - orderPaymentState(a).remaining
+    else if (s === "total_desc") primary = orderTotal(b) - orderTotal(a)
+    else if (s === "total_asc") primary = orderTotal(a) - orderTotal(b)
+    else if (s === "advance_desc") primary = parseNum(b.advanceUsed) - parseNum(a.advanceUsed)
+    else if (s === "client") primary = (a.client || "").localeCompare(b.client || "", "ru")
+    // Вторичный ключ — срок: без него равные значения (например нулевой долг
+    // у половины списка) выстраивались в случайном порядке.
+    return primary !== 0 ? primary : byDeadlineDesc(a, b)
+  })
   return list
 }
 
@@ -65,7 +143,12 @@ export function FinancePage() {
   const setAdvances = useAppStore((s) => s.setAdvances)
   const setActivityLog = useAppStore((s) => s.setActivityLog)
 
-  const [sort, setSort] = useState<SortMode>("default")
+  const [sort, setSort] = useState<SortMode>("deadline_desc")
+  const [payFilter, setPayFilter] = useState<PayFilter>("all")
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all")
+  const [clientFilter, setClientFilter] = useState("all")
+  const [search, setSearch] = useState("")
+  const [showCancelled, setShowCancelled] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
   const [finPage, setFinPage] = useState(0)
   const [finPageSize, setFinPageSize] = useState(10)
@@ -93,9 +176,32 @@ export function FinancePage() {
     }
   }, [orders, advances])
 
-  const finList = useMemo(() => sortedFinanceList(orders, sort), [orders, sort])
+  const finList = useMemo(
+    () => filteredSortedFinanceList(orders, { sort, pay: payFilter, period: periodFilter, client: clientFilter, search, showCancelled }),
+    [orders, sort, payFilter, periodFilter, clientFilter, search, showCancelled]
+  )
 
-  useEffect(() => { setFinPage(0) }, [sort, finPageSize])
+  // Клиенты для фильтра — только те, что реально встречаются в заказах.
+  const clientOptions = useMemo(
+    () => [...new Set(orders.map((o) => o.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
+    [orders]
+  )
+
+  // Итоги по отфильтрованному — иначе непонятно, что означает выборка.
+  // Общие цифры остаются в плитках наверху, а это про «сколько сейчас видно».
+  const finSubtotal = useMemo(() => {
+    let sum = 0, debt = 0
+    finList.forEach((o) => { sum += orderTotal(o); debt += orderPaymentState(o).remaining })
+    return { sum, debt }
+  }, [finList])
+
+  const filtersActive = payFilter !== "all" || periodFilter !== "all" || clientFilter !== "all" || search.trim() !== "" || showCancelled
+
+  function resetFilters() {
+    setPayFilter("all"); setPeriodFilter("all"); setClientFilter("all"); setSearch(""); setShowCancelled(false)
+  }
+
+  useEffect(() => { setFinPage(0) }, [sort, finPageSize, payFilter, periodFilter, clientFilter, search, showCancelled])
   const finTotalPages = Math.max(1, Math.ceil(finList.length / finPageSize))
   const finCurrentPage = Math.min(finPage, finTotalPages - 1)
   const pagedFinList = useMemo(
@@ -166,10 +272,24 @@ export function FinancePage() {
       />
 
       <Tabs defaultValue="overview">
-        <TabsList className="max-w-full overflow-x-auto">
-          <TabsTrigger value="overview">Обзор финансов</TabsTrigger>
-          <TabsTrigger value="advances">Баланс авансов по клиентам</TabsTrigger>
-          <TabsTrigger value="timereport">Отчёт по времени</TabsTrigger>
+        {/* На узком экране подписи сокращаются. С полными тремя вкладкам нужно
+            409px при доступных 343 — строка превращалась в горизонтальную
+            прокрутку, где видно одну вкладку из трёх, и переключатель выглядел
+            сломанным. Короткие подписи влезают целиком, полные остаются на
+            экранах пошире. */}
+        <TabsList className="w-full">
+          <TabsTrigger value="overview">
+            <span className="sm:hidden">Обзор</span>
+            <span className="hidden sm:inline">Обзор финансов</span>
+          </TabsTrigger>
+          <TabsTrigger value="advances">
+            <span className="sm:hidden">Авансы</span>
+            <span className="hidden sm:inline">Баланс авансов по клиентам</span>
+          </TabsTrigger>
+          <TabsTrigger value="timereport">
+            <span className="sm:hidden">Время</span>
+            <span className="hidden sm:inline">Отчёт по времени</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -187,20 +307,68 @@ export function FinancePage() {
                 <h3 className="text-[15px] font-bold">Финансовая статистика по заказам</h3>
                 <div className="text-[12px] text-muted-foreground">Кликните по названию для перехода к заказу. Кликните по статусу для смены оплаты.</div>
               </div>
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>
-                  <SelectTrigger size="sm" className="w-full sm:w-56"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Сортировка: по умолчанию</SelectItem>
-                    <SelectItem value="status">По статусу оплаты</SelectItem>
-                    <SelectItem value="price_desc">По сумме (убывание)</SelectItem>
-                    <SelectItem value="price_asc">По сумме (возрастание)</SelectItem>
-                    <SelectItem value="pending_desc">По остатку к доплате</SelectItem>
-                    <SelectItem value="adv_desc">По списанному авансу</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" size="sm" onClick={exportFinanceCsv}>Экспорт в CSV</Button>
-              </div>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={exportFinanceCsv}>Экспорт в CSV</Button>
+            </div>
+
+            {/* Фильтры. На мобильном — по два в ряд, поиск на всю ширину:
+                четыре элемента в строку при 375px не помещаются. */}
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по заказу или клиенту..."
+                className="col-span-2 h-9 sm:col-span-1"
+              />
+              <Select value={clientFilter} onValueChange={setClientFilter}>
+                <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Клиент: любой</SelectItem>
+                  {clientOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={payFilter} onValueChange={(v) => setPayFilter(v as PayFilter)}>
+                <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PAY_FILTER_LABELS) as PayFilter[]).map((k) => (
+                    <SelectItem key={k} value={k}>{PAY_FILTER_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+                <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PERIOD_LABELS) as PeriodFilter[]).map((k) => (
+                    <SelectItem key={k} value={k}>{PERIOD_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>
+                <SelectTrigger size="sm" className="col-span-2 w-full sm:col-span-4"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(SORT_LABELS) as SortMode[]).map((k) => (
+                    <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Сколько видно и на какую сумму — без этого непонятно, что
+                именно отсекли фильтры. */}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-muted-foreground">
+              <span>
+                Показано <b className="text-foreground">{finList.length}</b> из {orders.length} · на сумму{" "}
+                <b className="text-foreground">{fmtMoney(finSubtotal.sum)}</b>
+                {finSubtotal.debt > 0 && <> · к доплате <b className="text-destructive">{fmtMoney(finSubtotal.debt)}</b></>}
+              </span>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <Checkbox checked={showCancelled} onCheckedChange={(c) => setShowCancelled(!!c)} />
+                Показывать отменённые
+              </label>
+              {filtersActive && (
+                <button type="button" onClick={resetFilters} className="font-bold text-foreground underline-offset-2 hover:underline">
+                  Сбросить фильтры
+                </button>
+              )}
             </div>
 
             {/* mobile — stacked cards */}
