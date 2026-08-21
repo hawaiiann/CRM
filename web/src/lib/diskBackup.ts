@@ -218,10 +218,13 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
 }
 
 async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
-  const currentId = useAppStore.getState().cloudUserId
+  const state = useAppStore.getState()
+  const currentId = state.cloudUserId
+  const excluded = new Set(state.backupSettings.excludedAccounts || [])
   const known = getKnownAccounts()
   for (const [userId, acc] of Object.entries(known)) {
     if (userId === currentId) continue
+    if (excluded.has(userId)) continue // отключён в настройках (напр. тестовый аккаунт)
     const slug = accountSlug(acc.email, userId)
     const name = `crm-${slug}-${dayKey()}.json`
     const headers = { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token }

@@ -146,4 +146,7 @@ export interface BackupSettings {
   interval: "change" | "1h" | "6h" | "24h" | "7d"
   path: string
   lastBackup: number
+  // user_id аккаунтов, которые НЕ надо бэкапить автоматически (например
+  // тестовый). Пусто/undefined — бэкапятся все известные аккаунты.
+  excludedAccounts?: string[]
 }

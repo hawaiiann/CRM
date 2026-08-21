@@ -13,6 +13,10 @@ import { saveData, runSyncSelfCheck } from "@/lib/cloudSync"
 import { dateKey } from "@/lib/money"
 import { normalizeOrder, normalizeTask, normalizeAdvance, applySettingsMigrations } from "@/lib/normalize"
 import { selectBackupDirectory, hasDirectoryAccess, backupPathSupported } from "@/lib/diskBackup"
+import { getKnownAccounts } from "@/lib/accountSwitcher"
+import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/checkbox"
+import { DEFAULT_BACKUP_PATH } from "@/lib/version"
 import type { BackupSettings as BackupSettingsType, Order, Task, Advance, PlanningBoard, ActivityLogEntry } from "@/types/models"
 
 export function BackupSettings() {
@@ -30,6 +34,10 @@ export function BackupSettings() {
   }
 
   const dirWarning = backupSettings.path && !hasDirectoryAccess()
+  const currentUserId = useAppStore((s) => s.cloudUserId)
+  // Текущий аккаунт бэкапится всегда, поэтому в списке он есть, но галочку у
+  // него снять нельзя — иначе можно молча остаться вообще без бэкапа.
+  const otherAccounts = Object.entries(getKnownAccounts()).sort((a, b) => (a[0] === currentUserId ? -1 : b[0] === currentUserId ? 1 : 0))
 
   function updateSetting(patch: Partial<BackupSettingsType>) {
     const next = { ...backupSettings, ...patch }
@@ -126,17 +134,53 @@ export function BackupSettings() {
       {backupPathSupported() && (
         <div className="mb-4">
           <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Папка на диске для автобэкапа</label>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 truncate rounded-md border border-border bg-muted/40 px-3 py-2 text-[12.5px] text-muted-foreground">
-              {backupSettings.path || "Папка не выбрана — бэкап сохраняется только в браузере"}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={backupSettings.path}
+              onChange={(e) => updateSetting({ path: e.target.value })}
+              placeholder={DEFAULT_BACKUP_PATH}
+              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-[12.5px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
             <Button type="button" variant="outline" size="sm" onClick={pickDirectory}>
-              <FolderOpen />Выбрать папку
+              <FolderOpen />{hasDirectoryAccess() ? "Сменить папку" : "Подтвердить доступ"}
             </Button>
+          </div>
+          <div className="mt-1.5 text-[11.5px] text-muted-foreground">
+            Путь можно править вручную, но доступ к папке даёт только браузер — один раз нажмите кнопку и выберите её. Дальше доступ запомнится.
           </div>
           {dirWarning && (
             <div className="mt-1.5 text-[11.5px] font-bold text-destructive">
-              Доступ к папке нужно подтвердить заново — нажмите «Выбрать папку».
+              Доступ к папке не подтверждён — автобэкап на диск не пишется. Нажмите кнопку рядом.
+            </div>
+          )}
+
+          {otherAccounts.length > 0 && (
+            <div className="mt-3.5 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="mb-2 text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Какие аккаунты бэкапить</div>
+              <div className="flex flex-col gap-2">
+                {otherAccounts.map(([id, acc]) => {
+                  const isCurrent = id === currentUserId
+                  const on = isCurrent || !(backupSettings.excludedAccounts || []).includes(id)
+                  return (
+                    <label key={id} className={cn("flex items-center gap-2.5 text-[12.5px]", isCurrent ? "cursor-default" : "cursor-pointer")}>
+                      <Checkbox
+                        checked={on}
+                        disabled={isCurrent}
+                        onCheckedChange={(c) => {
+                          if (isCurrent) return
+                          const prev = backupSettings.excludedAccounts || []
+                          updateSetting({ excludedAccounts: c ? prev.filter((x) => x !== id) : [...prev, id] })
+                        }}
+                      />
+                      <span className={on ? "" : "text-muted-foreground line-through"}>{acc.email || id.slice(0, 8)}</span>
+                      {isCurrent && <span className="text-[11px] text-muted-foreground">— текущий, бэкапится всегда</span>}
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="mt-2 text-[11.5px] text-muted-foreground">
+                Снятые галочки пропускаются. Данные неактивных аккаунтов читаются напрямую по сохранённому токену — переключаться между ними не нужно.
+              </div>
             </div>
           )}
         </div>

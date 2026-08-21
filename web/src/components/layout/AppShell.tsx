@@ -23,6 +23,7 @@ import { SidebarTimerCard } from "./SidebarTimerCard"
 import { ToastRoot } from "./ToastRoot"
 import { AccountSwitcher } from "./AccountSwitcher"
 import { GlassBackdrop } from "@/features/dashboard/GlassBackdrop"
+import { APP_VERSION } from "@/lib/version"
 
 type NavItem = {
   label: string
@@ -204,14 +205,18 @@ function ThemeToggle() {
 
 function SidebarFooter() {
   const syncStatus = useAppStore((s) => s.syncStatus)
-  if (syncStatus !== "failed") return null
 
   return (
     <div className="border-t border-sidebar-border pt-3">
-      <div className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] font-bold text-destructive">
-        <CloudOff className="size-3.5 shrink-0" />
-        Не сохранено в облако
-      </div>
+      {syncStatus === "failed" && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] font-bold text-destructive">
+          <CloudOff className="size-3.5 shrink-0" />
+          Не сохранено в облако
+        </div>
+      )}
+      {/* Версия внизу сайдбара — как было в ванильной версии: по скриншоту
+          сразу видно, какая сборка у пользователя. */}
+      <div className="px-1 text-[11px] font-semibold text-muted-foreground">v{APP_VERSION}</div>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import type {
   BackupSettings,
 } from "@/types/models"
 import { defaultAppSettings, defaultPlanningBoards } from "@/lib/normalize"
+import { DEFAULT_BACKUP_PATH } from "@/lib/version"
 
 type Updater<T> = T | ((prev: T) => T)
 
@@ -68,7 +69,7 @@ export const useAppStore = create<AppState>((set) => ({
   planningBoards: defaultPlanningBoards(),
   appSettings: defaultAppSettings(),
   activityLog: [],
-  backupSettings: { enabled: true, interval: "change", path: "", lastBackup: 0 },
+  backupSettings: { enabled: true, interval: "change", path: DEFAULT_BACKUP_PATH, lastBackup: 0, excludedAccounts: [] },
 
   dataLoaded: false,
   syncStatus: "idle",

@@ -18,7 +18,9 @@ function App() {
   // пишет эти моки в БОЕВЫЕ ключи localStorage (design_crm_orders_v10 и др.)
   // и попадает в автобэкап. Облако спасал только незаданный cloudUserId.
   // Если облачная загрузка потом падала, из кэша поднимались фейковые заказы.
-  if (import.meta.env.DEV && window.location.pathname === "/__dashboard-preview") {
+  // endsWith, а не строгое равенство: после переезда приложения на /CRM/ у
+  // dev-сервера появился тот же base, и путь стал /CRM/__dashboard-preview.
+  if (import.meta.env.DEV && window.location.pathname.endsWith("/__dashboard-preview")) {
     return <DashboardPreviewHarness />
   }
   return (
