@@ -3,8 +3,10 @@ import { createClient } from "@supabase/supabase-js"
 // Публичный ключ не секретен: реальная защита данных — политики RLS в базе
 // (каждый видит и правит только свои строки, user_id = auth.uid()). Те же
 // значения, что и в vanilla-версии (js/supabaseConfig.js).
-const SUPABASE_URL = "https://wsykxvmweyvwytniycca.supabase.co"
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lfDyJYRnafI4mDvVaR8BKg_QZa1Thoe"
+// Экспортируются, чтобы бэкап мог читать данные НЕактивных аккаунтов напрямую
+// через REST с их сохранённым токеном, не переключая текущую сессию.
+export const SUPABASE_URL = "https://wsykxvmweyvwytniycca.supabase.co"
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lfDyJYRnafI4mDvVaR8BKg_QZa1Thoe"
 
 // Чекбокс "Запомнить меня" переключает, куда supabase-js пишет сессию: localStorage
 // (переживает закрытие браузера) при включённой галочке, sessionStorage (только пока

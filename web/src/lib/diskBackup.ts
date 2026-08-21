@@ -3,10 +3,28 @@
 // разрешение на запись браузер требует подтверждать явным кликом при каждой новой сессии.
 import { useAppStore } from "@/store/useAppStore"
 import { BACKUP_CFG_KEY } from "./storageKeys"
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase"
+import { getKnownAccounts } from "./accountSwitcher"
 
-const BACKUP_FILE_NAME = "crm-autobackup.json"
 const BACKUP_HANDLE_DB = "design_crm_dirhandle_db"
 const BACKUP_HANDLE_STORE = "handles"
+
+// Сколько дней хранить историю бэкапов. Раньше файл был один
+// (crm-autobackup.json) и затирал сам себя при каждом сохранении, поэтому
+// вчерашнего состояния попросту не существовало: когда 20.08.2026 миграция
+// снесла журнал часов, автобэкап тут же честно записал уже испорченные данные
+// поверх целых, и откатываться стало не на что. Теперь на каждый аккаунт и
+// каждый день — свой файл.
+const RETENTION_DAYS = 45
+
+function accountSlug(email: string | null | undefined, userId: string | null | undefined) {
+  const base = (email || userId || "account").toLowerCase()
+  return base.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "account"
+}
+
+function dayKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
 
 let directoryHandle: FileSystemDirectoryHandle | null = null
 
@@ -91,6 +109,52 @@ export async function selectBackupDirectory(): Promise<string | null> {
   }
 }
 
+// Насколько «похудел» бэкап по сравнению с уже лежащим за сегодня. Если данных
+// стало заметно меньше — это подозрительно (ровно так выглядела потеря журнала
+// 20.08.2026), и затирать целый файл усохшим нельзя.
+function looksLikeDataLoss(prev: any, next: any): string | null {
+  const pairs: [string, string][] = [["orders", "заказы"], ["advances", "авансы"], ["tasks", "задачи"], ["activityLog", "журнал"]]
+  for (const [key, label] of pairs) {
+    const a = Array.isArray(prev?.[key]) ? prev[key].length : 0
+    const b = Array.isArray(next?.[key]) ? next[key].length : 0
+    if (a >= 5 && b < a * 0.7) return `${label}: было ${a}, стало ${b}`
+  }
+  return null
+}
+
+async function writeBackupFile(dir: FileSystemDirectoryHandle, name: string, jsonStr: string) {
+  const fileHandle = await dir.getFileHandle(name, { create: true })
+  const writable = await fileHandle.createWritable()
+  await writable.write(jsonStr)
+  await writable.close()
+}
+
+async function readBackupFile(dir: FileSystemDirectoryHandle, name: string): Promise<any | null> {
+  try {
+    const fh = await dir.getFileHandle(name)
+    return JSON.parse(await (await fh.getFile()).text())
+  } catch {
+    return null
+  }
+}
+
+// Удаляет свои же файлы старше RETENTION_DAYS. Трогает только имена вида
+// crm-<аккаунт>-<дата>.json — чужие файлы в папке не затрагиваются.
+async function pruneOldBackups(dir: FileSystemDirectoryHandle) {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS)
+  const cutoffKey = dayKey(cutoff)
+  try {
+    for await (const entry of (dir as any).values()) {
+      if (entry.kind !== "file") continue
+      const m = /^crm-.+-(\d{4}-\d{2}-\d{2})(?:-.*)?\.json$/.exec(entry.name)
+      if (m && m[1] < cutoffKey) {
+        try { await (dir as any).removeEntry(entry.name) } catch { /* файл занят — не беда */ }
+      }
+    }
+  } catch { /* перебор недоступен — пропускаем чистку, это не критично */ }
+}
+
 export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
   const store = useAppStore.getState()
   const backupData = {
@@ -100,6 +164,7 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
     advances: store.advances,
     planning: store.planningBoards,
     activityLog: store.activityLog,
+    account: store.cloudUserEmail || null,
     timestamp: Date.now(),
   }
   const jsonStr = JSON.stringify(backupData, null, 2)
@@ -110,10 +175,21 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
       let perm = await directoryHandle.queryPermission({ mode: "readwrite" })
       if (perm !== "granted") perm = await directoryHandle.requestPermission({ mode: "readwrite" })
       if (perm === "granted") {
-        const fileHandle = await directoryHandle.getFileHandle(BACKUP_FILE_NAME, { create: true })
-        const writable = await fileHandle.createWritable()
-        await writable.write(jsonStr)
-        await writable.close()
+        const slug = accountSlug(store.cloudUserEmail, store.cloudUserId)
+        const todayName = `crm-${slug}-${dayKey()}.json`
+
+        // Если сегодняшний файл уже есть и новый заметно беднее — НЕ затираем.
+        // Кладём рядом отдельным файлом, чтобы уцелели оба и было видно расхождение.
+        const prev = await readBackupFile(directoryHandle, todayName)
+        const shrink = prev ? looksLikeDataLoss(prev, backupData) : null
+        if (shrink) {
+          const stamp = new Date().toTimeString().slice(0, 5).replace(":", "-")
+          await writeBackupFile(directoryHandle, `crm-${slug}-${dayKey()}-ВНИМАНИЕ-данных-меньше-${stamp}.json`, jsonStr)
+          console.warn(`Бэкап не перезаписан: данных стало меньше (${shrink}). Прежний файл сохранён.`)
+        } else {
+          await writeBackupFile(directoryHandle, todayName, jsonStr)
+        }
+        await pruneOldBackups(directoryHandle)
         saved = true
       }
     } catch (err) {
@@ -128,8 +204,49 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
     return { savedToDisk: false }
   }
 
+  // Остальные аккаунты бэкапим тем же заходом: читаем их данные напрямую по
+  // сохранённому токену и НЕ трогаем текущую сессию (никакого setSession и
+  // перезагрузки — именно это раньше и приводило к путанице между аккаунтами).
+  if (saved && directoryHandle) {
+    try { await backupOtherAccounts(directoryHandle) } catch (e) { console.error("Бэкап других аккаунтов", e) }
+  }
+
   const next = { ...useAppStore.getState().backupSettings, lastBackup: Date.now() }
   useAppStore.getState().setBackupSettings(next)
   localStorage.setItem(BACKUP_CFG_KEY, JSON.stringify(next))
   return { savedToDisk: true }
+}
+
+async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
+  const currentId = useAppStore.getState().cloudUserId
+  const known = getKnownAccounts()
+  for (const [userId, acc] of Object.entries(known)) {
+    if (userId === currentId) continue
+    const slug = accountSlug(acc.email, userId)
+    const name = `crm-${slug}-${dayKey()}.json`
+    const headers = { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token }
+    const grab = async (table: string) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, { headers })
+      if (!r.ok) throw new Error(`${table}: HTTP ${r.status}`)
+      return r.json()
+    }
+    try {
+      const [orders, tasks, advances, activityLog, planning] = await Promise.all([
+        grab("orders"), grab("tasks"), grab("advances"), grab("activity_log"), grab("planning_boards"),
+      ])
+      const data = { orders, tasks, advances, activityLog, planning, account: acc.email || userId, timestamp: Date.now(), raw: true }
+      const prev = await readBackupFile(dir, name)
+      const shrink = prev ? looksLikeDataLoss(prev, data) : null
+      const json = JSON.stringify(data, null, 2)
+      if (shrink) {
+        const stamp = new Date().toTimeString().slice(0, 5).replace(":", "-")
+        await writeBackupFile(dir, `crm-${slug}-${dayKey()}-ВНИМАНИЕ-данных-меньше-${stamp}.json`, json)
+      } else {
+        await writeBackupFile(dir, name, json)
+      }
+    } catch (e) {
+      // Протухший токен — обычное дело: аккаунт просто пропускаем, свой бэкап уже сохранён.
+      console.warn(`Бэкап аккаунта ${acc.email || userId} пропущен:`, e)
+    }
+  }
 }

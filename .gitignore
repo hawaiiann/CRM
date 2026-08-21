@@ -1,2 +1,7 @@
 Дизайн-система и палитра/
 _tmp_*.html
+
+# Бэкапы CRM — реальные клиенты и финансы. Репозиторий публичный: сюда им нельзя.
+crm-backup-*.json
+crm-autobackup*.json
+crm-restore-*.json

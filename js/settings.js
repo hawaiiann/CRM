@@ -263,7 +263,45 @@ function saveBackupSettings() {
   localStorage.setItem(BACKUP_CFG_KEY, JSON.stringify(backupSettings));
 }
 
-const BACKUP_FILE_NAME = 'crm-autobackup.json'; // одно и то же имя — файл каждый раз перезаписывается, а не плодится
+// Раньше здесь было одно имя на все бэкапы, и файл затирал сам себя при каждом
+// сохранении. Из-за этого 20.08.2026, когда миграция снесла журнал часов,
+// автобэкап тут же записал испорченные данные поверх целых, и откатываться
+// стало не на что. Теперь на каждый аккаунт и каждый день — отдельный файл.
+const BACKUP_RETENTION_DAYS = 45;
+
+function backupDayKey(d = new Date()) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function backupAccountSlug() {
+  const base = String((typeof cloudUserEmail !== 'undefined' && cloudUserEmail) || (typeof cloudUserId !== 'undefined' && cloudUserId) || 'account').toLowerCase();
+  return base.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'account';
+}
+
+// Если новый бэкап заметно беднее уже лежащего за сегодня — затирать нельзя:
+// ровно так выглядела потеря журнала 20.08.2026.
+function backupLooksLikeLoss(prev, next) {
+  const pairs = [['orders', 'заказы'], ['advances', 'авансы'], ['tasks', 'задачи'], ['activityLog', 'журнал']];
+  for (const [k, label] of pairs) {
+    const a = Array.isArray(prev && prev[k]) ? prev[k].length : 0;
+    const b = Array.isArray(next && next[k]) ? next[k].length : 0;
+    if (a >= 5 && b < a * 0.7) return label + ': было ' + a + ', стало ' + b;
+  }
+  return null;
+}
+
+async function pruneOldBackups(dir) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - BACKUP_RETENTION_DAYS);
+  const cutoffKey = backupDayKey(cutoff);
+  try {
+    for await (const entry of dir.values()) {
+      if (entry.kind !== 'file') continue;
+      const m = /^crm-.+-(\d{4}-\d{2}-\d{2})(?:-.*)?\.json$/.exec(entry.name);
+      if (m && m[1] < cutoffKey) { try { await dir.removeEntry(entry.name); } catch (e) {} }
+    }
+  } catch (e) { /* перебор недоступен — чистка не критична */ }
+}
 const BACKUP_HANDLE_DB = 'design_crm_dirhandle_db';
 const BACKUP_HANDLE_STORE = 'handles';
 
@@ -360,10 +398,28 @@ async function triggerAutoBackupProcess() {
       let perm = await directoryHandle.queryPermission({ mode: 'readwrite' });
       if (perm !== 'granted') perm = await directoryHandle.requestPermission({ mode: 'readwrite' });
       if (perm === 'granted') {
-        const fileHandle = await directoryHandle.getFileHandle(BACKUP_FILE_NAME, { create: true });
+        const slug = backupAccountSlug();
+        const todayName = 'crm-' + slug + '-' + backupDayKey() + '.json';
+
+        let prev = null;
+        try {
+          const fh = await directoryHandle.getFileHandle(todayName);
+          prev = JSON.parse(await (await fh.getFile()).text());
+        } catch (e) { /* сегодняшнего файла ещё нет */ }
+
+        const shrink = prev ? backupLooksLikeLoss(prev, backupData) : null;
+        // Данных стало меньше — прежний файл не трогаем, новый кладём рядом,
+        // чтобы уцелели оба и расхождение было видно.
+        const name = shrink
+          ? 'crm-' + slug + '-' + backupDayKey() + '-ВНИМАНИЕ-данных-меньше-' + new Date().toTimeString().slice(0,5).replace(':','-') + '.json'
+          : todayName;
+        if (shrink) console.warn('Бэкап не перезаписан: данных стало меньше (' + shrink + '). Прежний файл сохранён.');
+
+        const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(jsonStr);
         await writable.close();
+        await pruneOldBackups(directoryHandle);
         saved = true;
       }
     } catch(e) { console.error('Directory write error', e); }
