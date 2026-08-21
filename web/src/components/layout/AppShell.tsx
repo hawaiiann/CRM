@@ -207,7 +207,7 @@ function SidebarFooter() {
   const syncStatus = useAppStore((s) => s.syncStatus)
 
   return (
-    <div className="border-t border-sidebar-border pt-3">
+    <div className="pt-3">
       {syncStatus === "failed" && (
         <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] font-bold text-destructive">
           <CloudOff className="size-3.5 shrink-0" />
@@ -215,8 +215,9 @@ function SidebarFooter() {
         </div>
       )}
       {/* Версия внизу сайдбара — как было в ванильной версии: по скриншоту
-          сразу видно, какая сборка у пользователя. */}
-      <div className="px-1 text-[11px] font-semibold text-muted-foreground">v{APP_VERSION}</div>
+          сразу видно, какая сборка у пользователя. Без разделителя: линия
+          отсекала подпись от таймера и выглядела лишней рамкой. */}
+      <div className="text-center text-[11px] font-semibold text-muted-foreground">v{APP_VERSION}</div>
     </div>
   )
 }
