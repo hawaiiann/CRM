@@ -1,19 +1,34 @@
+import fs from "node:fs"
 import path from "node:path"
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// Сборка кладётся прямо в корень репозитория, потому что GitHub Pages отдаёт
+// корень ветки main. Значит emptyOutDir обязан быть false — иначе Vite снесёт
+// весь репозиторий. Обратная сторона: старые файлы сами не убираются, поэтому
+// папку assets (её содержимое целиком принадлежит Vite и имена хэшированные)
+// чистим перед каждой сборкой сами. Ничего, кроме неё, не трогаем.
+function cleanRootAssets(): Plugin {
+  return {
+    name: "clean-root-assets",
+    buildStart() {
+      const dir = path.resolve(import.meta.dirname, "../assets")
+      fs.rmSync(dir, { recursive: true, force: true })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  // Приложение публикуется на https://hawaiiann.github.io/CRM/app/ рядом с
-  // ванильной версией, которая остаётся на /CRM/. Сборка кладётся в /app/ в
-  // корне репозитория, потому что Pages отдаёт корень ветки main.
-  base: '/CRM/app/',
+  // Приложение стало основным и живёт на https://hawaiiann.github.io/CRM/.
+  // Прежняя ванильная версия осталась рабочей на /CRM/legacy/ как запасной вариант.
+  base: '/CRM/',
   build: {
-    outDir: '../app',
-    emptyOutDir: true,
+    outDir: '..',
+    emptyOutDir: false,
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), cleanRootAssets()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
