@@ -718,8 +718,16 @@ export async function loadData() {
     let activityLog = pulledLog
     const { log: purgedLog, purged } = purgeObsoleteJournalFields(activityLog)
     activityLog = purgedLog
-    const { log: compactedLog, merged: compactedCount } = compactHoursJournal(activityLog)
-    activityLog = compactedLog
+    // ВНИМАНИЕ: здесь раньше вызывался compactHoursJournal(), а ниже — снос всех
+    // записей "hours" из облака с последующей заливкой схлопнутых. Порядок был
+    // "сначала удалить, потом переслать", без атомарности: обрыв между шагами
+    // (закрыли вкладку, моргнула сеть) уносил часы из облака насовсем, а на
+    // следующей загрузке пустой журнал добивал seedActivityLogIfEmpty, подменяя
+    // реальную историю выдумкой из дат начала заказов. Так на 20.08.2026 было
+    // потеряно 45 настоящих записей, причём на нескольких аккаунтах сразу —
+    // миграция прогоняется независимо на каждом при первом входе.
+    // Схлопывание — косметика и риска не стоит, в облачном пути его больше нет.
+    // В офлайновом фолбэке оно осталось: там сносить нечего, правка локальная.
     const beforeSeedLen = activityLog.length
     activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog)
 
@@ -732,7 +740,6 @@ export async function loadData() {
 
     if (activityLog.length !== beforeSeedLen || migratedPaid) scheduleCloudSync()
     if (purged) await deleteObsoleteJournalFieldsFromCloud(JOURNAL_OBSOLETE_FIELDS)
-    if (compactedCount) { await deleteObsoleteJournalFieldsFromCloud(["hours"]); scheduleCloudSync() }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedOrders))
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))

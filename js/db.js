@@ -290,15 +290,21 @@ async function loadData(){
 
     activityLog = cloud.activityLog || [];
     const purged = purgeObsoleteJournalFields();
-    const compactedCount = compactHoursJournal();
+    // ВНИМАНИЕ: здесь раньше вызывался compactHoursJournal(), а ниже — снос всех
+    // записей 'hours' из облака с последующей заливкой схлопнутых. Порядок был
+    // "сначала удалить, потом переслать", без атомарности: если сессия обрывалась
+    // между шагами (закрыли вкладку, моргнула сеть), часы исчезали из облака
+    // насовсем, а на следующей загрузке пустой журнал добивал seedActivityLogIfEmpty,
+    // подменяя реальную историю выдумкой из дат начала заказов. Так на 20.08.2026
+    // было потеряно 45 настоящих записей на нескольких аккаунтах.
+    // Схлопывание — косметика (меньше строк при тех же данных), и оно не стоит
+    // риска потерять историю, поэтому в облачном пути его больше нет. В офлайновом
+    // фолбэке оно осталось: там сносить нечего, правка только локальная.
     const beforeSeedLen = activityLog.length;
     seedActivityLogIfEmpty();
     if (activityLog.length !== beforeSeedLen || migratedPaid) scheduleCloudSync(); // досчитанное сразу же отправляем в облако
     // Устаревшие записи чистим и в облаке, иначе они вернутся при следующей загрузке.
     if (purged) await deleteObsoleteJournalFieldsFromCloud(JOURNAL_OBSOLETE_FIELDS);
-    // Схлопнутые часы — та же история: в облаке ещё лежат старые поминутные строки, их
-    // нужно снести и переслать заново уже объединёнными (см. compactHoursJournal выше).
-    if (compactedCount) { await deleteObsoleteJournalFieldsFromCloud(['hours']); scheduleCloudSync(); }
 
     syncPlanningWithOrders();
 
