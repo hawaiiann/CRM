@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Clock } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder } from "@/lib/cloudSync"
 import { recordActivityChanges } from "@/lib/activity"
+import { cn } from "@/lib/utils"
 import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderTaxRate } from "@/lib/money"
 import { normalizePayment } from "@/lib/normalize"
 import type { Order, OrderLine, Payment, TaxType, OrderStatus } from "@/types/models"
@@ -36,6 +37,18 @@ const STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: "done", label: "Завершён" },
   { value: "cancelled", label: "Отменён" },
 ]
+
+// Галочка «позиция готова». Подпись объясняет смысл: сама по себе она ничего
+// не считает, но переводит таймер на следующую позицию.
+function LineReady({ line, onToggle }: { line: OrderLine; onToggle: () => void }) {
+  return (
+    <Checkbox
+      checked={!!line.ready}
+      onCheckedChange={onToggle}
+      title={line.ready ? "Позиция готова — таймер идёт в следующую" : "Отметить готовой: таймер переключится на следующую позицию"}
+    />
+  )
+}
 
 function randId(prefix: string) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -157,8 +170,39 @@ export function OrderFormDialog({
   const remaining = Math.max(0, totalWithTax - advUsed - paymentsTotal)
   const advanceExceedsOrder = parseNum(draft.advanceUsed) > totalWithTax + 0.01
 
+  // Та же логика, что в таймере (useTimerStore.flushSegment): время идёт в
+  // первую неготовую позицию, а если готовы все — в последнюю.
+  const timerLineId = (draft.lines.find((l) => !l.ready) || draft.lines[draft.lines.length - 1])?.id
+
   function updateLine(id: string, patch: Partial<OrderLine>) {
     setDraft((d) => ({ ...d, lines: d.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
+  }
+
+  /**
+   * Отметка «готово» у позиции. Таймер капает время в ПЕРВУЮ неготовую
+   * позицию заказа, поэтому этой галочкой его и переводят на следующую.
+   *
+   * Чекбокс был в ванильной версии, а в React-порт не попал: поле ready
+   * осталось в данных, но выставить его стало нечем — время навсегда шло в
+   * первую позицию.
+   *
+   * Пишем сразу в сохранённый заказ, не дожидаясь кнопки «Сохранить»:
+   * таймер читает заказ из хранилища, а не черновик формы, и иначе не
+   * переключился бы до закрытия окна. Так же было и в ванильной версии.
+   */
+  function toggleReady(id: string) {
+    const next = !draft.lines.find((l) => l.id === id)?.ready
+    setDraft((d) => ({ ...d, lines: d.lines.map((l) => (l.id === id ? { ...l, ready: next } : l)) }))
+    if (editingOrder) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === editingOrder.id
+            ? { ...o, lines: o.lines.map((l) => (l.id === id ? { ...l, ready: next } : l)) }
+            : o
+        )
+      )
+      saveData()
+    }
   }
   function addLine() {
     setDraft((d) => ({ ...d, lines: [...d.lines, blankLine(defaults)] }))
@@ -424,9 +468,25 @@ export function OrderFormDialog({
 
               <div className="flex flex-col gap-2">
                 {draft.lines.map((line) => (
-                  <div key={line.id} className="rounded-lg border border-border p-2">
+                  <div
+                    key={line.id}
+                    className={cn(
+                      "rounded-lg border border-border p-2",
+                      // Подсвечиваем позицию, в которую сейчас капает время: без
+                      // этого механизм таймера никак не виден, и непонятно,
+                      // куда попадут часы.
+                      line.id === timerLineId && "border-cta/50 bg-cta/5"
+                    )}
+                  >
+                    {line.id === timerLineId && (
+                      <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-bold text-cta">
+                        <Clock className="size-3" strokeWidth={2.5} />
+                        Сюда таймер записывает время
+                      </div>
+                    )}
                     {/* desktop / wide dialog — one compact row */}
-                    <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[1.3fr_1fr_60px_80px_90px_80px_28px]">
+                    <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[24px_1.3fr_1fr_60px_80px_90px_80px_28px]">
+                      <LineReady line={line} onToggle={() => toggleReady(line.id)} />
                       <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" inputClassName="h-8" />
                       <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} placeholder="Ед. изм." inputClassName="h-8" />
                       <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
@@ -439,6 +499,7 @@ export function OrderFormDialog({
                     {/* mobile — stacked, labeled fields so nothing needs to scroll sideways */}
                     <div className="flex flex-col gap-2 sm:hidden">
                       <div className="flex items-center gap-2">
+                        <LineReady line={line} onToggle={() => toggleReady(line.id)} />
                         <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" className="flex-1" inputClassName="h-8" />
                         <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
                       </div>
