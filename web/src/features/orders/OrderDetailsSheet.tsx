@@ -23,6 +23,18 @@ export function OrderDetailsSheet({
 }) {
   const pay = order ? orderPaymentState(order) : null
 
+  // Показываем только заполненные поля: пустые подписи в шапке лишь мешают.
+  const facts = order
+    ? ([
+        ["Предмет", order.subject],
+        ["Класс", order.grade],
+        ["Четверть", order.quarter],
+        ["Урок", order.lesson],
+      ] as [string, string][])
+        .filter(([, v]) => String(v || "").trim() !== "")
+        .map(([label, value]) => ({ label, value }))
+    : []
+
   return (
     <Sheet open={!!order} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-[440px]">
@@ -36,6 +48,25 @@ export function OrderDetailsSheet({
             </SheetHeader>
 
             <div className="flex flex-1 flex-col gap-4.5 overflow-y-auto px-4">
+              {/* Предмет, класс, четверть, урок. У заказа со своим названием
+                  эти поля нигде не показывались — автосборка «Предмет, Класс,
+                  Урок N» подставляется только когда название пустое, поэтому
+                  приходилось открывать форму, чтобы узнать, что за урок. */}
+              {facts.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {facts.map((f) => (
+                    <span
+                      key={f.label}
+                      title={f.label}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1.5 text-[12px]"
+                    >
+                      <span className="text-muted-foreground">{f.label}</span>
+                      <b className="font-bold">{f.value}</b>
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <div className="mb-2 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
                   Позиции в заказе
