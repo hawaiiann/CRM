@@ -235,7 +235,13 @@ export function OrdersPage() {
   }
 
   const overdueRows = active.filter((r) => r.overdue)
-  const dueRows = active.filter((r) => r.pay.remaining > 0)
+  // Долг считаем по ВСЕМ заказам, кроме отменённых, а не только по активным.
+  // Завершённый заказ вполне может оставаться неоплаченным — и это как раз то,
+  // что нужно видеть в первую очередь. Раньше такие суммы просто выпадали из
+  // итога: в таблице долг у завершённых виден, а карточка его не учитывала.
+  // Заодно это сходится с Финансами, где «Остаток к получению» всегда считался
+  // по всем неотменённым — до этого две страницы показывали разные числа.
+  const dueRows = rows.filter((r) => r.order.status !== "cancelled" && r.pay.remaining > 0)
   const dueTotal = dueRows.reduce((s, r) => s + r.pay.remaining, 0)
   const doneThisMonthCount = archived.filter((r) => r.order.status === "done").length
 
@@ -265,7 +271,7 @@ export function OrdersPage() {
           </CardHeader>
           <CardContent className="text-[12.5px] text-muted-foreground">
             <div className="font-bold text-foreground">Без учёта авансов клиентов</div>
-            По всем незавершённым заказам
+            По всем заказам, кроме отменённых — включая завершённые, если по ним ещё не заплатили
           </CardContent>
         </Card>
 
