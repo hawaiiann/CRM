@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NumberInput } from "@/components/ui/number-input"
 import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -351,10 +352,9 @@ export function OrderFormDialog({
                   <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(clientStats.available)}</div>
                 </div>
                 <Field label="Списать на этот заказ">
-                  <Input
-                    inputMode="decimal"
+                  <NumberInput
                     value={draft.advanceUsed}
-                    onChange={(e) => setDraft((d) => ({ ...d, advanceUsed: parseNum(e.target.value) }))}
+                    onChange={(n) => setDraft((d) => ({ ...d, advanceUsed: n }))}
                     className={advanceExceedsOrder ? "border-destructive" : undefined}
                     title={advanceExceedsOrder ? `Это больше, чем стоимость заказа (${fmtMoney(totalWithTax)}).` : undefined}
                   />
@@ -391,7 +391,7 @@ export function OrderFormDialog({
                 <div className="mt-3 flex flex-col gap-2">
                   {draft.payments.map((p) => (
                     <div key={p.id} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1.4fr_28px]">
-                      <Input inputMode="decimal" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: parseNum(e.target.value) })} placeholder="Сумма ₽" />
+                      <NumberInput value={p.amount} onChange={(n) => updatePayment(p.id, { amount: n })} placeholder="Сумма ₽" />
                       <Input type="date" value={p.date} onChange={(e) => updatePayment(p.id, { date: e.target.value })} />
                       <div className="col-span-2 flex gap-2 sm:contents">
                         <Input value={p.note} onChange={(e) => updatePayment(p.id, { note: e.target.value })} placeholder="Примечание" className="flex-1" />
@@ -429,9 +429,9 @@ export function OrderFormDialog({
                     <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[1.3fr_1fr_60px_80px_90px_80px_28px]">
                       <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" inputClassName="h-8" />
                       <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} placeholder="Ед. изм." inputClassName="h-8" />
-                      <Input inputMode="decimal" value={line.qty} onChange={(e) => updateLine(line.id, { qty: parseNum(e.target.value) })} className="h-8" />
-                      <Input inputMode="decimal" value={line.pomoHours} onChange={(e) => updateLine(line.id, { pomoHours: parseNum(e.target.value) })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
-                      <Input inputMode="decimal" value={line.rate} onChange={(e) => updateLine(line.id, { rate: parseNum(e.target.value) })} className="h-8" />
+                      <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
+                      <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
+                      <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
                       <div className="text-center text-[12.5px] font-bold tabular-nums">{fmtMoney(calculateLineTotal(line))}</div>
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
                     </div>
@@ -447,13 +447,13 @@ export function OrderFormDialog({
                           <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} inputClassName="h-8" />
                         </MiniField>
                         <MiniField label="Кол-во">
-                          <Input inputMode="decimal" value={line.qty} onChange={(e) => updateLine(line.id, { qty: parseNum(e.target.value) })} className="h-8" />
+                          <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
                         </MiniField>
                         <MiniField label="Часы" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"}>
-                          <Input inputMode="decimal" value={line.pomoHours} onChange={(e) => updateLine(line.id, { pomoHours: parseNum(e.target.value) })} placeholder="0 ч" className="h-8" />
+                          <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" />
                         </MiniField>
                         <MiniField label="Цена, ₽">
-                          <Input inputMode="decimal" value={line.rate} onChange={(e) => updateLine(line.id, { rate: parseNum(e.target.value) })} className="h-8" />
+                          <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
                         </MiniField>
                       </div>
                       <div className="flex justify-between text-[12.5px] font-bold">

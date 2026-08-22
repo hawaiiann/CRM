@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NumberInput } from "@/components/ui/number-input"
 import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { catalogWithCurrent } from "@/lib/catalog"
@@ -86,8 +87,8 @@ export function TemplateEditorDialog({
                   <div className="hidden sm:grid sm:grid-cols-[1.4fr_1fr_80px_100px_28px] sm:gap-1.5">
                     <ComboInput value={l.label} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, label: v } : x)))} options={catalogWithCurrent(appSettings, "types", l.label)} placeholder="Тип..." />
                     <ComboInput value={l.type} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: v } : x)))} options={catalogWithCurrent(appSettings, "units", l.type)} placeholder="Ед. изм..." />
-                    <Input inputMode="decimal" value={l.qty} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: parseNum(e.target.value) } : x)))} placeholder="1" />
-                    <Input inputMode="decimal" value={l.rate} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: parseNum(e.target.value) } : x)))} placeholder="0 ₽" />
+                    <NumberInput value={l.qty} onChange={(n) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: n } : x)))} placeholder="1" />
+                    <NumberInput value={l.rate} onChange={(n) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: n } : x)))} placeholder="0 ₽" />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => setLines((prev) => prev.filter((x) => x.id !== l.id))}>
                       <Trash2 className="text-muted-foreground" />
                     </Button>
@@ -103,8 +104,8 @@ export function TemplateEditorDialog({
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       <ComboInput value={l.type} onChange={(v) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, type: v } : x)))} options={catalogWithCurrent(appSettings, "units", l.type)} placeholder="Ед. изм..." />
-                      <Input inputMode="decimal" value={l.qty} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: parseNum(e.target.value) } : x)))} placeholder="1" />
-                      <Input inputMode="decimal" value={l.rate} onChange={(e) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: parseNum(e.target.value) } : x)))} placeholder="0 ₽" />
+                      <NumberInput value={l.qty} onChange={(n) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qty: n } : x)))} placeholder="1" />
+                      <NumberInput value={l.rate} onChange={(n) => setLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, rate: n } : x)))} placeholder="0 ₽" />
                     </div>
                   </div>
                 </div>
