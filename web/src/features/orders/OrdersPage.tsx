@@ -210,6 +210,14 @@ export function OrdersPage() {
     setSelected(checked ? new Set(active.map((r) => r.order.id)) : new Set())
   }
 
+  // Быстрая смена статуса прямо из списка — как было в ванильной версии.
+  // Завершение заказа не должно требовать открытия формы: это самое частое
+  // действие, а через форму его попросту не находили.
+  function changeStatus(id: string, next: Order["status"]) {
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: next } : o)))
+    saveData()
+  }
+
   function handleRowDrop(targetId: string) {
     const draggedId = draggingId
     setDraggingId(null)
@@ -428,6 +436,7 @@ export function OrdersPage() {
             onCheckedChange={(c) => toggleRow(order.id, c)}
             onOpen={() => setActiveOrder(order)}
             onEdit={() => openEditOrder(order)}
+                onStatusChange={(next) => changeStatus(order.id, next)}
             onDuplicate={() => openDuplicateOrder(order)}
             onDelete={() => openDeleteOrder(order)}
           />
@@ -457,6 +466,7 @@ export function OrdersPage() {
                 onCheckedChange={(c) => toggleRow(order.id, c)}
                 onOpen={() => setActiveOrder(order)}
                 onEdit={() => openEditOrder(order)}
+                onStatusChange={(next) => changeStatus(order.id, next)}
                 onDuplicate={() => openDuplicateOrder(order)}
                 onDelete={() => openDeleteOrder(order)}
                 muted
@@ -523,6 +533,7 @@ export function OrdersPage() {
                 onCheckedChange={(c) => toggleRow(order.id, c)}
                 onOpen={() => setActiveOrder(order)}
                 onEdit={() => openEditOrder(order)}
+                onStatusChange={(next) => changeStatus(order.id, next)}
                 onDuplicate={() => openDuplicateOrder(order)}
                 onDelete={() => openDeleteOrder(order)}
                 draggable
@@ -574,6 +585,7 @@ export function OrdersPage() {
                   onCheckedChange={(c) => toggleRow(order.id, c)}
                   onOpen={() => setActiveOrder(order)}
                   onEdit={() => openEditOrder(order)}
+                onStatusChange={(next) => changeStatus(order.id, next)}
                   onDuplicate={() => openDuplicateOrder(order)}
                   onDelete={() => openDeleteOrder(order)}
                   muted
@@ -679,6 +691,7 @@ function OrderRow({
   onEdit,
   onDuplicate,
   onDelete,
+  onStatusChange,
   muted,
   draggable,
   onDragStart,
@@ -698,6 +711,7 @@ function OrderRow({
   onEdit: () => void
   onDuplicate: () => void
   onDelete: () => void
+  onStatusChange: (next: Order["status"]) => void
   muted?: boolean
   draggable?: boolean
   onDragStart?: () => void
@@ -771,7 +785,7 @@ function OrderRow({
         {fmtDeadline(order.deadline)}
       </TableCell>
       <TableCell className="px-4">
-        <StatusBadge status={order.status} />
+        <StatusBadge status={order.status} onChange={onStatusChange} />
       </TableCell>
       <TableCell className={cn("px-4 text-right font-heading text-[13px] font-bold tabular-nums", muted && "text-muted-foreground")}>
         {fmtMoney(sum)}
@@ -833,6 +847,7 @@ function OrderCard({
   onEdit,
   onDuplicate,
   onDelete,
+  onStatusChange,
   muted,
 }: {
   order: Order
@@ -848,6 +863,7 @@ function OrderCard({
   onEdit: () => void
   onDuplicate: () => void
   onDelete: () => void
+  onStatusChange: (next: Order["status"]) => void
   muted?: boolean
 }) {
   const metaParts = [
@@ -884,7 +900,7 @@ function OrderCard({
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <StatusBadge status={order.status} />
+        <StatusBadge status={order.status} onChange={onStatusChange} />
         <span className={cn("text-[11.5px] font-bold", overdue ? "text-destructive" : "text-muted-foreground")}>
           {overdue && "просрочен · "}{fmtDeadline(order.deadline)}
         </span>
