@@ -36,6 +36,7 @@ import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
 import { PaginationBar } from "@/components/ui/pagination-bar"
+import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order } from "@/types/models"
 
 // Сортировка переработана. Прежний набор был неудобен для денег:
@@ -112,7 +113,6 @@ function filteredSortedFinanceList(
   orders: Order[],
   opts: { sort: SortMode; pay: PayFilter; period: PeriodFilter; client: string; search: string; showCancelled: boolean }
 ): Order[] {
-  const q = opts.search.trim().toLowerCase()
   const list = orders.filter((o) => {
     // Отменённые по умолчанию скрыты: итоги наверху их тоже не считают, и
     // раньше таблица расходилась с этими цифрами.
@@ -120,10 +120,7 @@ function filteredSortedFinanceList(
     if (opts.client !== "all" && (o.client || "") !== opts.client) return false
     if (!inPeriod(o, opts.period)) return false
     if (!matchesPayFilter(o, opts.pay)) return false
-    if (q) {
-      const hay = [o.title, o.client, o.subject, o.grade].filter(Boolean).join(" ").toLowerCase()
-      if (!hay.includes(q)) return false
-    }
+    if (!orderMatchesQuery(o, opts.search)) return false
     return true
   })
 
@@ -353,7 +350,7 @@ export function FinancePage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по заказу или клиенту..."
+                placeholder="Поиск: класс, урок, клиент..."
                 className="col-span-2 h-9 sm:col-span-1"
               />
               <Select value={clientFilter} onValueChange={setClientFilter}>

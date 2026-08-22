@@ -57,6 +57,7 @@ import { fmtDeadline } from "@/lib/dates"
 import { StatusBadge } from "./StatusBadge"
 import { OrderDetailsSheet } from "./OrderDetailsSheet"
 import { OrderFormDialog } from "./OrderFormDialog"
+import { orderMatchesQuery } from "@/lib/orderSearch"
 
 function clientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -140,9 +141,7 @@ export function OrdersPage() {
   const active = rows.filter((r) => r.order.status !== "done" && r.order.status !== "cancelled")
   const archived = rows.filter((r) => r.order.status === "done" || r.order.status === "cancelled")
 
-  const q = search.trim().toLowerCase()
-  const matchesSearch = (r: (typeof rows)[number]) =>
-    !q || `${orderDisplayTitle(r.order)} ${r.order.client} ${r.order.subject} ${r.order.grade}`.toLowerCase().includes(q)
+  const matchesSearch = (r: (typeof rows)[number]) => orderMatchesQuery(r.order, search)
 
   function matchesFilter(r: (typeof rows)[number]) {
     if (filter === "all") return true
@@ -174,11 +173,11 @@ export function OrdersPage() {
 
   const visibleActive = useMemo(
     () => applySort(active.filter((r) => matchesFilter(r) && matchesSearch(r) && matchesClient(r))),
-    [active, filter, q, sort, clientFilter]
+    [active, filter, search, sort, clientFilter]
   )
   const visibleArchived = useMemo(
     () => applySort(archived.filter((r) => matchesSearch(r) && matchesClient(r))),
-    [archived, q, sort, clientFilter]
+    [archived, search, sort, clientFilter]
   )
 
   const clientOptions = useMemo(
@@ -190,7 +189,7 @@ export function OrdersPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [filter, q, pageSize, sort, clientFilter])
+  }, [filter, search, pageSize, sort, clientFilter])
 
   const totalPages = Math.max(1, Math.ceil(visibleActive.length / pageSize))
   const currentPage = Math.min(page, totalPages - 1)
@@ -330,7 +329,7 @@ export function OrdersPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по заказам, клиентам, предметам..."
+              placeholder="Поиск: класс, урок, клиент, предмет..."
               className="w-full pl-8 sm:w-60"
             />
           </div>
