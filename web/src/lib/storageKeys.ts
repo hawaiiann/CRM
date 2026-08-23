@@ -10,3 +10,8 @@ export const PLANNING_KEY = "design_crm_planning_v8"
 export const BACKUP_CFG_KEY = "design_crm_backup_cfg"
 export const ACTIVITY_LOG_KEY = "design_crm_activity_log_v1"
 export const KNOWN_ACCOUNTS_KEY = "design_crm_known_accounts_v1"
+
+// Удаления, которые ещё не подтверждены облаком. Переживают перезагрузку
+// намеренно: без этого не дошедшее до сервера удаление «отменялось» при
+// следующем открытии приложения — запись приезжала обратно.
+export const PENDING_DELETES_KEY = "design_crm_pending_deletes_v1"

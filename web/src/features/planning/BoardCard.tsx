@@ -109,6 +109,10 @@ export function BoardCard({
     })
     if (!ok) return
     setPlanningBoards((prev) => prev.filter((b) => b.id !== board.id))
+    // Уроки удаляем поимённо, а не только доску: строки уроков лежат в своей
+    // таблице и без этого оставались в облаке навсегда. На экране их не видно
+    // (урок без доски никуда не попадает), но копятся они молча.
+    lessons.forEach((l) => deleteFromCloud("planning_lessons", l.id))
     deleteFromCloud("planning_boards", board.id)
     saveData()
   }

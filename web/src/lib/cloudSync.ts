@@ -32,6 +32,7 @@ import {
   ACTIVITY_LOG_KEY,
   BACKUP_CFG_KEY,
 } from "./storageKeys"
+import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries } from "./pendingDeletes"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
 type Row = Record<string, any>
@@ -232,11 +233,54 @@ async function upsertWithConflictCheck<T extends { id: string }>(
 }
 
 /* ---------- Единственная точка настоящего удаления записи из облака ---------- */
+/* ---------- Неподтверждённые удаления ----------
+ * Сама очередь живёт в pendingDeletes.ts, здесь — работа с облаком.
+ */
+
+/** Убирает запись из снимка — иначе снимок расходится с реальностью. */
+function dropFromSnapshot(table: string, id: string) {
+  const maps: Record<string, Record<string, unknown>> = {
+    orders: cloudSnapshot.orders,
+    tasks: cloudSnapshot.tasks,
+    advances: cloudSnapshot.advances,
+    planning_boards: cloudSnapshot.planningBoards,
+    planning_lessons: cloudSnapshot.planningLessons,
+  }
+  const map = maps[table]
+  if (map) delete map[id]
+}
+
+/** Одна попытка удаления. true — облако подтвердило. */
+async function tryDelete(table: string, id: string): Promise<boolean> {
+  try {
+    const { error } = await supabaseClient.from(table).delete().eq("id", id)
+    if (error) throw error
+    forgetDelete(table, id)
+    dropFromSnapshot(table, id)
+    return true
+  } catch (err) {
+    console.error(`Не удалось удалить запись из облака (${table}/${id}):`, err)
+    return false
+  }
+}
+
+/** Повтор всех неподтверждённых удалений. Вызывается при каждой синхронизации. */
+async function flushPendingDeletes() {
+  let allOk = true
+  for (const { table, id } of pendingDeleteEntries()) {
+    if (!(await tryDelete(table, id))) allOk = false
+  }
+  if (!allOk) markSyncFailed()
+}
+
 export async function deleteFromCloud(table: string, id: string) {
-  const userId = useAppStore.getState().cloudUserId
-  if (!userId || !id) return
-  try { await supabaseClient.from(table).delete().eq("id", id) }
-  catch (err) { console.error(`Не удалось удалить запись из облака (${table}/${id}):`, err) }
+  if (!id) return
+  // В очередь ставим всегда, даже без облачного аккаунта: запись могла быть
+  // заведена в другой сессии, и удаление должно дойти, когда вход появится.
+  rememberDelete(table, id)
+  dropFromSnapshot(table, id)
+  if (!useAppStore.getState().cloudUserId) return
+  if (!(await tryDelete(table, id))) markSyncFailed()
 }
 
 export async function deleteActivityLogForOrder(orderId: string) {
@@ -280,6 +324,11 @@ export async function performCloudSync() {
   cloudSyncInFlight = true
   useAppStore.getState().setSyncStatus("syncing")
   try {
+    // Сначала доводим до конца удаления, не подтверждённые прошлый раз, и
+    // только потом отправляем изменения — иначе запись, которую не удалось
+    // удалить, могла бы уехать обратно в облако как «изменённая».
+    await flushPendingDeletes()
+
     const ordersMap = diffById(useAppStore.getState().orders)
     const ordersToUpsert = collectionChanged(ordersMap, cloudSnapshot.orders)
     if (ordersToUpsert.length) {
@@ -616,13 +665,18 @@ async function cloudLoadData() {
   ;[ordersRes, tasksRes, advRes, boardsRes, lessonsRes, logRes].forEach((r) => { if (r.error) throw r.error })
   if (settingsRes.error) throw settingsRes.error
 
-  const pulledOrdersRaw = (ordersRes.data || []).map(rowToOrder)
-  const pulledTasks = (tasksRes.data || []).map((r) => normalizeTask(rowToTask(r)))
-  const pulledAdvances = (advRes.data || []).map((r) => normalizeAdvance(rowToAdvance(r)))
-  const boards = (boardsRes.data || []).map(rowToBoard)
+  // Отсеиваем то, что уже удалено локально, но облако удаление ещё не
+  // подтвердило. Без этого не дошедшее удаление отменялось перезагрузкой:
+  // запись возвращалась на экран как ни в чём не бывало.
+  const alive = (table: string) => (r: Row) => !isPendingDelete(table, r.id)
+
+  const pulledOrdersRaw = (ordersRes.data || []).filter(alive("orders")).map(rowToOrder)
+  const pulledTasks = (tasksRes.data || []).filter(alive("tasks")).map((r) => normalizeTask(rowToTask(r)))
+  const pulledAdvances = (advRes.data || []).filter(alive("advances")).map((r) => normalizeAdvance(rowToAdvance(r)))
+  const boards = (boardsRes.data || []).filter(alive("planning_boards")).map(rowToBoard)
   const boardsById: Record<string, PlanningBoard> = {}
   boards.forEach((b) => { boardsById[b.id] = b })
-  ;(lessonsRes.data || []).forEach((r: Row) => {
+  ;(lessonsRes.data || []).filter(alive("planning_lessons")).forEach((r: Row) => {
     const board = boardsById[r.board_id]
     if (board) board.lessons.push(rowToLesson(r))
   })
