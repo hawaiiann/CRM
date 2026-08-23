@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react"
-import { Check, Trash2, RotateCcw, ArrowRight } from "lucide-react"
+import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink } from "lucide-react"
+import { Link } from "react-router-dom"
 import {
   Sheet,
   SheetContent,
@@ -10,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAppStore } from "@/store/useAppStore"
+import { fmtMoney, orderTotal } from "@/lib/money"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { findGoverningOrder } from "@/lib/planningSync"
 import { cn } from "@/lib/utils"
@@ -26,6 +28,10 @@ const STATUS_LABEL: Record<string, string> = { queue: "В очереди", progr
 
 function randId(prefix: string) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+}
+
+function orderTitle(o: { title?: string; subject?: string; grade?: string; quarter?: string; lesson?: string }): string {
+  return o.title || [o.subject, o.grade, o.quarter, o.lesson && `Урок ${o.lesson}`].filter(Boolean).join(", ") || "Без названия"
 }
 
 export function LessonSheet({
@@ -198,6 +204,39 @@ export function LessonSheet({
               <div>
                 <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
                 <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
+              </div>
+
+              {/* Связь с заказом. Раньше её не было видно вовсе: заказ мог быть
+                  привязан к уроку (явно или по совпадению предмета/класса/
+                  четверти/номера), но из урока об этом узнать было нельзя и
+                  перейти к заказу тоже. */}
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказ</div>
+                {governingOrder ? (
+                  <Link
+                    to="/orders"
+                    onClick={() => onOpenChange(false)}
+                    className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
+                      <div className="truncate text-[11.5px] text-muted-foreground">
+                        {governingOrder.client || "без клиента"} · {fmtMoney(orderTotal(governingOrder))}
+                      </div>
+                    </div>
+                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                ) : (
+                  <div className="rounded-xl bg-muted px-3.5 py-3">
+                    <div className="text-[12.5px] text-muted-foreground">
+                      К этому уроку не привязан ни один заказ.
+                    </div>
+                    <div className="mt-1 text-[11.5px] text-muted-foreground">
+                      Состав урока в заказ не переносится сам — заказ создаётся отдельно, а привязывается полем
+                      «Привязать к уроку» в его форме либо совпадением предмета, класса, четверти и номера урока.
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </>

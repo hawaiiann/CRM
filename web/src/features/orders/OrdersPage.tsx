@@ -52,7 +52,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { useTimerStore } from "@/store/useTimerStore"
 import { saveData } from "@/lib/cloudSync"
 import type { Order } from "@/types/models"
-import { fmtMoney, orderPaymentState, isOrderOverdue } from "@/lib/money"
+import { fmtMoney, orderPaymentState, isOrderOverdue, dateKey } from "@/lib/money"
 import { fmtDeadline } from "@/lib/dates"
 import { StatusBadge } from "./StatusBadge"
 import { OrderDetailsSheet } from "./OrderDetailsSheet"
@@ -214,7 +214,28 @@ export function OrdersPage() {
   // Завершение заказа не должно требовать открытия формы: это самое частое
   // действие, а через форму его попросту не находили.
   function changeStatus(id: string, next: Order["status"]) {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: next } : o)))
+    const order = orders.find((o) => o.id === id)
+    const wasArchived = order && (order.status === "done" || order.status === "cancelled")
+    const backToWork = next !== "done" && next !== "cancelled"
+    const today = dateKey(new Date())
+
+    // Заказ, поднятый из архива со старым сроком, молча уезжал в прошлые недели:
+    // в планировании и таймлайне он не попадал в текущую неделю, и о нём просто
+    // забывали. Формально он числится просроченным, но по датам его не видно.
+    // Поэтому спрашиваем сразу — перенести срок или оставить как есть.
+    let patch: Partial<Order> = { status: next }
+    if (order && wasArchived && backToWork && order.deadline && order.deadline < today) {
+      const move = confirm(
+        `Срок сдачи этого заказа уже прошёл (${fmtDeadline(order.deadline)}).\n\n` +
+          `Перенести срок на сегодня, чтобы заказ появился в текущей неделе?\n` +
+          `Отмена — оставить прежнюю дату, заказ останется просроченным.`
+      )
+      if (move) {
+        patch = { ...patch, deadline: today, start: order.start && order.start > today ? today : order.start }
+      }
+    }
+
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)))
     saveData()
   }
 
