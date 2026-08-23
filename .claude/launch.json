@@ -4,14 +4,51 @@
     {
       "name": "static-preview",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/serve.ps1"],
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/serve.ps1"
+      ],
       "port": 8743
     },
     {
       "name": "web-dev",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/serve-web-dev.ps1"],
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/serve-web-dev.ps1"
+      ],
       "port": 5173
+    },
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/serve-web-preview.ps1"
+      ],
+      "port": 4174,
+      "url": "http://localhost:4174"
+    },
+    {
+      "name": "web-dev-alt",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/serve-web-dev-alt.ps1"
+      ],
+      "port": 5175
     }
   ]
 }

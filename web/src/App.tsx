@@ -1,16 +1,23 @@
+import { lazy } from "react"
 import { HashRouter, Routes, Route } from "react-router-dom"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppShell } from "@/components/layout/AppShell"
 import { AuthGate } from "@/components/auth/AuthGate"
 import { DashboardPage } from "@/features/dashboard/DashboardPage"
-import { FinancePage } from "@/features/finance/FinancePage"
-import { ClientsPage } from "@/features/clients/ClientsPage"
-import { OrdersPage } from "@/features/orders/OrdersPage"
-import { TimelinePage } from "@/features/timeline/TimelinePage"
-import { TasksPage } from "@/features/tasks/TasksPage"
-import { PlanningPage } from "@/features/planning/PlanningPage"
-import { SettingsPage } from "@/features/settings/SettingsPage"
 import { DashboardPreviewHarness } from "@/features/dashboard/DashboardPreviewHarness"
+
+// Дашборд грузится сразу — это стартовый экран, откладывать его нечего.
+// Остальные разделы приезжают при первом заходе в них: всё приложение одним
+// куском весило больше мегабайта, и при открытии дашборда в него входили
+// Финансы с таблицами, Планирование и Настройки, которые могут не понадобиться
+// за всю сессию.
+const FinancePage = lazy(() => import("@/features/finance/FinancePage").then((m) => ({ default: m.FinancePage })))
+const ClientsPage = lazy(() => import("@/features/clients/ClientsPage").then((m) => ({ default: m.ClientsPage })))
+const OrdersPage = lazy(() => import("@/features/orders/OrdersPage").then((m) => ({ default: m.OrdersPage })))
+const TimelinePage = lazy(() => import("@/features/timeline/TimelinePage").then((m) => ({ default: m.TimelinePage })))
+const TasksPage = lazy(() => import("@/features/tasks/TasksPage").then((m) => ({ default: m.TasksPage })))
+const PlanningPage = lazy(() => import("@/features/planning/PlanningPage").then((m) => ({ default: m.PlanningPage })))
+const SettingsPage = lazy(() => import("@/features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })))
 
 function App() {
   // Dev-only. Раньше харнесс был доступен и в проде: он подменяет стор

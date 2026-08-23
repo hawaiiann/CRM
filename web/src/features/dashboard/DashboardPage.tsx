@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, lazy, Suspense } from "react"
 import { Play, CheckCircle2, Wallet, Clock3, TrendingUp, TrendingDown } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { useAppStore } from "@/store/useAppStore"
@@ -6,11 +6,17 @@ import { fmtMoney, ordersDebt } from "@/lib/money"
 import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
 import { cn } from "@/lib/utils"
 import { TasksMiniWidget } from "./TasksMiniWidget"
-import { ClassProgressDonuts } from "./ClassProgressDonuts"
 import { WeekPlanningWidget } from "./WeekPlanningWidget"
-import { RevenueChart } from "./RevenueChart"
 import { ActiveDaysCalendar } from "./ActiveDaysCalendar"
-import { ActivityMetricsGrid } from "./ActivityMetricsGrid"
+
+// Все три виджета тянут recharts — самую тяжёлую библиотеку в проекте.
+// Дашборд стартовый, отложить его целиком нельзя, но цифры в плитках и
+// список задач не должны ждать графики: они приезжают следом, на своих
+// местах (высота заглушек совпадает с высотой графиков, чтобы страницу
+// не дёргало).
+const ClassProgressDonuts = lazy(() => import("./ClassProgressDonuts").then((m) => ({ default: m.ClassProgressDonuts })))
+const RevenueChart = lazy(() => import("./RevenueChart").then((m) => ({ default: m.RevenueChart })))
+const ActivityMetricsGrid = lazy(() => import("./ActivityMetricsGrid").then((m) => ({ default: m.ActivityMetricsGrid })))
 
 function pctChange(cur: number, prev: number): number | null {
   if (!prev) return null
@@ -75,7 +81,7 @@ export function DashboardPage() {
             <h3 className="text-[16px] font-bold">Прогресс по классам</h3>
             <div className="mb-1 text-[12.5px] text-muted-foreground">Завершение выработки материалов</div>
             <div className="flex flex-1 items-center">
-              <ClassProgressDonuts />
+              <Suspense fallback={<div className="h-[72px] w-[72px]" />}><ClassProgressDonuts /></Suspense>
             </div>
           </div>
         </div>
@@ -95,12 +101,12 @@ export function DashboardPage() {
         <div className="glass-surface glass-surface-accent rounded-xl p-4.5 ring-1 ring-cta/25">
           <h3 className="text-[16px] font-bold">Доход по месяцам</h3>
           <div className="mb-3 text-[12.5px] text-muted-foreground">За последние 6 месяцев по завершённым проектам</div>
-          <RevenueChart />
+          <Suspense fallback={<div className="h-[190px] w-full" />}><RevenueChart /></Suspense>
         </div>
       </div>
 
       <div className="glass-surface glass-surface-accent-warm rounded-xl p-4.5 ring-1 ring-accent-warm/25">
-        <ActivityMetricsGrid />
+        <Suspense fallback={<div className="h-[180px] w-full" />}><ActivityMetricsGrid /></Suspense>
       </div>
     </div>
   )

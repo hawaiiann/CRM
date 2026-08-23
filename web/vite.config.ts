@@ -9,9 +9,15 @@ import tailwindcss from '@tailwindcss/vite'
 // весь репозиторий. Обратная сторона: старые файлы сами не убираются, поэтому
 // папку assets (её содержимое целиком принадлежит Vite и имена хэшированные)
 // чистим перед каждой сборкой сами. Ничего, кроме неё, не трогаем.
+// apply: "build" обязателен. Хук buildStart вызывается и при старте dev-сервера,
+// поэтому без этой строки `npm run dev` сносил папку assets в корне репозитория —
+// ту самую, что отдаётся на GitHub Pages. Внешне всё выглядело нормально (dev
+// раздаёт файлы из памяти), а в git появлялись удаления собранных файлов, и
+// закоммитить их вместе с правками означало положить прод.
 function cleanRootAssets(): Plugin {
   return {
     name: "clean-root-assets",
+    apply: "build",
     buildStart() {
       const dir = path.resolve(import.meta.dirname, "../assets")
       fs.rmSync(dir, { recursive: true, force: true })

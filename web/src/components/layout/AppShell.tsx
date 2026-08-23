@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState, Suspense, type ReactNode } from "react"
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
   LayoutGrid,
@@ -161,7 +161,13 @@ export function AppShell() {
 
         <main className={cn("relative min-w-0 w-full flex-1 px-4 py-5 pb-12 text-foreground md:px-8 md:py-7", isDark && "dark")}>
           <div className="mx-auto" style={{ maxWidth: 1600 }}>
-            <Outlet />
+            {/* Разделы грузятся отдельными кусками (см. App.tsx), поэтому
+                Suspense стоит здесь, а не вокруг всего шелла: при переходе
+                должна ждать только область страницы, а сайдбар с таймером —
+                оставаться на месте. */}
+            <Suspense fallback={<div className="min-h-[60vh]" />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>
