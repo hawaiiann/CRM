@@ -1,4 +1,5 @@
-import type { Order, OrderLine, PlanningLesson } from "@/types/models"
+import type { Order, OrderLine, PlanningBoard, PlanningLesson } from "@/types/models"
+import { orderMatchesLessonFuzzy } from "./planningSync"
 
 /**
  * Ручное пополнение между планированием и заказом.
@@ -70,6 +71,67 @@ export function addLessonItemsToOrderLines(
     ready: !!doneByText.get(norm(text)),
   }))
   return [...(order.lines || []), ...added]
+}
+
+/**
+ * Что произойдёт при отвязке урока от заказа.
+ *
+ * Разорвать связь одним флагом нельзя: у неё два независимых источника.
+ * Явная привязка живёт в заказе (linkedLessonId), нечёткая — в совпадении
+ * класса, предмета, четверти и НОМЕРА УРОКА. Снять только явную мало: заказ
+ * тут же поймает тот же урок по совпадению полей, и со стороны это выглядит
+ * как «кнопка не работает».
+ *
+ * Поэтому отвязка правит данные, а не заводит скрытый флаг «не связывать»:
+ * чистится linkedLessonId и, если нечёткое совпадение всё равно срабатывает,
+ * поле «Урок» заказа. Это видно в форме заказа и обратимо руками — в отличие
+ * от невидимого признака, про который через месяц никто не вспомнит. Заодно
+ * не нужна колонка в базе.
+ */
+export interface UnlinkPlan {
+  /** Связь вообще есть и её есть что рвать. */
+  possible: boolean
+  /** Будет снята явная привязка «Привязать к уроку». */
+  clearsExplicitLink: boolean
+  /** Будет очищено поле «Урок» заказа — иначе связь восстановится сама. */
+  clearsLessonNumber: boolean
+  /** Номер урока, который будет стёрт (для текста подтверждения). */
+  lessonNumber: string
+  /** Патч заказа. */
+  orderPatch: Pick<Order, "linkedLessonId" | "lesson">
+  /** Чек-лист урока после отвязки. */
+  lessonItems: PlanningLesson["items"]
+  /** Сколько пунктов чек-листа перестанут числиться пришедшими из заказа. */
+  releasedItems: number
+}
+
+export function planUnlink(order: Order, board: PlanningBoard, lesson: PlanningLesson): UnlinkPlan {
+  const clearsExplicitLink = order.linkedLessonId === lesson.id
+  // Проверяем нечёткое совпадение так, как оно сработает ПОСЛЕ снятия явной
+  // привязки: пока linkedLessonId стоит, нечёткое правило до заказа не доходит.
+  const clearsLessonNumber = orderMatchesLessonFuzzy({ ...order, linkedLessonId: null }, board, lesson)
+
+  // Пункты, добавленные автосинхронизацией, оставляем в уроке, но снимаем
+  // пометку fromOrder: заказа за ними больше нет, а терять набранный состав
+  // из-за отвязки — потеря данных на ровном месте.
+  const items = lesson.items || []
+  const releasedItems = items.filter((i) => i.fromOrder).length
+  const lessonItems = releasedItems
+    ? items.map((i) => (i.fromOrder ? { id: i.id, text: i.text, done: i.done } : i))
+    : items
+
+  return {
+    possible: clearsExplicitLink || clearsLessonNumber,
+    clearsExplicitLink,
+    clearsLessonNumber,
+    lessonNumber: String(order.lesson || ""),
+    orderPatch: {
+      linkedLessonId: clearsExplicitLink ? null : order.linkedLessonId,
+      lesson: clearsLessonNumber ? "" : order.lesson,
+    },
+    lessonItems,
+    releasedItems,
+  }
 }
 
 /** Добавляет недостающие позиции заказа в чек-лист урока. */

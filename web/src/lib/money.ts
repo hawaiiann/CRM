@@ -94,7 +94,7 @@ export function orderPaymentsTotal(o: Pick<Order, "payments" | "paidAmount" | "p
   return orderPayments(o).reduce((s, p) => s + parseNum(p.amount), 0)
 }
 
-function pluralizeRu(n: number, one: string, few: string, many: string): string {
+export function pluralizeRu(n: number, one: string, few: string, many: string): string {
   const mod10 = n % 10
   const mod100 = n % 100
   if (mod10 === 1 && mod100 !== 11) return one

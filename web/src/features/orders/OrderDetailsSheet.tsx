@@ -1,4 +1,5 @@
-import { PackageOpen } from "lucide-react"
+import { PackageOpen, ExternalLink, TriangleAlert } from "lucide-react"
+import { Link } from "react-router-dom"
 import {
   Sheet,
   SheetContent,
@@ -9,8 +10,11 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import type { Order } from "@/types/models"
-import { fmtMoney, calculateLineTotal, orderPaymentState, isHourlyUnit } from "@/lib/money"
+import { fmtMoney, calculateLineTotal, orderPaymentState, isHourlyUnit, pluralizeRu } from "@/lib/money"
 import { fmtDateRangeCompact, fmtDeadline } from "@/lib/dates"
+import { useAppStore } from "@/store/useAppStore"
+import { findLessonForOrder } from "@/lib/planningSync"
+import { lessonItemsMissingInOrder } from "@/lib/planningOrderSync"
 
 export function OrderDetailsSheet({
   order,
@@ -22,6 +26,12 @@ export function OrderDetailsSheet({
   onEdit: (order: Order) => void
 }) {
   const pay = order ? orderPaymentState(order) : null
+
+  // Связь с уроком была видна только из планирования: отсюда нельзя было ни
+  // узнать, что заказ вообще чем-то управляет, ни сверить состав.
+  const planningBoards = useAppStore((s) => s.planningBoards)
+  const linked = order ? findLessonForOrder(planningBoards, order) : null
+  const missingInOrder = order && linked ? lessonItemsMissingInOrder(linked.lesson, order) : []
 
   // Показываем только заполненные поля: пустые подписи в шапке лишь мешают.
   const facts = order
@@ -103,6 +113,47 @@ export function OrderDetailsSheet({
                   </div>
                 )}
               </div>
+
+              {/* Урок в планировании: куда уходят позиции этого заказа и что
+                  из состава урока в заказ не попало. Расхождение здесь — это
+                  работа, которая делается, но не посчитана. */}
+              {linked && (
+                <div>
+                  <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                    Урок в планировании
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Link
+                      to="/planning"
+                      onClick={() => onOpenChange(false)}
+                      className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-bold">
+                          {linked.lesson.title || `Урок ${linked.lesson.num}`}
+                        </div>
+                        <div className="truncate text-[11.5px] text-muted-foreground">
+                          {[linked.board.subject, linked.board.title, linked.board.quarter].filter(Boolean).join(" · ")} ·{" "}
+                          {linked.lesson.items.filter((i) => i.done).length}/{linked.lesson.items.length} выполнено
+                        </div>
+                      </div>
+                      <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                    </Link>
+
+                    {missingInOrder.length > 0 && (
+                      <div className="flex gap-2 rounded-xl bg-warning px-3 py-2.5 text-warning-foreground">
+                        <TriangleAlert className="mt-px size-3.5 shrink-0" />
+                        <div className="text-[11.5px] leading-relaxed">
+                          <b className="font-bold">Состав расходится с уроком.</b> В чек-листе урока{" "}
+                          {missingInOrder.length}{" "}
+                          {pluralizeRu(missingInOrder.length, "пункт", "пункта", "пунктов")}, которых нет в позициях
+                          заказа: {missingInOrder.join(", ")}. Перенести их можно кнопкой «В заказ» в карточке урока.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl bg-muted px-3 py-2.5">

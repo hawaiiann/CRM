@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react"
-import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink } from "lucide-react"
+import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink, Unlink, TriangleAlert } from "lucide-react"
 import { Link } from "react-router-dom"
 import {
   Sheet,
@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, orderTotal } from "@/lib/money"
+import { fmtMoney, orderTotal, pluralizeRu } from "@/lib/money"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { findGoverningOrder } from "@/lib/planningSync"
 import {
@@ -19,6 +19,7 @@ import {
   orderLinesMissingInLesson,
   addLessonItemsToOrderLines,
   addOrderLinesToLessonItems,
+  planUnlink,
 } from "@/lib/planningOrderSync"
 import { getVisibleCatalog } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
@@ -121,6 +122,34 @@ export function LessonSheet({
   function pullFromOrder() {
     if (!governingOrder || !liveLesson || !toLesson.length) return
     updateLesson({ items: addOrderLinesToLessonItems(governingOrder, liveLesson, () => randId("i")) })
+  }
+
+  // Что именно изменится при отвязке — считаем заранее, чтобы написать это в
+  // подтверждении. Связь держится на двух разных вещах (явная привязка и
+  // совпадение полей), и «отвязал, а оно вернулось» — худшее, что тут может
+  // случиться.
+  const unlinkPlan = governingOrder && liveBoard && liveLesson ? planUnlink(governingOrder, liveBoard, liveLesson) : null
+
+  function unlinkOrder() {
+    if (!governingOrder || !liveLesson || !unlinkPlan?.possible) return
+
+    const what: string[] = []
+    if (unlinkPlan.clearsExplicitLink) what.push("• у заказа снимется привязка «Привязать к уроку»")
+    if (unlinkPlan.clearsLessonNumber)
+      what.push(
+        `• у заказа очистится поле «Урок»${unlinkPlan.lessonNumber ? ` (сейчас «${unlinkPlan.lessonNumber}»)` : ""} — ` +
+          "иначе связь вернётся сама по совпадению предмета, класса, четверти и номера"
+      )
+    if (unlinkPlan.releasedItems)
+      what.push(
+        `• ${unlinkPlan.releasedItems} ${pluralizeRu(unlinkPlan.releasedItems, "пункт", "пункта", "пунктов")} ` +
+          "чек-листа останутся в уроке, но перестанут обновляться из заказа"
+      )
+
+    if (!confirm(`Отвязать урок от заказа?\n\n${what.join("\n")}\n\nПозиции, суммы и оплаты заказа не изменятся.`)) return
+
+    setOrders((prev) => prev.map((o) => (o.id === governingOrder.id ? { ...o, ...unlinkPlan.orderPatch } : o)))
+    updateLesson({ items: unlinkPlan.lessonItems })
   }
   const items = liveLesson?.items || []
   const doneCount = items.filter((i) => i.done).length
@@ -279,6 +308,32 @@ export function LessonSheet({
                     <div className="text-[11px] text-muted-foreground">
                       Цену и количество новых позиций заказа проставьте сами — их не угадать.
                     </div>
+
+                    {/* Расхождение состава. Счётчик на кнопке легко прочитать
+                        как «можно добавить», а не как «работа не посчитана»,
+                        поэтому про деньги сказано прямым текстом. */}
+                    {toOrder.length > 0 && (
+                      <div className="flex gap-2 rounded-xl bg-warning px-3 py-2.5 text-warning-foreground">
+                        <TriangleAlert className="mt-px size-3.5 shrink-0" />
+                        <div className="text-[11.5px] leading-relaxed">
+                          <b className="font-bold">Состав расходится с заказом.</b> В чек-листе{" "}
+                          {toOrder.length} {pluralizeRu(toOrder.length, "пункт", "пункта", "пунктов")}, которых нет среди
+                          позиций заказа: {toOrder.join(", ")}. Эта работа нигде не посчитана и не оплачена.
+                        </div>
+                      </div>
+                    )}
+
+                    {unlinkPlan?.possible && (
+                      <button
+                        type="button"
+                        onClick={unlinkOrder}
+                        className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        title="Разорвать связь урока с этим заказом"
+                      >
+                        <Unlink className="size-3.5" />
+                        Отвязать от заказа
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-xl bg-muted px-3.5 py-3">

@@ -1,5 +1,38 @@
 import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
 
+/**
+ * Нечёткое совпадение заказа с уроком: класс, предмет, четверть и номер урока.
+ * Раньше эти правила были переписаны дважды — внутри syncPlanningWithOrders и
+ * в findGoverningOrder — и разошлись бы при первой же правке. Теперь одно
+ * место, и на него же опирается отвязка урока от заказа: чтобы разорвать
+ * связь, надо знать, поймает ли заказ урок снова по совпадению полей.
+ *
+ * Явную привязку (linkedLessonId) не учитывает — это отдельное, более сильное
+ * правило, которое проверяется до нечёткого.
+ */
+export function orderMatchesLessonFuzzy(order: Order, board: PlanningBoard, lesson: PlanningLesson): boolean {
+  if (!order.grade || !order.lesson) return false
+
+  const lessonNumMatch = String(order.lesson).match(/\d+/)
+  if (!lessonNumMatch || parseInt(lessonNumMatch[0], 10) !== lesson.num) return false
+
+  const boardTitle = (board.title || "").trim().toLowerCase()
+  const boardSubject = (board.subject || "").trim().toLowerCase()
+  const boardQuarter = (board.quarter || "").trim().toLowerCase()
+
+  const orderGrade = (order.grade || "").trim().toLowerCase()
+  const orderSubject = (order.subject || "").trim().toLowerCase()
+  const orderQuarter = (order.quarter || "").trim().toLowerCase()
+
+  const isGradeMatch = boardTitle === orderGrade || boardTitle.includes(orderGrade) || orderGrade.includes(boardTitle)
+  const isSubjectMatch =
+    !boardSubject || !orderSubject || boardSubject === orderSubject || boardSubject.includes(orderSubject) || orderSubject.includes(boardSubject)
+  const isQuarterMatch =
+    !boardQuarter || !orderQuarter || boardQuarter === orderQuarter || boardQuarter.includes(orderQuarter) || orderQuarter.includes(boardQuarter)
+
+  return isGradeMatch && isSubjectMatch && isQuarterMatch
+}
+
 /* АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ЗАКАЗОВ И ПЛАНИРОВАНИЯ
  * Ported 1:1 from js/db.js's syncPlanningWithOrders — same matching rules
  * (explicit linkedLessonId first, fuzzy grade/subject/quarter/lesson-number
@@ -91,29 +124,9 @@ export function syncPlanningWithOrders(orders: Order[], boardsIn: PlanningBoard[
 
     if (!o.grade || !o.lesson) return
 
-    const orderGrade = (o.grade || "").trim().toLowerCase()
-    const orderSubject = (o.subject || "").trim().toLowerCase()
-    const orderQuarter = (o.quarter || "").trim().toLowerCase()
-
-    const lessonNumMatch = String(o.lesson).match(/\d+/)
-    if (!lessonNumMatch) return
-    const orderLessonNum = parseInt(lessonNumMatch[0], 10)
-
     boards.forEach((board) => {
-      const boardTitle = (board.title || "").trim().toLowerCase()
-      const boardSubject = (board.subject || "").trim().toLowerCase()
-      const boardQuarter = (board.quarter || "").trim().toLowerCase()
-
-      const isGradeMatch = boardTitle === orderGrade || boardTitle.includes(orderGrade) || orderGrade.includes(boardTitle)
-      const isSubjectMatch =
-        !boardSubject || !orderSubject || boardSubject === orderSubject || boardSubject.includes(orderSubject) || orderSubject.includes(boardSubject)
-      const isQuarterMatch =
-        !boardQuarter || !orderQuarter || boardQuarter === orderQuarter || boardQuarter.includes(orderQuarter) || orderQuarter.includes(boardQuarter)
-
-      if (isGradeMatch && isSubjectMatch && isQuarterMatch) {
-        const lesson = board.lessons.find((l) => l.num === orderLessonNum)
-        if (lesson) applyOrderToLesson(o, lesson)
-      }
+      const lesson = board.lessons.find((l) => orderMatchesLessonFuzzy(o, board, l))
+      if (lesson) applyOrderToLesson(o, lesson)
     })
   })
 
@@ -138,38 +151,45 @@ export function syncPlanningWithOrders(orders: Order[], boardsIn: PlanningBoard[
   return boards
 }
 
-// Same lookup as syncPlanningWithOrders uses internally — returns the order
-// that governs a given lesson's color, for the "why is this cell this color"
-// hint in the lesson popup (ported from db.js's findGoverningOrder).
+// Тот же поиск, что делает syncPlanningWithOrders — возвращает заказ, который
+// управляет цветом урока (подсказка «почему ячейка такого цвета» и блок «Заказ»
+// в карточке урока). Портировано из db.js findGoverningOrder.
 export function findGoverningOrder(orders: Order[], board: PlanningBoard, lesson: PlanningLesson): Order | null {
   if (!orders) return null
 
   const explicit = orders.find((o) => o.status !== "cancelled" && o.linkedLessonId === lesson.id)
   if (explicit) return explicit
 
-  const boardTitle = (board.title || "").trim().toLowerCase()
-  const boardSubject = (board.subject || "").trim().toLowerCase()
-  const boardQuarter = (board.quarter || "").trim().toLowerCase()
-
   return (
-    orders.find((o) => {
-      if (o.status === "cancelled") return false
-      if (o.linkedLessonId) return false
-      if (!o.grade || !o.lesson) return false
-      const lessonNumMatch = String(o.lesson).match(/\d+/)
-      if (!lessonNumMatch || parseInt(lessonNumMatch[0], 10) !== lesson.num) return false
-
-      const orderGrade = (o.grade || "").trim().toLowerCase()
-      const orderSubject = (o.subject || "").trim().toLowerCase()
-      const orderQuarter = (o.quarter || "").trim().toLowerCase()
-
-      const isGradeMatch = boardTitle === orderGrade || boardTitle.includes(orderGrade) || orderGrade.includes(boardTitle)
-      const isSubjectMatch =
-        !boardSubject || !orderSubject || boardSubject === orderSubject || boardSubject.includes(orderSubject) || orderSubject.includes(boardSubject)
-      const isQuarterMatch =
-        !boardQuarter || !orderQuarter || boardQuarter === orderQuarter || boardQuarter.includes(orderQuarter) || orderQuarter.includes(boardQuarter)
-
-      return isGradeMatch && isSubjectMatch && isQuarterMatch
-    }) || null
+    orders.find((o) => o.status !== "cancelled" && !o.linkedLessonId && orderMatchesLessonFuzzy(o, board, lesson)) ||
+    null
   )
+}
+
+/**
+ * Обратный поиск: по заказу найти урок, которым он управляет. Нужен на стороне
+ * заказа — связь была видна только из планирования, и из карточки заказа нельзя
+ * было ни узнать про урок, ни сверить с ним состав.
+ */
+export function findLessonForOrder(
+  boards: PlanningBoard[],
+  order: Order
+): { board: PlanningBoard; lesson: PlanningLesson } | null {
+  if (!boards || order.status === "cancelled") return null
+
+  if (order.linkedLessonId) {
+    for (const board of boards) {
+      const lesson = board.lessons.find((l) => l.id === order.linkedLessonId)
+      if (lesson) return { board, lesson }
+    }
+    // Явная привязка указывает на удалённый урок — на нечёткое совпадение не
+    // переключаемся: так же ведёт себя и автосинхронизация.
+    return null
+  }
+
+  for (const board of boards) {
+    const lesson = board.lessons.find((l) => orderMatchesLessonFuzzy(order, board, l))
+    if (lesson) return { board, lesson }
+  }
+  return null
 }
