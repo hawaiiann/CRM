@@ -26,7 +26,8 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder } from "@/lib/cloudSync"
 import { recordActivityChanges } from "@/lib/activity"
 import { cn } from "@/lib/utils"
-import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderTaxRate } from "@/lib/money"
+import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, draftPaymentState } from "@/lib/money"
+import { getClientAdvanceStats } from "@/lib/advances"
 import { normalizePayment } from "@/lib/normalize"
 import type { Order, OrderLine, Payment, TaxType, OrderStatus } from "@/types/models"
 
@@ -151,23 +152,24 @@ export function OrderFormDialog({
     return opts
   }, [planningBoards])
 
-  const baseTotal = useMemo(() => draft.lines.reduce((s, l) => s + calculateLineTotal(l), 0), [draft.lines])
-  const taxRate = orderTaxRate(draft)
-  const totalWithTax = Math.round(baseTotal * (1 + taxRate))
+  const baseTotal = orderBaseTotal(draft)
 
-  const clientStats = useMemo(() => {
-    const name = draft.client.trim().toLowerCase()
-    if (!name) return { totalIn: 0, used: 0, available: 0 }
-    const totalIn = advances.filter((a) => a.client.toLowerCase() === name).reduce((s, a) => s + parseNum(a.amount), 0)
-    const used = orders
-      .filter((o) => o.client.toLowerCase() === name && o.status !== "cancelled" && o.id !== draft.id)
-      .reduce((s, o) => s + parseNum(o.advanceUsed), 0)
-    return { totalIn, used, available: Math.max(0, totalIn - used) }
-  }, [advances, orders, draft.client, draft.id])
-
-  const advUsed = Math.min(parseNum(draft.advanceUsed), totalWithTax)
+  // Раньше здесь стояли выражения, повторяющие orderPaymentState — третья
+  // копия одной формулы, которая уже начинала расходиться с остальными.
+  const pay = draftPaymentState(draft)
+  const totalWithTax = pay.full
+  const advUsed = pay.advUsed
+  const remaining = pay.remaining
+  // Сырая сумма платежей, без обрезки по стоимости заказа: «Получено деньгами»
+  // должно показывать, сколько реально внесено, даже если это переплата.
   const paymentsTotal = draft.payments.reduce((s, p) => s + parseNum(p.amount), 0)
-  const remaining = Math.max(0, totalWithTax - advUsed - paymentsTotal)
+
+  // Тот же расчёт, что у Клиентов и Финансов — своя копия жила прямо здесь.
+  const clientStats = useMemo(
+    () => getClientAdvanceStats(draft.client, advances, orders, draft.id),
+    [advances, orders, draft.client, draft.id]
+  )
+
   const advanceExceedsOrder = parseNum(draft.advanceUsed) > totalWithTax + 0.01
 
   // Сколько аванса реально доступно под ЭТОТ заказ: остаток клиента плюс то,
@@ -276,10 +278,13 @@ export function OrderFormDialog({
       notes: draft.notes.trim(),
       createdAt: editingOrder ? editingOrder.createdAt : Date.now(),
     }
-    const paidTotal = cleanPayments.reduce((s, p) => s + parseNum(p.amount), 0)
-    const fullExact = cleanLines.reduce((s, l) => s + calculateLineTotal(l), 0) * (1 + orderTaxRate(finalOrder))
-    finalOrder.paidAmount = paidTotal
-    finalOrder.isPaid = Math.round(fullExact) > 0 && Math.max(0, Math.round(fullExact) - Math.min(finalOrder.advanceUsed, Math.round(fullExact)) - paidTotal) <= 0
+    // Считаем по УЖЕ ОЧИЩЕННЫМ позициям и платежам, а не по черновику: пустые
+    // строки и нулевые платежи из формы в заказ не идут.
+    // paidAmount — сырая сумма платежей, без обрезки по стоимости заказа:
+    // это зеркало списка платежей (так же его пишет и cloudSync), переплату
+    // терять нельзя. Обрезка живёт только в расчёте покрытия.
+    finalOrder.paidAmount = cleanPayments.reduce((s, p) => s + parseNum(p.amount), 0)
+    finalOrder.isPaid = draftPaymentState(finalOrder).isFullyPaid
     finalOrder.paidAt = cleanPayments.length ? cleanPayments[0].date || null : null
 
     const entry = recordActivityChanges(editingOrder, finalOrder)

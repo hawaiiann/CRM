@@ -112,11 +112,19 @@ export function fmtMilestoneDuration(ms: number): string {
   return parts.join(" ") || "0 минут"
 }
 
-export function orderPaymentState(o: Order) {
-  const fullExact = orderTotal(o)
+/**
+ * Единая формула покрытия заказа: сначала аванс, потом живые деньги, остаток
+ * не уходит в минус.
+ *
+ * Вынесена отдельно от orderPaymentState, потому что у формы заказа те же
+ * расчёты идут по ЧЕРНОВИКУ, а не по сохранённому заказу, и подставлять туда
+ * orderPaymentState нельзя (см. draftPaymentState). Раньше форма считала всё
+ * заново своими выражениями — три копии одной формулы, которые уже расходились.
+ */
+export function paymentBreakdown(fullExact: number, advanceUsed: unknown, paymentsTotal: unknown) {
   const full = Math.round(fullExact)
-  const advUsed = Math.min(parseNum(o.advanceUsed), full)
-  const paidMoney = Math.min(orderPaymentsTotal(o), Math.max(0, full - advUsed))
+  const advUsed = Math.min(parseNum(advanceUsed), full)
+  const paidMoney = Math.min(parseNum(paymentsTotal), Math.max(0, full - advUsed))
   const covered = advUsed + paidMoney
   const remaining = Math.max(0, Math.round((full - covered) * 100) / 100)
   return {
@@ -128,4 +136,46 @@ export function orderPaymentState(o: Order) {
     remaining,
     isFullyPaid: full > 0 && remaining <= 0,
   }
+}
+
+export function orderPaymentState(o: Order) {
+  return paymentBreakdown(orderTotal(o), o.advanceUsed, orderPaymentsTotal(o))
+}
+
+/**
+ * То же самое для черновика формы заказа.
+ *
+ * Отдельная функция нужна из-за legacy-поля paidAmount: orderPayments()
+ * подставляет его, когда список платежей пуст. Для сохранённого заказа это
+ * правильно — так читаются старые записи. Для черновика губительно: стоит
+ * удалить в форме все платежи, и старая сумма воскреснет, а заказ покажется
+ * оплаченным. Поэтому здесь платежи берутся строго из списка.
+ */
+export function draftPaymentState(d: Pick<Order, "lines" | "taxType" | "advanceUsed" | "payments">) {
+  const paymentsTotal = (d.payments || []).reduce((s, p) => s + parseNum(p.amount), 0)
+  return paymentBreakdown(orderTotal(d), d.advanceUsed, paymentsTotal)
+}
+
+/**
+ * Заказы клиента — все, кроме отменённых.
+ *
+ * Этот отбор был расписан руками в четырёх местах и дважды разъезжался: долг
+ * считался только по незавершённым заказам, и сданный, но не оплаченный заказ
+ * выпадал из суммы — сначала на Заказах (v2.8.1), потом у Клиентов (v2.8.2).
+ * Правило одно: отменённый заказ денег не стоит, завершённый — стоит.
+ */
+export function ordersOfClient(orders: Order[], client: string): Order[] {
+  const name = (client || "").trim().toLowerCase()
+  if (!name) return []
+  return orders.filter((o) => (o.client || "").trim().toLowerCase() === name && o.status !== "cancelled")
+}
+
+/** Долг клиента: сколько по нему осталось получить по всем неотменённым заказам. */
+export function clientDebt(orders: Order[], client: string): number {
+  return ordersOfClient(orders, client).reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+}
+
+/** Общий долг: то же самое по всем заказам сразу. */
+export function ordersDebt(orders: Order[]): number {
+  return orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + orderPaymentState(o).remaining, 0)
 }

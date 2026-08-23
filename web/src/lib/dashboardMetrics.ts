@@ -1,5 +1,5 @@
 import type { Order, Advance, ActivityLogEntry, DashboardMetric } from "@/types/models"
-import { parseNum, dateKey, addDays, orderTotal, orderBaseTotal, orderPayments } from "./money"
+import { parseNum, dateKey, addDays, orderBaseTotal, orderPayments, orderPaymentState } from "./money"
 
 /* Ported from js/app.js */
 export interface MetricTypeInfo {
@@ -63,12 +63,12 @@ interface RevenueEvent { date: string; orderId: string; revenue: number; net: nu
 
 function revenueEventsForOrder(o: Order, advances: Advance[]): RevenueEvent[] {
   const events: RevenueEvent[] = []
-  const fullExact = orderTotal(o)
-  const full = Math.round(fullExact)
+  // Стоимость и списанный аванс — из общего расчёта покрытия. Разбивать по
+  // датам приходится здесь: график строится по событиям, а не по итогу.
+  const { full, fullExact, advUsed } = orderPaymentState(o)
   const base = orderBaseTotal(o)
   if (full <= 0) return events
 
-  const advUsed = Math.min(parseNum(o.advanceUsed), full)
   const netForAdvance = fullExact > 0 ? advUsed * (base / fullExact) : 0
   if (advUsed > 0) {
     events.push({
@@ -114,12 +114,10 @@ function countEvents(orders: Order[]) {
 // capped at the order's full price. Same rule as orderRecognizedRevenue in utils.js.
 export function orderRecognizedRevenue(o: Order): { revenue: number; net: number } {
   const base = orderBaseTotal(o)
-  const fullExact = orderTotal(o)
-  const full = Math.round(fullExact)
-  const advUsed = Math.min(parseNum(o.advanceUsed), full)
-  const paid = orderPayments(o).reduce((s, p) => s + parseNum(p.amount), 0)
-  const paidCapped = Math.min(paid, Math.max(0, full - advUsed))
-  const covered = advUsed + paidCapped
+  // Покрытие считает orderPaymentState — здесь лежала ещё одна копия той же
+  // формулы (аванс, потом деньги, с обрезкой по стоимости заказа), и выручка
+  // на дашборде разошлась бы с «к доплате» на Заказах при первой же правке.
+  const { full, fullExact, covered } = orderPaymentState(o)
   if (covered <= 0) return { revenue: 0, net: 0 }
   if (covered >= full) return { revenue: full, net: Math.round(base) }
   const net = fullExact > 0 ? covered * (base / fullExact) : 0

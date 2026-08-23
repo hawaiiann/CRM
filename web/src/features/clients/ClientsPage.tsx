@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select"
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, isOrderOverdue, orderPaymentState } from "@/lib/money"
+import { fmtMoney, isOrderOverdue, ordersOfClient, clientDebt } from "@/lib/money"
 import { getClientAdvanceStats } from "@/lib/advances"
 import { ClientCardSheet } from "./ClientCardSheet"
 import { DepositDialog } from "@/features/finance/DepositDialog"
@@ -48,14 +48,11 @@ export function ClientsPage() {
 
     let list = [...names].map((name) => {
       const stats = getClientAdvanceStats(name, advances, orders)
-      const clientOrders = orders.filter((o) => (o.client || "").toLowerCase() === name.toLowerCase() && o.status !== "cancelled")
+      const clientOrders = ordersOfClient(orders, name)
       const activeOrders = clientOrders.filter((o) => o.status !== "done")
-      // Долг считаем по ВСЕМ заказам клиента, кроме отменённых. Раньше сюда
-      // попадали только незавершённые, и оплаченный не полностью, но сданный
-      // заказ выпадал из суммы — клиент выглядел «чистым», хотя деньги за ним
-      // остаются. Та же ошибка была на Заказах (см. v2.8.1); теперь Клиенты,
-      // Заказы и Финансы считают долг одинаково.
-      const totalDue = clientOrders.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+      // Долг — по ВСЕМ заказам клиента, кроме отменённых (см. clientDebt:
+      // именно этот отбор дважды разъезжался, в v2.8.1 и v2.8.2).
+      const totalDue = clientDebt(orders, name)
       // Просрочка — только по незавершённым: у сданного заказа срок сдачи уже
       // неактуален, там вопрос только к оплате.
       const hasOverdue = activeOrders.some(isOrderOverdue)

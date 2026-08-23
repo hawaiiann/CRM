@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { Play, CheckCircle2, Wallet, Clock3, TrendingUp, TrendingDown } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, orderPaymentState } from "@/lib/money"
+import { fmtMoney, ordersDebt } from "@/lib/money"
 import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
 import { cn } from "@/lib/utils"
 import { TasksMiniWidget } from "./TasksMiniWidget"
@@ -44,7 +44,7 @@ export function DashboardPage() {
       }
     })
 
-    const activeRev = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+    const activeRev = ordersDebt(orders)
 
     return {
       activeCount: active.length,

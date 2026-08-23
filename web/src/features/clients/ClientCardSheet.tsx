@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, orderTotal } from "@/lib/money"
+import { fmtMoney, orderTotal, ordersOfClient } from "@/lib/money"
 import { fmtDeadline } from "@/lib/dates"
 import { getClientAdvanceStats } from "@/lib/advances"
 
@@ -31,9 +31,7 @@ export function ClientCardSheet({
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
 
-  const clientOrders = clientName
-    ? orders.filter((o) => (o.client || "").toLowerCase() === clientName.toLowerCase() && o.status !== "cancelled")
-    : []
+  const clientOrders = ordersOfClient(orders, clientName || "")
   const revenue = clientOrders.reduce((s, o) => s + orderTotal(o), 0)
   const stats = clientName ? getClientAdvanceStats(clientName, advances, orders) : { totalIn: 0, used: 0, available: 0 }
   const sortedOrders = clientOrders.slice().sort((a, b) => (b.deadline || "").localeCompare(a.deadline || ""))
