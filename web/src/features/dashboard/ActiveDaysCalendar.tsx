@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react"
+import { X } from "lucide-react"
 import { useAppStore } from "@/store/useAppStore"
 import { fmtHours, dateKey } from "@/lib/money"
 import { cn } from "@/lib/utils"
+import { deleteActivityLogEntries } from "@/lib/cloudSync"
+import { confirmDialog } from "@/store/useDialogStore"
+import type { ActivityLogEntry } from "@/types/models"
 import {
   Select,
   SelectTrigger,
@@ -24,6 +28,7 @@ function monthOptions() {
 
 export function ActiveDaysCalendar() {
   const activityLog = useAppStore((s) => s.activityLog)
+  const orders = useAppStore((s) => s.orders)
   const options = useMemo(() => monthOptions(), [])
   const [monthValue, setMonthValue] = useState(options[0].value)
   const [openDay, setOpenDay] = useState<string | null>(null)
@@ -55,6 +60,21 @@ export function ActiveDaysCalendar() {
 
   const dayEntries = openDay ? activityLog.filter((e) => e.date === openDay) : []
   const hoursForDay = dayEntries.reduce((s, e) => s + e.delta, 0)
+
+  // Раньше журнал только пополнялся — ошибочную запись (например, часы,
+  // посчитанные по «Плану», а не по факту, см. lib/activity.ts) нельзя было
+  // убрать иначе как стерев всю статистику заказа целиком.
+  async function removeEntry(entry: ActivityLogEntry) {
+    const order = orders.find((o) => o.id === entry.orderId)
+    const ok = await confirmDialog({
+      title: "Удалить запись из журнала?",
+      body: `${order ? orderTitle(order) : "Заказ удалён"} · ${entry.delta > 0 ? "+" : ""}${fmtHours(Math.abs(entry.delta))}`,
+      confirmLabel: "Удалить",
+      destructive: true,
+    })
+    if (!ok) return
+    deleteActivityLogEntries([entry])
+  }
 
   return (
     <div>
@@ -110,10 +130,41 @@ export function ActiveDaysCalendar() {
             <button type="button" onClick={() => setOpenDay(null)} className="text-[11px] text-muted-foreground">Закрыть ✕</button>
           </div>
           {dayEntries.length ? (
-            <div className="flex justify-between py-1 text-[12.5px]">
-              <span className="text-muted-foreground">Часы</span>
-              <b>{fmtHours(hoursForDay)}</b>
-            </div>
+            <>
+              <div className="flex justify-between py-1 text-[12.5px]">
+                <span className="text-muted-foreground">Часы</span>
+                <b>{fmtHours(hoursForDay)}</b>
+              </div>
+              {/* Список записей и удаление по одной. Без этого поправить
+                  неверно посчитанные часы (см. lib/activity.ts) было нечем —
+                  журнал только пополнялся. */}
+              <div className="flex flex-col gap-1 border-t border-border pt-2">
+                {dayEntries.map((e, i) => {
+                  const order = orders.find((o) => o.id === e.orderId)
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-2 text-[11.5px]">
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {order ? orderTitle(order) : "Заказ удалён"}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <b className={cn(e.delta < 0 && "text-destructive")}>
+                          {e.delta > 0 ? "+" : ""}
+                          {fmtHours(Math.abs(e.delta))}
+                        </b>
+                        <button
+                          type="button"
+                          title="Удалить запись"
+                          onClick={() => removeEntry(e)}
+                          className="flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           ) : (
             <div className="text-[12px] text-muted-foreground">Нет записей</div>
           )}
@@ -121,6 +172,10 @@ export function ActiveDaysCalendar() {
       )}
     </div>
   )
+}
+
+function orderTitle(o: { title?: string; subject?: string; grade?: string; lesson?: string }): string {
+  return o.title || [o.subject, o.grade, o.lesson && `Урок ${o.lesson}`].filter(Boolean).join(", ") || "Без названия"
 }
 
 function formatDayLabel(dateStr: string): string {

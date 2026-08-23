@@ -250,10 +250,17 @@ function dropFromSnapshot(table: string, id: string) {
   if (map) delete map[id]
 }
 
+// activity_log — единственная таблица, где клиентский идентификатор это не
+// "id" (его назначает сервер), а "entry_id". Остальной механизм очереди тот
+// же самый, поэтому не заводим отдельный путь, а просто бьём по нужной колонке.
+function deleteMatchColumn(table: string): string {
+  return table === "activity_log" ? "entry_id" : "id"
+}
+
 /** Одна попытка удаления. true — облако подтвердило. */
 async function tryDelete(table: string, id: string): Promise<boolean> {
   try {
-    const { error } = await supabaseClient.from(table).delete().eq("id", id)
+    const { error } = await supabaseClient.from(table).delete().eq(deleteMatchColumn(table), id)
     if (error) throw error
     forgetDelete(table, id)
     dropFromSnapshot(table, id)
@@ -281,6 +288,21 @@ export async function deleteFromCloud(table: string, id: string) {
   dropFromSnapshot(table, id)
   if (!useAppStore.getState().cloudUserId) return
   if (!(await tryDelete(table, id))) markSyncFailed()
+}
+
+/**
+ * Удаляет отдельные записи журнала активности — единственный способ поправить
+ * неверно посчитанные часы (например записанные по ошибке ранних версий,
+ * см. lib/activity.ts). Точечного удаления не было вовсе: журнал только
+ * пополнялся, и ошибочную запись нельзя было убрать иначе как стерев вообще
+ * все записи заказа через deleteActivityLogForOrder.
+ */
+export function deleteActivityLogEntries(entries: ActivityLogEntry[]) {
+  if (!entries.length) return
+  const toRemove = new Set(entries)
+  useAppStore.getState().setActivityLog((prev) => prev.filter((e) => !toRemove.has(e)))
+  // Запись без entryId ещё не отправлена в облако — удалять там нечего.
+  entries.forEach((e) => { if (e.entryId) deleteFromCloud("activity_log", e.entryId) })
 }
 
 export async function deleteActivityLogForOrder(orderId: string) {
@@ -681,7 +703,9 @@ async function cloudLoadData() {
     if (board) board.lessons.push(rowToLesson(r))
   })
   const pulledSettings = settingsRes.data ? (settingsRes.data as Row).data : null
-  const pulledLog: ActivityLogEntry[] = (logRes.data || []).map((r: Row) => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }))
+  const pulledLog: ActivityLogEntry[] = (logRes.data || [])
+    .filter((r: Row) => !r.entry_id || !isPendingDelete("activity_log", r.entry_id))
+    .map((r: Row) => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }))
 
   cloudSnapshot.orders = {}
   pulledOrdersRaw.forEach((o) => { if (o.id) cloudSnapshot.orders[o.id] = snapshotCopy(o) })
