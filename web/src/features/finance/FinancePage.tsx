@@ -30,7 +30,7 @@ import {
   orderPaymentsTotal,
 } from "@/lib/money"
 import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
-import { getClientAdvanceStats } from "@/lib/advances"
+import { getClientAdvanceStats, getTotalAdvanceStats } from "@/lib/advances"
 import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
@@ -164,7 +164,10 @@ export function FinancePage() {
 
   const totals = useMemo(() => {
     let totalRevenue = 0, totalNet = 0, totalPending = 0
-    const totalAdvancesIn = advances.reduce((s, a) => s + parseNum(a.amount), 0)
+    // Через общий расчёт, а не своим reduce: здесь он шёл по всем заказам,
+    // включая отменённые, и «Остаток доступен» расходился с карточкой заказа
+    // и со списком клиентов.
+    const adv = getTotalAdvanceStats(advances, orders)
     orders.forEach((o) => {
       if (o.status === "cancelled") return
       const rec = orderRecognizedRevenue(o)
@@ -172,13 +175,12 @@ export function FinancePage() {
       totalNet += rec.net
       totalPending += orderPaymentState(o).remaining
     })
-    const totalAdvUsed = orders.reduce((s, o) => s + parseNum(o.advanceUsed), 0)
     return {
       totalRevenue,
       totalNet,
       totalTax: totalRevenue - totalNet,
-      totalAdvancesIn,
-      totalAdvAvailable: Math.max(0, totalAdvancesIn - totalAdvUsed),
+      totalAdvancesIn: adv.totalIn,
+      totalAdvAvailable: adv.available,
       totalPending,
     }
   }, [orders, advances])
@@ -331,7 +333,7 @@ export function FinancePage() {
             <StatTile num={fmtMoney(totals.totalRevenue)} lbl="Выручка (с налогом)" sub="Оплачено + покрыто авансом" tone="success" />
             <StatTile num={fmtMoney(totals.totalNet)} lbl="Чистый доход" sub="За вычетом налогов" accent />
             <StatTile num={fmtMoney(totals.totalTax)} lbl="Налог к уплате" sub="Справочно по ставкам" tone="destructive" />
-            <StatTile num={fmtMoney(totals.totalAdvancesIn)} lbl="Всего авансов внесено" sub={`Остаток доступен: ${fmtMoney(totals.totalAdvAvailable)}`} tone="warning" />
+            <StatTile num={fmtMoney(totals.totalAdvancesIn)} lbl="Всего авансов внесено" sub={`Не списано ни на один заказ: ${fmtMoney(totals.totalAdvAvailable)}`} tone="warning" />
             <StatTile num={fmtMoney(totals.totalPending)} lbl="Остаток к получению" sub="Ожидает доплаты клиентов" />
           </div>
 

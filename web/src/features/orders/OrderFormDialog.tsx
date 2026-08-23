@@ -172,10 +172,15 @@ export function OrderFormDialog({
 
   const advanceExceedsOrder = parseNum(draft.advanceUsed) > totalWithTax + 0.01
 
-  // Сколько аванса реально доступно под ЭТОТ заказ: остаток клиента плюс то,
-  // что уже списано на сам заказ (иначе при редактировании собственное
-  // списание выглядело бы как чужое и «съедало» лимит).
-  const advanceAvailableHere = clientStats.available + (editingOrder ? parseNum(editingOrder.advanceUsed) : 0)
+  // Сколько аванса реально доступно под ЭТОТ заказ.
+  //
+  // Раньше сюда прибавлялось списание самого заказа — чтобы при редактировании
+  // собственная сумма не выглядела как чужая и не «съедала» лимит. Но
+  // getClientAdvanceStats уже исключает этот заказ из израсходованного
+  // (последним аргументом передаётся его id), и прибавка считала его второй
+  // раз: предупреждение о перерасходе включалось позже, чем следовало, а
+  // «Списать всё» подставляло сумму больше внесённой.
+  const advanceAvailableHere = clientStats.available
   // Ограничения на это не было вовсе: сумма резалась только стоимостью заказа,
   // а против реально внесённого аванса не проверялась. Списать можно было
   // больше, чем клиент когда-либо платил, и перерасход не было видно —
@@ -238,8 +243,7 @@ export function OrderFormDialog({
     addPayment(Math.round(remaining * 100) / 100)
   }
   function fillMaxAdvance() {
-    const trueAvail = clientStats.available + (editingOrder ? parseNum(editingOrder.advanceUsed) : 0)
-    setDraft((d) => ({ ...d, advanceUsed: Math.round(Math.min(trueAvail, totalWithTax)) }))
+    setDraft((d) => ({ ...d, advanceUsed: Math.round(Math.min(advanceAvailableHere, totalWithTax)) }))
   }
 
   function applyTemplate(templateId: string) {
