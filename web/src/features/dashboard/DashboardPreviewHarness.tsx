@@ -14,15 +14,23 @@ import { PlanningPage } from "@/features/planning/PlanningPage"
 import { SettingsPage } from "@/features/settings/SettingsPage"
 import type { Order, Task, Advance, PlanningBoard } from "@/types/models"
 
+// Классы и предметы намеренно разные и «неудобные»: с однобуквенными литерами,
+// с двузначным номером и без номера вовсе. На одинаковых данных превью не
+// показывало ни группировки, ни порядка сортировки — а именно ради этого
+// харнесс и открывают.
+const PREVIEW_GRADES = ["9А", "5 класс", "10 класс", "9Б", "Без класса", "7 класс", "11 класс"]
+const PREVIEW_SUBJECTS = ["Литература", "Математика", "Русский язык", "Дизайн"]
+
 function fakeOrder(daysOffset: number, total: number, status: Order["status"] = "progress", client = "Иванова Мария Петровна"): Order {
   const start = dateKey(new Date(Date.now() + daysOffset * 86400000))
   const deadline = dateKey(new Date(Date.now() + (daysOffset + 3) * 86400000))
+  const spread = Math.abs(daysOffset)
   return {
     id: "preview_o" + daysOffset + client,
     title: "",
     client,
-    subject: "Литература",
-    grade: "9А",
+    subject: PREVIEW_SUBJECTS[spread % PREVIEW_SUBJECTS.length],
+    grade: PREVIEW_GRADES[spread % PREVIEW_GRADES.length],
     quarter: "1",
     lesson: String(Math.abs(daysOffset) + 1),
     status,

@@ -10,6 +10,7 @@ import {
   Copy,
   Trash2,
   ChevronRight,
+  ArrowUp,
   TrendingUp,
   AlertTriangle,
   Play,
@@ -75,15 +76,112 @@ type StatusFilter = "all" | "progress" | "unpaid" | "overdue"
 // определялся тем, в каком они заведены, и найти нужный можно было только
 // глазами. По умолчанию — ближайший срок сверху: это то, чем список
 // открывают чаще всего («что горит»).
-type OrderSort = "deadline_asc" | "deadline_desc" | "debt_desc" | "total_desc" | "client" | "created_desc"
+//
+// Поле и направление хранятся раздельно, а не одной строкой вида
+// "deadline_asc": по заголовку таблицы жмут, чтобы ПЕРЕВЕРНУТЬ порядок, и с
+// плоским перечислением каждый столбец пришлось бы описывать парой значений
+// и вручную сводить их между собой.
+type SortField = "deadline" | "debt" | "total" | "client" | "subject" | "grade" | "created"
+type OrderSort = { field: SortField; dir: "asc" | "desc" }
 
-const ORDER_SORT_LABELS: Record<OrderSort, string> = {
-  deadline_asc: "Ближайший срок сверху",
-  deadline_desc: "Дальний срок сверху",
-  debt_desc: "Сначала с долгом",
-  total_desc: "По сумме: больше сверху",
-  client: "По клиенту (А–Я)",
-  created_desc: "Сначала добавленные позже",
+// Направление по умолчанию при первом клике по столбцу: у текста — с начала
+// алфавита, у денег и дат добавления — с большего, потому что спрашивают
+// «где самые крупные» и «что появилось недавно», а не наоборот.
+const DEFAULT_DIR: Record<SortField, OrderSort["dir"]> = {
+  deadline: "asc",
+  debt: "desc",
+  total: "desc",
+  client: "asc",
+  subject: "asc",
+  grade: "asc",
+  created: "desc",
+}
+
+// Готовые варианты для выпадающего списка. Он остаётся ради телефона: там
+// вместо таблицы карточки, и заголовков, по которым можно кликнуть, нет.
+const ORDER_SORT_PRESETS: { key: string; label: string; sort: OrderSort }[] = [
+  { key: "deadline_asc", label: "Ближайший срок сверху", sort: { field: "deadline", dir: "asc" } },
+  { key: "deadline_desc", label: "Дальний срок сверху", sort: { field: "deadline", dir: "desc" } },
+  { key: "grade_asc", label: "По классу (от младших)", sort: { field: "grade", dir: "asc" } },
+  { key: "grade_desc", label: "По классу (от старших)", sort: { field: "grade", dir: "desc" } },
+  { key: "subject_asc", label: "По предмету (А–Я)", sort: { field: "subject", dir: "asc" } },
+  { key: "debt_desc", label: "Сначала с долгом", sort: { field: "debt", dir: "desc" } },
+  { key: "total_desc", label: "По сумме: больше сверху", sort: { field: "total", dir: "desc" } },
+  { key: "client_asc", label: "По клиенту (А–Я)", sort: { field: "client", dir: "asc" } },
+  { key: "created_desc", label: "Сначала добавленные позже", sort: { field: "created", dir: "desc" } },
+]
+
+// Названия полей для подписи текущей сортировки. Кликом по заголовку можно
+// получить сочетание, которого нет среди готовых вариантов (скажем, клиент
+// в обратном порядке) — без этого выпадающий список в такой момент просто
+// оказывался пустым.
+const SORT_FIELD_LABELS: Record<SortField, string> = {
+  deadline: "сроку сдачи",
+  debt: "долгу",
+  total: "сумме",
+  client: "клиенту",
+  subject: "предмету",
+  grade: "классу",
+  created: "дате добавления",
+}
+
+function sortLabel(sort: OrderSort): string {
+  const preset = ORDER_SORT_PRESETS.find((p) => p.sort.field === sort.field && p.sort.dir === sort.dir)
+  if (preset) return preset.label
+  return `По ${SORT_FIELD_LABELS[sort.field]} (${sort.dir === "asc" ? "по возрастанию" : "по убыванию"})`
+}
+
+/**
+ * Ключ сортировки по классу.
+ *
+ * Обычное сравнение строк ставит «10 класс» перед «5 классом» — посимвольно
+ * «1» меньше «5». Поэтому сначала сравниваем число, а буквенную часть («9А»
+ * против «9Б») используем вторым ключом. Классы без числа («Без класса»)
+ * уходят в конец: это не место в ряду, а его отсутствие.
+ */
+function gradeSortKey(grade: string): [number, string] {
+  const text = (grade || "").trim().toLowerCase()
+  const num = text.match(/\d+/)
+  return [num ? parseInt(num[0], 10) : Number.MAX_SAFE_INTEGER, text]
+}
+
+/**
+ * Подпись столбца, по которой можно кликнуть, чтобы отсортировать.
+ *
+ * Первый клик ставит направление по умолчанию для этого поля, повторный —
+ * переворачивает. Стрелка появляется только у активного столбца: показывать
+ * её у всех — значит превратить шапку в частокол.
+ */
+function SortHead({
+  field,
+  label,
+  sort,
+  onSort,
+}: {
+  field: SortField
+  label: string
+  sort: OrderSort
+  onSort: (s: OrderSort) => void
+}) {
+  const active = sort.field === field
+  return (
+    <button
+      type="button"
+      onClick={() => onSort({ field, dir: active ? (sort.dir === "asc" ? "desc" : "asc") : DEFAULT_DIR[field] })}
+      title={active ? "Кликните, чтобы перевернуть порядок" : `Сортировать по столбцу «${label}»`}
+      className={cn(
+        "group inline-flex items-center gap-1 whitespace-nowrap transition-colors",
+        active ? "text-foreground" : "hover:text-foreground"
+      )}
+    >
+      {label}
+      {active ? (
+        <ArrowUp className={cn("size-3 shrink-0 transition-transform", sort.dir === "desc" && "rotate-180")} />
+      ) : (
+        <ArrowUp className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
+      )}
+    </button>
+  )
 }
 
 export function OrdersPage() {
@@ -92,7 +190,7 @@ export function OrdersPage() {
   const [search, setSearch] = useState("")
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>("all")
-  const [sort, setSort] = useState<OrderSort>("deadline_asc")
+  const [sort, setSort] = useState<OrderSort>({ field: "deadline", dir: "asc" })
   const [clientFilter, setClientFilter] = useState("all")
   const [showClass, setShowClass] = useState(true)
   const [showClient, setShowClient] = useState(true)
@@ -161,16 +259,45 @@ export function OrdersPage() {
       return true
     }
 
+    // «Нет значения» всегда внизу, в обе стороны. Иначе при обратном порядке
+    // наверх всплывают заказы, у которых поля просто нет, — а искали в них
+    // ровно обратное.
+    //
+    // Для класса это не только пустая строка, но и «Без класса»: номера у него
+    // нет, места в ряду 5…11 тоже, и на «от старших» он не должен идти первым.
+    const noValue = (r: Row) => {
+      if (sort.field === "grade") return !/\d/.test(r.order.grade || "")
+      if (sort.field === "subject") return !(r.order.subject || "").trim()
+      if (sort.field === "client") return !(r.order.client || "").trim()
+      return false
+    }
+
+    const compare = (a: Row, b: Row): number => {
+      switch (sort.field) {
+        case "deadline": return dl(a).localeCompare(dl(b))
+        case "debt": return a.pay.remaining - b.pay.remaining
+        case "total": return a.pay.full - b.pay.full
+        case "client": return (a.order.client || "").localeCompare(b.order.client || "", "ru")
+        case "subject": return (a.order.subject || "").localeCompare(b.order.subject || "", "ru")
+        case "grade": {
+          const [an, at] = gradeSortKey(a.order.grade)
+          const [bn, bt] = gradeSortKey(b.order.grade)
+          return an - bn || at.localeCompare(bt, "ru")
+        }
+        case "created": return (a.order.createdAt || 0) - (b.order.createdAt || 0)
+      }
+    }
+
     const applySort = (list: Row[]): Row[] =>
       list.slice().sort((a, b) => {
-        let p = 0
-        if (sort === "deadline_asc") p = dl(a).localeCompare(dl(b))
-        else if (sort === "deadline_desc") p = dl(b).localeCompare(dl(a))
-        else if (sort === "debt_desc") p = b.pay.remaining - a.pay.remaining
-        else if (sort === "total_desc") p = b.pay.full - a.pay.full
-        else if (sort === "client") p = (a.order.client || "").localeCompare(b.order.client || "", "ru")
-        else if (sort === "created_desc") p = (b.order.createdAt || 0) - (a.order.createdAt || 0)
+        const emptyA = noValue(a)
+        const emptyB = noValue(b)
+        if (emptyA !== emptyB) return emptyA ? 1 : -1
+
+        const p = compare(a, b) * (sort.dir === "asc" ? 1 : -1)
         // Вторичный ключ — срок, иначе равные значения встают случайно.
+        // Он всегда по возрастанию: внутри одного класса или предмета нужен
+        // тот же ответ на вопрос «что горит», а не зеркальный.
         return p !== 0 ? p : dl(a).localeCompare(dl(b))
       })
 
@@ -189,7 +316,9 @@ export function OrdersPage() {
 
   const {
     page: currentPage, pageSize, pageItems: pagedActive, setPage, setPageSize,
-  } = usePagination(visibleActive, { resetKey: [filter, search, sort, clientFilter].join("|") })
+  } = usePagination(visibleActive, {
+    resetKey: [filter, search, sort.field, sort.dir, clientFilter].join("|"),
+  })
 
   function toggleRow(id: string, checked: boolean) {
     setSelected((prev) => {
@@ -390,11 +519,19 @@ export function OrdersPage() {
           </div>
           {/* Сортировка и отбор по клиенту. Быстрые виды слева отвечают за
               «что показать», эти два — за «в каком порядке» и «чьё». */}
-          <Select value={sort} onValueChange={(v) => setSort(v as OrderSort)}>
-            <SelectTrigger size="sm" className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+          <Select
+            value={`${sort.field}_${sort.dir}`}
+            onValueChange={(v) => {
+              const preset = ORDER_SORT_PRESETS.find((p) => p.key === v)
+              if (preset) setSort(preset.sort)
+            }}
+          >
+            <SelectTrigger size="sm" className="w-full sm:w-52">
+              <SelectValue>{sortLabel(sort)}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
-              {(Object.keys(ORDER_SORT_LABELS) as OrderSort[]).map((k) => (
-                <SelectItem key={k} value={k}>{ORDER_SORT_LABELS[k]}</SelectItem>
+              {ORDER_SORT_PRESETS.map((p) => (
+                <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -525,12 +662,39 @@ export function OrdersPage() {
                 />
               </TableHead>
               <TableHead className="px-3">Заказ</TableHead>
-              {showClass && <TableHead className="px-4">Класс / предмет</TableHead>}
-              {showClient && <TableHead className="px-4">Клиент</TableHead>}
-              <TableHead className="px-4">Срок сдачи</TableHead>
+              {/* Столбец один, а полей в нём два, и сортировать просили по
+                  каждому. Поэтому кликабельны обе подписи по отдельности, а
+                  не заголовок целиком. */}
+              {showClass && (
+                <TableHead className="px-4">
+                  <span className="inline-flex items-center gap-1">
+                    <SortHead field="grade" label="Класс" sort={sort} onSort={setSort} />
+                    <span className="text-muted-foreground/50">/</span>
+                    <SortHead field="subject" label="предмет" sort={sort} onSort={setSort} />
+                  </span>
+                </TableHead>
+              )}
+              {showClient && (
+                <TableHead className="px-4">
+                  <SortHead field="client" label="Клиент" sort={sort} onSort={setSort} />
+                </TableHead>
+              )}
+              <TableHead className="px-4">
+                <SortHead field="deadline" label="Срок сдачи" sort={sort} onSort={setSort} />
+              </TableHead>
               <TableHead className="px-4">Статус</TableHead>
-              <TableHead className="px-4 text-right">Сумма</TableHead>
-              {showDue && <TableHead className="px-4 text-right">К доплате</TableHead>}
+              <TableHead className="px-4 text-right">
+                <span className="flex justify-end">
+                  <SortHead field="total" label="Сумма" sort={sort} onSort={setSort} />
+                </span>
+              </TableHead>
+              {showDue && (
+                <TableHead className="px-4 text-right">
+                  <span className="flex justify-end">
+                    <SortHead field="debt" label="К доплате" sort={sort} onSort={setSort} />
+                  </span>
+                </TableHead>
+              )}
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -767,7 +931,7 @@ function OrderRow({
       {showClass && (
         <TableCell className="min-w-0 px-4 text-[12.5px] text-muted-foreground">
           {(order.subject || order.grade) ? (
-            <span className="block truncate">{[order.subject, order.grade].filter(Boolean).join(" · ")}</span>
+            <span className="block truncate">{[order.grade, order.subject].filter(Boolean).join(" · ")}</span>
           ) : "—"}
         </TableCell>
       )}
@@ -871,7 +1035,7 @@ function OrderCard({
   muted?: boolean
 }) {
   const metaParts = [
-    showClass && [order.subject, order.grade].filter(Boolean).join(" · "),
+    showClass && [order.grade, order.subject].filter(Boolean).join(" · "),
     showClient && order.client,
   ].filter(Boolean) as string[]
 
