@@ -175,10 +175,12 @@ function SortHead({
       )}
     >
       {label}
-      {active ? (
+      {/* Стрелка только у активного столбца, без невидимой заглушки у
+          остальных: в столбце «Класс / предмет» подписи две, и два
+          зарезервированных места под стрелки съедали ширину, из-за чего
+          заголовок налезал на соседний. */}
+      {active && (
         <ArrowUp className={cn("size-3 shrink-0 transition-transform", sort.dir === "desc" && "rotate-180")} />
-      ) : (
-        <ArrowUp className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
       )}
     </button>
   )
@@ -639,17 +641,17 @@ export function OrdersPage() {
       {/* table — fixed layout via colgroup; desktop/tablet only */}
       <div className="glass-surface hidden overflow-hidden rounded-xl sm:block">
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] table-fixed border-collapse">
+        <table className="w-full min-w-[1120px] table-fixed border-collapse">
           <colgroup>
             <col style={{ width: 26 }} />
             <col style={{ width: 34 }} />
             <col />
-            <col style={{ width: showClass ? 136 : 0 }} />
-            <col style={{ width: showClient ? 156 : 0 }} />
-            <col style={{ width: 104 }} />
+            <col style={{ width: showClass ? 192 : 0 }} />
+            <col style={{ width: showClient ? 124 : 0 }} />
             <col style={{ width: 148 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: showDue ? 108 : 0 }} />
+            <col style={{ width: 148 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: showDue ? 128 : 0 }} />
             <col style={{ width: 36 }} />
           </colgroup>
           <TableHeader>
@@ -667,9 +669,9 @@ export function OrdersPage() {
                   не заголовок целиком. */}
               {showClass && (
                 <TableHead className="px-4">
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1.5">
                     <SortHead field="grade" label="Класс" sort={sort} onSort={setSort} />
-                    <span className="text-muted-foreground/50">/</span>
+                    <span className="text-muted-foreground/40">/</span>
                     <SortHead field="subject" label="предмет" sort={sort} onSort={setSort} />
                   </span>
                 </TableHead>
@@ -744,17 +746,17 @@ export function OrdersPage() {
 
         {archiveOpen && (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] table-fixed border-collapse">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse">
             <colgroup>
               <col style={{ width: 26 }} />
               <col style={{ width: 34 }} />
               <col />
-              <col style={{ width: showClass ? 136 : 0 }} />
-              <col style={{ width: showClient ? 156 : 0 }} />
-              <col style={{ width: 104 }} />
+              <col style={{ width: showClass ? 192 : 0 }} />
+              <col style={{ width: showClient ? 124 : 0 }} />
               <col style={{ width: 148 }} />
-              <col style={{ width: 100 }} />
-              <col style={{ width: showDue ? 108 : 0 }} />
+              <col style={{ width: 148 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: showDue ? 128 : 0 }} />
               <col style={{ width: 36 }} />
             </colgroup>
             <TableBody>
