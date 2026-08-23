@@ -170,6 +170,16 @@ export function OrderFormDialog({
   const remaining = Math.max(0, totalWithTax - advUsed - paymentsTotal)
   const advanceExceedsOrder = parseNum(draft.advanceUsed) > totalWithTax + 0.01
 
+  // Сколько аванса реально доступно под ЭТОТ заказ: остаток клиента плюс то,
+  // что уже списано на сам заказ (иначе при редактировании собственное
+  // списание выглядело бы как чужое и «съедало» лимит).
+  const advanceAvailableHere = clientStats.available + (editingOrder ? parseNum(editingOrder.advanceUsed) : 0)
+  // Ограничения на это не было вовсе: сумма резалась только стоимостью заказа,
+  // а против реально внесённого аванса не проверялась. Списать можно было
+  // больше, чем клиент когда-либо платил, и перерасход не было видно —
+  // «Доступно» обрезается до нуля через Math.max(0, …) и всё выглядело нормально.
+  const advanceOverdraft = Math.max(0, parseNum(draft.advanceUsed) - advanceAvailableHere)
+
   // Та же логика, что в таймере (useTimerStore.flushSegment): время идёт в
   // первую неготовую позицию, а если готовы все — в последнюю.
   const timerLineId = (draft.lines.find((l) => !l.ready) || draft.lines[draft.lines.length - 1])?.id
@@ -399,8 +409,14 @@ export function OrderFormDialog({
                   <NumberInput
                     value={draft.advanceUsed}
                     onChange={(n) => setDraft((d) => ({ ...d, advanceUsed: n }))}
-                    className={advanceExceedsOrder ? "border-destructive" : undefined}
-                    title={advanceExceedsOrder ? `Это больше, чем стоимость заказа (${fmtMoney(totalWithTax)}).` : undefined}
+                    className={advanceExceedsOrder || advanceOverdraft > 0 ? "border-destructive" : undefined}
+                    title={
+                      advanceOverdraft > 0
+                        ? `У клиента доступно только ${fmtMoney(advanceAvailableHere)} — не хватает ${fmtMoney(advanceOverdraft)}.`
+                        : advanceExceedsOrder
+                          ? `Это больше, чем стоимость заказа (${fmtMoney(totalWithTax)}).`
+                          : undefined
+                    }
                   />
                 </Field>
                 <div>
@@ -408,6 +424,12 @@ export function OrderFormDialog({
                   <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(Math.max(0, totalWithTax - advUsed))}</div>
                 </div>
               </div>
+              {advanceOverdraft > 0 && (
+                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">
+                  Списано больше, чем внесено: у клиента доступно {fmtMoney(advanceAvailableHere)}, не хватает {fmtMoney(advanceOverdraft)}.
+                  Внесите аванс на Финансах или уменьшите сумму.
+                </div>
+              )}
               <button type="button" onClick={fillMaxAdvance} className="mt-2 text-[11.5px] font-bold text-foreground hover:underline">
                 Списать всё
               </button>

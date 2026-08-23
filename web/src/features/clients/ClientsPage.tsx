@@ -50,7 +50,14 @@ export function ClientsPage() {
       const stats = getClientAdvanceStats(name, advances, orders)
       const clientOrders = orders.filter((o) => (o.client || "").toLowerCase() === name.toLowerCase() && o.status !== "cancelled")
       const activeOrders = clientOrders.filter((o) => o.status !== "done")
-      const totalDue = activeOrders.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+      // Долг считаем по ВСЕМ заказам клиента, кроме отменённых. Раньше сюда
+      // попадали только незавершённые, и оплаченный не полностью, но сданный
+      // заказ выпадал из суммы — клиент выглядел «чистым», хотя деньги за ним
+      // остаются. Та же ошибка была на Заказах (см. v2.8.1); теперь Клиенты,
+      // Заказы и Финансы считают долг одинаково.
+      const totalDue = clientOrders.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+      // Просрочка — только по незавершённым: у сданного заказа срок сдачи уже
+      // неактуален, там вопрос только к оплате.
       const hasOverdue = activeOrders.some(isOrderOverdue)
       return { name, available: stats.available, totalDue, activeCount: activeOrders.length, hasOverdue }
     })
