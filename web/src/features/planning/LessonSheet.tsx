@@ -14,6 +14,13 @@ import { useAppStore } from "@/store/useAppStore"
 import { fmtMoney, orderTotal } from "@/lib/money"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { findGoverningOrder } from "@/lib/planningSync"
+import {
+  lessonItemsMissingInOrder,
+  orderLinesMissingInLesson,
+  addLessonItemsToOrderLines,
+  addOrderLinesToLessonItems,
+} from "@/lib/planningOrderSync"
+import { getVisibleCatalog } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 
@@ -45,6 +52,8 @@ export function LessonSheet({
 }) {
   const orders = useAppStore((s) => s.orders)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
+  const setOrders = useAppStore((s) => s.setOrders)
+  const appSettings = useAppStore((s) => s.appSettings)
   const [newItem, setNewItem] = useState("")
 
   // Always read the live lesson from the store so edits reflect immediately.
@@ -97,6 +106,22 @@ export function LessonSheet({
   }
 
   const governingOrder = liveBoard && liveLesson ? findGoverningOrder(orders, liveBoard, liveLesson) : null
+
+  const toOrder = governingOrder && liveLesson ? lessonItemsMissingInOrder(liveLesson, governingOrder) : []
+  const toLesson = governingOrder && liveLesson ? orderLinesMissingInLesson(governingOrder, liveLesson) : []
+
+  function pushToOrder() {
+    if (!governingOrder || !liveLesson || !toOrder.length) return
+    const unit = getVisibleCatalog(appSettings, "units")[0] || "Слайд"
+    const lines = addLessonItemsToOrderLines(governingOrder, liveLesson, { unit }, () => randId("l"))
+    setOrders((prev) => prev.map((o) => (o.id === governingOrder.id ? { ...o, lines } : o)))
+    saveData()
+  }
+
+  function pullFromOrder() {
+    if (!governingOrder || !liveLesson || !toLesson.length) return
+    updateLesson({ items: addOrderLinesToLessonItems(governingOrder, liveLesson, () => randId("i")) })
+  }
   const items = liveLesson?.items || []
   const doneCount = items.filter((i) => i.done).length
 
@@ -213,19 +238,48 @@ export function LessonSheet({
               <div>
                 <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказ</div>
                 {governingOrder ? (
-                  <Link
-                    to="/orders"
-                    onClick={() => onOpenChange(false)}
-                    className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
-                      <div className="truncate text-[11.5px] text-muted-foreground">
-                        {governingOrder.client || "без клиента"} · {fmtMoney(orderTotal(governingOrder))}
+                  <div className="flex flex-col gap-2">
+                    <Link
+                      to="/orders"
+                      onClick={() => onOpenChange(false)}
+                      className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
+                        <div className="truncate text-[11.5px] text-muted-foreground">
+                          {governingOrder.client || "без клиента"} · {fmtMoney(orderTotal(governingOrder))}
+                        </div>
                       </div>
+                      <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                    </Link>
+
+                    {/* Ручное пополнение в обе стороны. Автоматически работает
+                        только «заказ → урок», поэтому набранный в планировании
+                        состав в заказ раньше не попадал вовсе. */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={toOrder.length === 0}
+                        onClick={pushToOrder}
+                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-bold hover:bg-muted/70 disabled:opacity-40"
+                        title={toOrder.length ? `Добавит в заказ: ${toOrder.join(", ")}` : "В заказе уже есть всё из чек-листа"}
+                      >
+                        В заказ{toOrder.length > 0 && ` (${toOrder.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={toLesson.length === 0}
+                        onClick={pullFromOrder}
+                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-bold hover:bg-muted/70 disabled:opacity-40"
+                        title={toLesson.length ? `Добавит в урок: ${toLesson.join(", ")}` : "В чек-листе уже есть все позиции заказа"}
+                      >
+                        В урок{toLesson.length > 0 && ` (${toLesson.length})`}
+                      </button>
                     </div>
-                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
-                  </Link>
+                    <div className="text-[11px] text-muted-foreground">
+                      Цену и количество новых позиций заказа проставьте сами — их не угадать.
+                    </div>
+                  </div>
                 ) : (
                   <div className="rounded-xl bg-muted px-3.5 py-3">
                     <div className="text-[12.5px] text-muted-foreground">
