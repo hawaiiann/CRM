@@ -55,17 +55,18 @@ export function ClassProgressDonuts() {
     return <div className="py-4 text-[12.5px] text-muted-foreground">Нет активных классов</div>
   }
 
-  let totalAll = 0
-  let doneAll = 0
+  // Считаем и складываем в один проход, но без записи во внешние переменные
+  // из колбэка map: побочный эффект внутри рендера — то, на чём ломается
+  // работа React в конкурентном режиме (рендер могут прервать и повторить,
+  // и счётчики удвоятся).
   const items = boards.map((board) => {
     let total = 0
     let done = 0
     ;(board.lessons || []).forEach((l) => (l.items || []).forEach((i) => { total++; if (i.done) done++ }))
-    totalAll += total
-    doneAll += done
-    const pct = total > 0 ? Math.round((done / total) * 100) : 0
-    return { id: board.id, title: board.title, subject: board.subject, pct }
+    return { id: board.id, title: board.title, subject: board.subject, total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
   })
+  const totalAll = items.reduce((s, it) => s + it.total, 0)
+  const doneAll = items.reduce((s, it) => s + it.done, 0)
   const overallPct = totalAll > 0 ? Math.round((doneAll / totalAll) * 100) : 0
 
   return (

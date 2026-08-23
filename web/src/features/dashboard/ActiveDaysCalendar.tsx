@@ -24,7 +24,7 @@ function monthOptions() {
 
 export function ActiveDaysCalendar() {
   const activityLog = useAppStore((s) => s.activityLog)
-  const options = useMemo(monthOptions, [])
+  const options = useMemo(() => monthOptions(), [])
   const [monthValue, setMonthValue] = useState(options[0].value)
   const [openDay, setOpenDay] = useState<string | null>(null)
 

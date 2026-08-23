@@ -65,6 +65,10 @@ export function BoardFormDialog({
       setRangeTo(32)
       setTemplate(["Презентация", "Рабочий лист"])
     }
+    // Зависим от конкретных справочников, а не от appSettings целиком, и это
+    // намеренно: эффект заполняет форму значениями по умолчанию, и перезапуск
+    // от любой правки настроек затёр бы то, что человек уже набрал.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, board, appSettings.subjects, appSettings.classes])
 
   function addRange() {

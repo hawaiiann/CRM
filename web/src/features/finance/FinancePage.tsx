@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { Plus, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
@@ -39,6 +39,7 @@ import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
+import { usePagination } from "@/lib/usePagination"
 
 // Сортировка переработана. Прежний набор был неудобен для денег:
 //   • «по умолчанию» — это просто порядок создания, ничего не значащий;
@@ -157,10 +158,6 @@ export function FinancePage() {
   const [search, setSearch] = useState("")
   const [showCancelled, setShowCancelled] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
-  const [finPage, setFinPage] = useState(0)
-  const [finPageSize, setFinPageSize] = useState(10)
-  const [advPage, setAdvPage] = useState(0)
-  const [advPageSize, setAdvPageSize] = useState(10)
   const [advSearch, setAdvSearch] = useState("")
   const [advClient, setAdvClient] = useState("all")
   const [advSort, setAdvSort] = useState<AdvSort>("date_desc")
@@ -211,13 +208,12 @@ export function FinancePage() {
     setPayFilter("all"); setPeriodFilter("all"); setClientFilter("all"); setSearch(""); setShowCancelled(false)
   }
 
-  useEffect(() => { setFinPage(0) }, [sort, finPageSize, payFilter, periodFilter, clientFilter, search, showCancelled])
-  const finTotalPages = Math.max(1, Math.ceil(finList.length / finPageSize))
-  const finCurrentPage = Math.min(finPage, finTotalPages - 1)
-  const pagedFinList = useMemo(
-    () => finList.slice(finCurrentPage * finPageSize, finCurrentPage * finPageSize + finPageSize),
-    [finList, finCurrentPage, finPageSize]
-  )
+  const {
+    page: finCurrentPage, pageSize: finPageSize, pageItems: pagedFinList,
+    setPage: setFinPage, setPageSize: setFinPageSize,
+  } = usePagination(finList, {
+    resetKey: [sort, payFilter, periodFilter, clientFilter, search, showCancelled].join("|"),
+  })
 
   // В реестре авансов не было ничего: ни поиска, ни сортировки — только
   // страницы. При десятке поступлений найти нужное можно было лишь листая,
@@ -244,13 +240,10 @@ export function FinancePage() {
   )
   const advSum = useMemo(() => advList.reduce((s, a) => s + parseNum(a.amount), 0), [advList])
 
-  useEffect(() => { setAdvPage(0) }, [advPageSize, advSearch, advClient, advSort])
-  const advTotalPages = Math.max(1, Math.ceil(advList.length / advPageSize))
-  const advCurrentPage = Math.min(advPage, advTotalPages - 1)
-  const pagedAdvances = useMemo(
-    () => advList.slice(advCurrentPage * advPageSize, advCurrentPage * advPageSize + advPageSize),
-    [advList, advCurrentPage, advPageSize]
-  )
+  const {
+    page: advCurrentPage, pageSize: advPageSize, pageItems: pagedAdvances,
+    setPage: setAdvPage, setPageSize: setAdvPageSize,
+  } = usePagination(advList, { resetKey: [advSearch, advClient, advSort].join("|") })
 
   function togglePayment(o: Order) {
     const pay = orderPaymentState(o)

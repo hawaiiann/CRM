@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Search,
   Plus,
@@ -9,9 +9,6 @@ import {
   Pencil,
   Copy,
   Trash2,
-  ChevronsRight,
-  ChevronsLeft,
-  ChevronLeft,
   ChevronRight,
   TrendingUp,
   AlertTriangle,
@@ -59,6 +56,8 @@ import { OrderDetailsSheet } from "./OrderDetailsSheet"
 import { OrderFormDialog } from "./OrderFormDialog"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import { confirmDialog } from "@/store/useDialogStore"
+import { usePagination } from "@/lib/usePagination"
+import { PaginationBar } from "@/components/ui/pagination-bar"
 
 function clientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -105,8 +104,6 @@ export function OrdersPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [duplicateFrom, setDuplicateFrom] = useState<Order | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null)
-  const [pageSize, setPageSize] = useState(10)
-  const [page, setPage] = useState(0)
 
   function openNewOrder() {
     setEditingOrder(null)
@@ -139,47 +136,49 @@ export function OrdersPage() {
     [orders]
   )
 
-  const active = rows.filter((r) => r.order.status !== "done" && r.order.status !== "cancelled")
-  const archived = rows.filter((r) => r.order.status === "done" || r.order.status === "cancelled")
-
-  const matchesSearch = (r: (typeof rows)[number]) => orderMatchesQuery(r.order, search)
-
-  function matchesFilter(r: (typeof rows)[number]) {
-    if (filter === "all") return true
-    if (filter === "progress") return r.order.status === "progress"
-    if (filter === "unpaid") return r.pay.remaining > 0
-    if (filter === "overdue") return r.overdue
-    return true
-  }
+  // Через useMemo, а не просто filter: эти массивы стоят в зависимостях
+  // отбора ниже, и пересоздаваясь каждый рендер обнуляли бы весь его смысл.
+  const active = useMemo(() => rows.filter((r) => r.order.status !== "done" && r.order.status !== "cancelled"), [rows])
+  const archived = useMemo(() => rows.filter((r) => r.order.status === "done" || r.order.status === "cancelled"), [rows])
 
   type Row = (typeof rows)[number]
-  const dl = (r: Row) => r.order.deadline || r.order.start || ""
-  function applySort(list: Row[]): Row[] {
-    const out = list.slice()
-    out.sort((a, b) => {
-      let p = 0
-      if (sort === "deadline_asc") p = dl(a).localeCompare(dl(b))
-      else if (sort === "deadline_desc") p = dl(b).localeCompare(dl(a))
-      else if (sort === "debt_desc") p = b.pay.remaining - a.pay.remaining
-      else if (sort === "total_desc") p = b.pay.full - a.pay.full
-      else if (sort === "client") p = (a.order.client || "").localeCompare(b.order.client || "", "ru")
-      else if (sort === "created_desc") p = (b.order.createdAt || 0) - (a.order.createdAt || 0)
-      // Вторичный ключ — срок, иначе равные значения встают случайно.
-      return p !== 0 ? p : dl(a).localeCompare(dl(b))
-    })
-    return out
-  }
 
-  const matchesClient = (r: Row) => clientFilter === "all" || (r.order.client || "") === clientFilter
+  // Отбор и сортировка живут внутри useMemo, а не рядом с ним. Снаружи они
+  // пересоздавались на каждый рендер, из-за чего в списке зависимостей стояли
+  // не сами функции, а значения фильтров, которые они замыкают, — memo работал
+  // правильно только пока эти два списка держали руками в согласии. Так и
+  // получилось: при добавлении сортировки в deps архива забыли filter.
+  const { visibleActive, visibleArchived } = useMemo(() => {
+    const dl = (r: Row) => r.order.deadline || r.order.start || ""
 
-  const visibleActive = useMemo(
-    () => applySort(active.filter((r) => matchesFilter(r) && matchesSearch(r) && matchesClient(r))),
-    [active, filter, search, sort, clientFilter]
-  )
-  const visibleArchived = useMemo(
-    () => applySort(archived.filter((r) => matchesSearch(r) && matchesClient(r))),
-    [archived, search, sort, clientFilter]
-  )
+    const matchesSearch = (r: Row) => orderMatchesQuery(r.order, search)
+    const matchesClient = (r: Row) => clientFilter === "all" || (r.order.client || "") === clientFilter
+    const matchesFilter = (r: Row) => {
+      if (filter === "all") return true
+      if (filter === "progress") return r.order.status === "progress"
+      if (filter === "unpaid") return r.pay.remaining > 0
+      if (filter === "overdue") return r.overdue
+      return true
+    }
+
+    const applySort = (list: Row[]): Row[] =>
+      list.slice().sort((a, b) => {
+        let p = 0
+        if (sort === "deadline_asc") p = dl(a).localeCompare(dl(b))
+        else if (sort === "deadline_desc") p = dl(b).localeCompare(dl(a))
+        else if (sort === "debt_desc") p = b.pay.remaining - a.pay.remaining
+        else if (sort === "total_desc") p = b.pay.full - a.pay.full
+        else if (sort === "client") p = (a.order.client || "").localeCompare(b.order.client || "", "ru")
+        else if (sort === "created_desc") p = (b.order.createdAt || 0) - (a.order.createdAt || 0)
+        // Вторичный ключ — срок, иначе равные значения встают случайно.
+        return p !== 0 ? p : dl(a).localeCompare(dl(b))
+      })
+
+    return {
+      visibleActive: applySort(active.filter((r) => matchesFilter(r) && matchesSearch(r) && matchesClient(r))),
+      visibleArchived: applySort(archived.filter((r) => matchesSearch(r) && matchesClient(r))),
+    }
+  }, [active, archived, filter, search, sort, clientFilter])
 
   const clientOptions = useMemo(
     () => [...new Set(orders.map((o) => o.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
@@ -188,16 +187,9 @@ export function OrdersPage() {
 
   const totalRows = active.length + archived.length
 
-  useEffect(() => {
-    setPage(0)
-  }, [filter, search, pageSize, sort, clientFilter])
-
-  const totalPages = Math.max(1, Math.ceil(visibleActive.length / pageSize))
-  const currentPage = Math.min(page, totalPages - 1)
-  const pagedActive = useMemo(
-    () => visibleActive.slice(currentPage * pageSize, currentPage * pageSize + pageSize),
-    [visibleActive, currentPage, pageSize]
-  )
+  const {
+    page: currentPage, pageSize, pageItems: pagedActive, setPage, setPageSize,
+  } = usePagination(visibleActive, { resetKey: [filter, search, sort, clientFilter].join("|") })
 
   function toggleRow(id: string, checked: boolean) {
     setSelected((prev) => {
@@ -633,36 +625,17 @@ export function OrdersPage() {
         <div className="text-[12.5px] text-muted-foreground">
           {selected.size} из {totalRows} строк выбрано
         </div>
-        <div className="flex flex-wrap items-center gap-x-5.5 gap-y-2.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-            <span>Строк на странице</span>
-            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-              <SelectTrigger size="sm" className="w-[68px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="5">5</SelectItem>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="text-[12.5px] font-bold">Страница {currentPage + 1} из {totalPages}</div>
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="icon-sm" disabled={currentPage === 0} onClick={() => setPage(0)}>
-              <ChevronsLeft />
-            </Button>
-            <Button variant="outline" size="icon-sm" disabled={currentPage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-              <ChevronLeft />
-            </Button>
-            <Button variant="outline" size="icon-sm" disabled={currentPage >= totalPages - 1} onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}>
-              <ChevronRight />
-            </Button>
-            <Button variant="outline" size="icon-sm" disabled={currentPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
-              <ChevronsRight />
-            </Button>
-          </div>
-        </div>
+        {/* Раньше эта панель была здесь переписана вручную — при том, что
+            PaginationBar уже используется на Клиентах и Финансах. Копия и
+            разошлась: кнопки «назад/вперёд» считали от сырого номера страницы
+            вместо обрезанного (см. usePagination). */}
+        <PaginationBar
+          page={currentPage}
+          pageSize={pageSize}
+          totalItems={visibleActive.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       <OrderDetailsSheet

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { AlertTriangle, Clock } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,7 @@ import { getClientAdvanceStats } from "@/lib/advances"
 import { ClientCardSheet } from "./ClientCardSheet"
 import { DepositDialog } from "@/features/finance/DepositDialog"
 import { PaginationBar } from "@/components/ui/pagination-bar"
+import { usePagination } from "@/lib/usePagination"
 
 type SortMode = "name" | "due_desc" | "advance_desc" | "orders_desc"
 
@@ -39,8 +40,6 @@ export function ClientsPage() {
   const [state, setState] = useState<StateFilter>("all")
   const [activeClient, setActiveClient] = useState<string | null>(null)
   const [depositClient, setDepositClient] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
 
   const rows = useMemo(() => {
     const names = new Set((appSettings.clients || []).filter(Boolean))
@@ -84,13 +83,9 @@ export function ClientsPage() {
     return list
   }, [orders, advances, appSettings.clients, search, sort, state])
 
-  useEffect(() => { setPage(0) }, [search, sort, pageSize, state])
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const currentPage = Math.min(page, totalPages - 1)
-  const pagedRows = useMemo(
-    () => rows.slice(currentPage * pageSize, currentPage * pageSize + pageSize),
-    [rows, currentPage, pageSize]
-  )
+  const { page: currentPage, pageSize, pageItems: pagedRows, setPage, setPageSize } = usePagination(rows, {
+    resetKey: [search, sort, state].join("|"),
+  })
 
   return (
     <div>
