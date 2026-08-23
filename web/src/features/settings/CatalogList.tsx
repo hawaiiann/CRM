@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { cn } from "@/lib/utils"
 import type { AppSettings } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 type CatalogKey = keyof Pick<AppSettings, "clients" | "types" | "units" | "subjects" | "classes">
 
@@ -40,9 +41,17 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
     const next = hidden.includes(val) ? hidden.filter((h) => h !== val) : [...hidden, val]
     update(list, next)
   }
-  function remove(idx: number) {
+  async function remove(idx: number) {
     const val = list[idx]
-    if (!confirm(`Удалить «${val}» из справочника? Если позиция где-то ещё используется — лучше скрыть её глазком, а не удалять.`)) return
+    const ok = await confirmDialog({
+      title: "Удалить запись из справочника?",
+      body: `«${val}»
+
+Если она где-то ещё используется — лучше скрыть её глазком, а не удалять: удаление не подставит замену в старые записи.`,
+      confirmLabel: "Удалить",
+      destructive: true,
+    })
+    if (!ok) return
     update(list.filter((_, i) => i !== idx), hidden.filter((h) => h !== val))
   }
   function add() {

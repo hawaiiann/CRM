@@ -10,6 +10,7 @@ import {
 import { useAppStore } from "@/store/useAppStore"
 import { supabaseClient } from "@/lib/supabase"
 import { getKnownAccounts, forgetAccount } from "@/lib/accountSwitcher"
+import { alertDialog } from "@/store/useDialogStore"
 
 export function AccountSwitcher() {
   const email = useAppStore((s) => s.cloudUserEmail)
@@ -28,7 +29,10 @@ export function AccountSwitcher() {
     if (!acc) return
     const { error } = await supabaseClient.auth.setSession({ access_token: acc.access_token, refresh_token: acc.refresh_token })
     if (error) {
-      alert('Не удалось переключиться — сессия этого аккаунта истекла. Войдите в него заново через "Войти под другим аккаунтом".')
+      await alertDialog({
+        title: "Сессия аккаунта истекла",
+        body: 'Переключиться не удалось. Войдите в этот аккаунт заново через «Войти под другим аккаунтом» — он убран из списка сохранённых.',
+      })
       forgetAccount(userId)
       forceRender((n) => n + 1)
       return

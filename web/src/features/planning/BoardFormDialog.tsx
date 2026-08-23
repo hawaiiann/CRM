@@ -41,6 +41,7 @@ export function BoardFormDialog({
   const [rangeFrom, setRangeFrom] = useState(1)
   const [rangeTo, setRangeTo] = useState(24)
   const [template, setTemplate] = useState<string[]>([])
+  const [error, setError] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -79,7 +80,13 @@ export function BoardFormDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (lessonNums.length === 0) { alert("Добавьте хотя бы один урок — укажите диапазон и нажмите «Добавить диапазон»."); return }
+    // Подсказка в форме, а не системным окном: сказать надо про конкретное
+    // поле, и человек должен видеть его, пока читает.
+    if (lessonNums.length === 0) {
+      setError("Добавьте хотя бы один урок — укажите диапазон и нажмите «Добавить диапазон».")
+      return
+    }
+    setError("")
     const templateItems = template.map((s) => s.trim()).filter(Boolean)
 
     const nextSettings = { ...appSettings }
@@ -206,6 +213,10 @@ export function BoardFormDialog({
               <Plus />Добавить материал
             </Button>
           </div>
+
+          {error && (
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">{error}</div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>

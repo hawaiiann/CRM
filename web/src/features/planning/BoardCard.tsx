@@ -6,6 +6,7 @@ import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { fmtDeadline } from "@/lib/dates"
 import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 function lessonColorClass(lesson: PlanningLesson, colorLocked: boolean, orderLinked: boolean): string {
   let c = lesson.color || "gray"
@@ -99,8 +100,14 @@ export function BoardCard({
   function toggleArchived() {
     updateBoard({ archived: !board.archived })
   }
-  function deleteBoard() {
-    if (!confirm(`Удалить "${board.title}" со всеми уроками?`)) return
+  async function deleteBoard() {
+    const ok = await confirmDialog({
+      title: "Удалить доску со всеми уроками?",
+      body: `«${board.title}» — вместе с ней исчезнут ${lessons.length} уроков и весь их состав. Заказы это не затронет.`,
+      confirmLabel: "Удалить доску",
+      destructive: true,
+    })
+    if (!ok) return
     setPlanningBoards((prev) => prev.filter((b) => b.id !== board.id))
     deleteFromCloud("planning_boards", board.id)
     saveData()

@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { TemplateEditorDialog } from "./TemplateEditorDialog"
 import type { OrderTemplate } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 export function OrderTemplatesSettings() {
   const templates = useAppStore((s) => s.appSettings.orderTemplates)
@@ -12,8 +13,14 @@ export function OrderTemplatesSettings() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<OrderTemplate | null>(null)
 
-  function remove(id: string) {
-    if (!confirm("Удалить этот шаблон? Уже созданные заказы это не затронет.")) return
+  async function remove(id: string) {
+    const ok = await confirmDialog({
+      title: "Удалить шаблон заказа?",
+      body: "Уже созданные по нему заказы это не затронет.",
+      confirmLabel: "Удалить",
+      destructive: true,
+    })
+    if (!ok) return
     setAppSettings((s) => ({ ...s, orderTemplates: s.orderTemplates.filter((t) => t.id !== id) }))
     saveData()
   }

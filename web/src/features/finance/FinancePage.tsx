@@ -38,6 +38,7 @@ import { DepositDialog } from "./DepositDialog"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 // Сортировка переработана. Прежний набор был неудобен для денег:
 //   • «по умолчанию» — это просто порядок создания, ничего не значащий;
@@ -268,10 +269,16 @@ export function FinancePage() {
     saveData()
   }
 
-  function removeAdvance(id: string) {
+  async function removeAdvance(id: string) {
     const a = advances.find((x) => x.id === id)
     const label = a ? `${fmtMoney(a.amount)} от ${a.client} (${a.date})` : "эту запись"
-    if (!confirm(`Удалить запись об авансе — ${label}?`)) return
+    const ok = await confirmDialog({
+      title: "Удалить запись об авансе?",
+      body: `${label}\n\nСписания этого аванса по заказам останутся как есть — их придётся поправить руками.`,
+      confirmLabel: "Удалить",
+      destructive: true,
+    })
+    if (!ok) return
     setAdvances((prev) => prev.filter((x) => x.id !== id))
     deleteFromCloud("advances", id)
     saveData()

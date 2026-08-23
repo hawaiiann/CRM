@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { BACKUP_CFG_KEY } from "./storageKeys"
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase"
 import { getKnownAccounts } from "./accountSwitcher"
+import { alertDialog } from "../store/useDialogStore"
 
 const BACKUP_HANDLE_DB = "design_crm_dirhandle_db"
 const BACKUP_HANDLE_STORE = "handles"
@@ -92,7 +93,10 @@ export function backupPathSupported() {
 
 export async function selectBackupDirectory(): Promise<string | null> {
   if (!isFsAccessSupported()) {
-    alert("Ваш браузер не поддерживает выбор папки на диске (File System Access API).")
+    await alertDialog({
+      title: "Браузер не поддерживает выбор папки",
+      body: "Для записи бэкапов на диск нужен File System Access API — его нет в этом браузере. Бэкап можно скачать файлом вручную.",
+    })
     return null
   }
   try {

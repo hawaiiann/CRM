@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DEFAULT_BACKUP_PATH } from "@/lib/version"
 import type { BackupSettings as BackupSettingsType, Order, Task, Advance, PlanningBoard, ActivityLogEntry } from "@/types/models"
+import { alertDialog } from "@/store/useDialogStore"
 
 export function BackupSettings() {
   const backupSettings = useAppStore((s) => s.backupSettings)
@@ -94,7 +95,10 @@ export function BackupSettings() {
         saveData()
       } catch (err) {
         console.error(err)
-        alert("Не удалось прочитать файл — проверьте, что это корректный JSON-бэкап.")
+        alertDialog({
+          title: "Не удалось прочитать файл",
+          body: "Проверьте, что это корректный JSON-бэкап. Данные в приложении не тронуты.",
+        })
       }
     }
     reader.readAsText(file)
@@ -104,10 +108,21 @@ export function BackupSettings() {
     setChecking(true)
     try {
       const problems = await runSyncSelfCheck()
-      if (!problems) alert("Синхронизация в порядке — данные в приложении и в облаке совпадают.")
-      else alert("Найдены расхождения:\n\n" + problems.join("\n"))
+      if (!problems) {
+        await alertDialog({
+          title: "Синхронизация в порядке",
+          body: "Данные в приложении и в облаке совпадают.",
+        })
+      } else {
+        // Списком, а не сплошным текстом: расхождений может быть много, и в
+        // системном окне их приходилось разбирать глазами по переводам строк.
+        await alertDialog({ title: "Найдены расхождения", bullets: problems })
+      }
     } catch (err) {
-      alert("Не удалось проверить: " + (err instanceof Error ? err.message : String(err)))
+      await alertDialog({
+        title: "Не удалось проверить",
+        body: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       setChecking(false)
     }

@@ -21,6 +21,7 @@ import { useThemeStore } from "@/store/useThemeStore"
 import { restoreBackupDirectoryHandle, triggerDiskBackup } from "@/lib/diskBackup"
 import { SidebarTimerCard } from "./SidebarTimerCard"
 import { ToastRoot } from "./ToastRoot"
+import { AppDialogRoot } from "./AppDialogRoot"
 import { AccountSwitcher } from "./AccountSwitcher"
 import { GlassBackdrop } from "@/features/dashboard/GlassBackdrop"
 import { APP_VERSION } from "@/lib/version"
@@ -173,6 +174,7 @@ export function AppShell() {
       </div>
 
       <ToastRoot />
+      <AppDialogRoot />
     </div>
   )
 }

@@ -36,6 +36,7 @@ export function TemplateEditorDialog({
 
   const [name, setName] = useState("")
   const [lines, setLines] = useState<(OrderTemplateLine & { id: string })[]>([])
+  const [error, setError] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -46,14 +47,18 @@ export function TemplateEditorDialog({
       setName("")
       setLines([{ id: randId("tl"), label: "", type: "", qty: 1, rate: 0 }])
     }
+    setError("")
   }, [open, template])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmedName = name.trim()
-    if (!trimmedName) { alert("Введите название шаблона."); return }
+    // Подсказка в самой форме, а не системным окном: ошибка относится к
+    // конкретному полю, и её надо видеть рядом с ним, а не поверх всего экрана.
+    if (!trimmedName) { setError("Введите название шаблона."); return }
     const cleanLines = lines.filter((l) => (l.label || "").trim() !== "").map((l) => ({ label: l.label.trim(), type: (l.type || "").trim(), qty: parseNum(l.qty) || 1, rate: parseNum(l.rate) || 0 }))
-    if (!cleanLines.length) { alert("Добавьте хотя бы одну позицию с названием."); return }
+    if (!cleanLines.length) { setError("Добавьте хотя бы одну позицию с названием."); return }
+    setError("")
 
     setAppSettings((s) => {
       const templates = s.orderTemplates
@@ -115,6 +120,10 @@ export function TemplateEditorDialog({
               <Plus />Добавить позицию
             </Button>
           </div>
+
+          {error && (
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">{error}</div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>

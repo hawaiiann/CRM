@@ -24,6 +24,7 @@ import {
 import { getVisibleCatalog } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 const COLORS: { key: string; label: string; className: string }[] = [
   { key: "gray", label: "Неактив", className: "bg-neutral-tone text-neutral-tone-foreground" },
@@ -95,9 +96,15 @@ export function LessonSheet({
     updateLesson({ items: (liveLesson.items || []).filter((i) => i.id !== id) })
   }
 
-  function deleteLesson() {
+  async function deleteLesson() {
     if (!liveBoard || !liveLesson) return
-    if (!confirm("Удалить этот урок?")) return
+    const ok = await confirmDialog({
+      title: "Удалить этот урок?",
+      body: `Урок ${liveLesson.num}${liveLesson.title ? " — " + liveLesson.title : ""}. Вместе с ним пропадёт весь его состав. Заказ, если он привязан, останется.`,
+      confirmLabel: "Удалить урок",
+      destructive: true,
+    })
+    if (!ok) return
     setPlanningBoards((prev) =>
       prev.map((b) => (b.id !== liveBoard.id ? b : { ...b, lessons: b.lessons.filter((l) => l.id !== liveLesson.id) }))
     )
@@ -130,23 +137,29 @@ export function LessonSheet({
   // случиться.
   const unlinkPlan = governingOrder && liveBoard && liveLesson ? planUnlink(governingOrder, liveBoard, liveLesson) : null
 
-  function unlinkOrder() {
+  async function unlinkOrder() {
     if (!governingOrder || !liveLesson || !unlinkPlan?.possible) return
 
     const what: string[] = []
-    if (unlinkPlan.clearsExplicitLink) what.push("• у заказа снимется привязка «Привязать к уроку»")
+    if (unlinkPlan.clearsExplicitLink) what.push("У заказа снимется привязка «Привязать к уроку».")
     if (unlinkPlan.clearsLessonNumber)
       what.push(
-        `• у заказа очистится поле «Урок»${unlinkPlan.lessonNumber ? ` (сейчас «${unlinkPlan.lessonNumber}»)` : ""} — ` +
-          "иначе связь вернётся сама по совпадению предмета, класса, четверти и номера"
+        `У заказа очистится поле «Урок»${unlinkPlan.lessonNumber ? ` (сейчас «${unlinkPlan.lessonNumber}»)` : ""} — ` +
+          "иначе связь вернётся сама по совпадению предмета, класса, четверти и номера."
       )
     if (unlinkPlan.releasedItems)
       what.push(
-        `• ${unlinkPlan.releasedItems} ${pluralizeRu(unlinkPlan.releasedItems, "пункт", "пункта", "пунктов")} ` +
-          "чек-листа останутся в уроке, но перестанут обновляться из заказа"
+        `${unlinkPlan.releasedItems} ${pluralizeRu(unlinkPlan.releasedItems, "пункт", "пункта", "пунктов")} ` +
+          "чек-листа останутся в уроке, но перестанут обновляться из заказа."
       )
 
-    if (!confirm(`Отвязать урок от заказа?\n\n${what.join("\n")}\n\nПозиции, суммы и оплаты заказа не изменятся.`)) return
+    const ok = await confirmDialog({
+      title: "Отвязать урок от заказа?",
+      bullets: what,
+      note: "Позиции, суммы и оплаты заказа не изменятся.",
+      confirmLabel: "Отвязать",
+    })
+    if (!ok) return
 
     setOrders((prev) => prev.map((o) => (o.id === governingOrder.id ? { ...o, ...unlinkPlan.orderPatch } : o)))
     updateLesson({ items: unlinkPlan.lessonItems })

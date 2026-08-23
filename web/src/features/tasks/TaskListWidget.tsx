@@ -5,6 +5,7 @@ import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { dateKey } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { Task, TaskPeriod } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 const PERIODS: TaskPeriod[] = ["today", "week", "month", "year"]
 const PERIOD_LABELS: Record<TaskPeriod, string> = { today: "Сегодня", week: "На этой неделе", month: "В этом месяце", year: "В этом году" }
@@ -33,10 +34,16 @@ export function TaskListWidget() {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)))
     saveData()
   }
-  function remove(id: string) {
+  async function remove(id: string) {
     const t = tasks.find((x) => x.id === id)
     const label = t ? (t.text.length > 60 ? t.text.slice(0, 60) + "…" : t.text) : "эту задачу"
-    if (!confirm(`Удалить задачу «${label}»?`)) return
+    const ok = await confirmDialog({
+      title: "Удалить задачу?",
+      body: label,
+      confirmLabel: "Удалить",
+      destructive: true,
+    })
+    if (!ok) return
     setTasks((prev) => prev.filter((x) => x.id !== id))
     deleteFromCloud("tasks", id)
     saveData()

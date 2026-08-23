@@ -58,6 +58,7 @@ import { StatusBadge } from "./StatusBadge"
 import { OrderDetailsSheet } from "./OrderDetailsSheet"
 import { OrderFormDialog } from "./OrderFormDialog"
 import { orderMatchesQuery } from "@/lib/orderSearch"
+import { confirmDialog } from "@/store/useDialogStore"
 
 function clientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -213,7 +214,7 @@ export function OrdersPage() {
   // Быстрая смена статуса прямо из списка — как было в ванильной версии.
   // Завершение заказа не должно требовать открытия формы: это самое частое
   // действие, а через форму его попросту не находили.
-  function changeStatus(id: string, next: Order["status"]) {
+  async function changeStatus(id: string, next: Order["status"]) {
     const order = orders.find((o) => o.id === id)
     const wasArchived = order && (order.status === "done" || order.status === "cancelled")
     const backToWork = next !== "done" && next !== "cancelled"
@@ -225,11 +226,14 @@ export function OrdersPage() {
     // Поэтому спрашиваем сразу — перенести срок или оставить как есть.
     let patch: Partial<Order> = { status: next }
     if (order && wasArchived && backToWork && order.deadline && order.deadline < today) {
-      const move = confirm(
-        `Срок сдачи этого заказа уже прошёл (${fmtDeadline(order.deadline)}).\n\n` +
-          `Перенести срок на сегодня, чтобы заказ появился в текущей неделе?\n` +
-          `Отмена — оставить прежнюю дату, заказ останется просроченным.`
-      )
+      const move = await confirmDialog({
+        title: "Срок сдачи уже прошёл",
+        body:
+          `Заказ нужно было сдать ${fmtDeadline(order.deadline)}. ` +
+          "Перенести срок на сегодня, чтобы он появился в текущей неделе?",
+        confirmLabel: "Перенести на сегодня",
+        cancelLabel: "Оставить дату",
+      })
       if (move) {
         patch = { ...patch, deadline: today, start: order.start && order.start > today ? today : order.start }
       }

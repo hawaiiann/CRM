@@ -13,6 +13,7 @@ import { saveData } from "@/lib/cloudSync"
 import { DASHBOARD_METRIC_TYPES } from "@/lib/dashboardMetrics"
 import { cn } from "@/lib/utils"
 import type { DashboardMetric } from "@/types/models"
+import { confirmDialog } from "@/store/useDialogStore"
 
 function randId() {
   return "dm" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -33,11 +34,16 @@ export function DashboardMetricsSettings() {
     const freeType = Object.keys(DASHBOARD_METRIC_TYPES).find((k) => !usedTypes.includes(k)) || Object.keys(DASHBOARD_METRIC_TYPES)[0]
     update([...metrics, { id: randId(), type: freeType, goal: 0 }])
   }
-  function remove(idx: number) {
+  async function remove(idx: number) {
     if (metrics.length <= 1) return
     const m = metrics[idx]
     const label = DASHBOARD_METRIC_TYPES[m.type]?.label || "этот показатель"
-    if (!confirm(`Убрать показатель «${label}» с графика "Активность"?`)) return
+    const ok = await confirmDialog({
+      title: "Убрать показатель с графика?",
+      body: `«${label}» пропадёт из блока «Активность» на дашборде. Сами данные остаются — показатель можно вернуть.`,
+      confirmLabel: "Убрать",
+    })
+    if (!ok) return
     update(metrics.filter((_, i) => i !== idx))
   }
 
