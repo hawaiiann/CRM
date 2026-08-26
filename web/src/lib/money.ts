@@ -127,6 +127,15 @@ export function paymentBreakdown(fullExact: number, advanceUsed: unknown, paymen
   const paidMoney = Math.min(parseNum(paymentsTotal), Math.max(0, full - advUsed))
   const covered = advUsed + paidMoney
   const remaining = Math.max(0, Math.round((full - covered) * 100) / 100)
+  // Сколько денег (аванс + платежи) записано на заказ сверх его нынешней
+  // стоимости. Обычно 0 — но если заказ подешевел ПОСЛЕ того, как деньги уже
+  // были учтены (убрали позицию, срезали цену), advUsed/paidMoney молча
+  // обрезаются до full, а разница из «Получено»/«К доплате» просто исчезает.
+  // Деньги никуда не делись — advanceUsed и payments на заказе не меняются,
+  // пропадает только их отражение в выручке. overpaid делает эту сумму видной,
+  // чтобы её можно было руками разобрать: уменьшить списание аванса или платёж,
+  // либо вернуть позицию.
+  const overpaid = Math.max(0, Math.round((parseNum(advanceUsed) + parseNum(paymentsTotal) - full) * 100) / 100)
   return {
     full,
     fullExact,
@@ -134,6 +143,7 @@ export function paymentBreakdown(fullExact: number, advanceUsed: unknown, paymen
     paidMoney,
     covered,
     remaining,
+    overpaid,
     isFullyPaid: full > 0 && remaining <= 0,
   }
 }

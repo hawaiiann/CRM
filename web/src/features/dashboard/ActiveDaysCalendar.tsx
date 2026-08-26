@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react"
-import { X } from "lucide-react"
+import { X, Pencil, Check } from "lucide-react"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtHours, dateKey } from "@/lib/money"
+import { fmtHours, dateKey, parseHours } from "@/lib/money"
 import { cn } from "@/lib/utils"
-import { deleteActivityLogEntries } from "@/lib/cloudSync"
+import { deleteActivityLogEntries, saveData } from "@/lib/cloudSync"
 import { confirmDialog } from "@/store/useDialogStore"
 import type { ActivityLogEntry } from "@/types/models"
 import {
@@ -29,9 +29,11 @@ function monthOptions() {
 export function ActiveDaysCalendar() {
   const activityLog = useAppStore((s) => s.activityLog)
   const orders = useAppStore((s) => s.orders)
+  const setActivityLog = useAppStore((s) => s.setActivityLog)
   const options = useMemo(() => monthOptions(), [])
   const [monthValue, setMonthValue] = useState(options[0].value)
   const [openDay, setOpenDay] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ entry: ActivityLogEntry; value: string } | null>(null)
 
   const [yearStr, monthStr] = monthValue.split("-")
   const year = parseInt(yearStr, 10)
@@ -63,7 +65,7 @@ export function ActiveDaysCalendar() {
 
   // Раньше журнал только пополнялся — ошибочную запись (например, часы,
   // посчитанные по «Плану», а не по факту, см. lib/activity.ts) нельзя было
-  // убрать иначе как стерев всю статистику заказа целиком.
+  // ни убрать, ни поправить иначе как стерев всю статистику заказа целиком.
   async function removeEntry(entry: ActivityLogEntry) {
     const order = orders.find((o) => o.id === entry.orderId)
     const ok = await confirmDialog({
@@ -76,11 +78,38 @@ export function ActiveDaysCalendar() {
     deleteActivityLogEntries([entry])
   }
 
+  /**
+   * Правка числа записи вместо удаления — когда часы посчитаны неверно, но
+   * не полностью выдуманы (например, урок реально был, просто автоматика
+   * накинула лишнее). У записи нет отдельного «обновить» в облаке — там
+   * только вставка (см. syncActivityLog в cloudSync.ts), поэтому правка это
+   * старую запись удалить и добавить новую с тем же днём и заказом, но
+   * верным числом. С точки зрения журнала результат неотличим от того, если
+   * бы изначально записали правильно.
+   */
+  function saveEdit() {
+    if (!editing) return
+    const delta = parseHours(editing.value)
+    setEditing(null)
+    if (!Number.isFinite(delta) || delta === editing.entry.delta) return
+    deleteActivityLogEntries([editing.entry])
+    setActivityLog((prev) => [...prev, { date: editing.entry.date, orderId: editing.entry.orderId, field: editing.entry.field, delta }])
+    saveData()
+  }
+
+  // Один вход для смены открытого дня — везде, где он меняется, заодно
+  // гасим незавершённую правку: иначе открытая форма редактирования могла
+  // бы относиться к записи другого дня.
+  function selectDay(next: string | null) {
+    setOpenDay(next)
+    setEditing(null)
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-[16px] font-bold">Активные дни</h3>
-        <Select value={monthValue} onValueChange={(v) => { setMonthValue(v); setOpenDay(null) }}>
+        <Select value={monthValue} onValueChange={(v) => { setMonthValue(v); selectDay(null) }}>
           <SelectTrigger size="sm" className="w-auto"><SelectValue /></SelectTrigger>
           <SelectContent>
             {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -97,7 +126,7 @@ export function ActiveDaysCalendar() {
             key={i}
             type="button"
             disabled={c.outside || !c.isActive}
-            onClick={() => c.dateStr && setOpenDay((d) => (d === c.dateStr ? null : c.dateStr!))}
+            onClick={() => c.dateStr && selectDay(openDay === c.dateStr ? null : c.dateStr)}
             className={cn(
               "flex aspect-square items-center justify-center rounded-md text-[11px] font-semibold",
               c.outside && "text-muted-foreground/40",
@@ -127,7 +156,7 @@ export function ActiveDaysCalendar() {
         <div className="mt-3 rounded-xl bg-muted px-3.5 py-3">
           <div className="mb-1 flex items-center justify-between">
             <b className="text-[12.5px]">{formatDayLabel(openDay)}</b>
-            <button type="button" onClick={() => setOpenDay(null)} className="text-[11px] text-muted-foreground">Закрыть ✕</button>
+            <button type="button" onClick={() => selectDay(null)} className="text-[11px] text-muted-foreground">Закрыть ✕</button>
           </div>
           {dayEntries.length ? (
             <>
@@ -135,31 +164,65 @@ export function ActiveDaysCalendar() {
                 <span className="text-muted-foreground">Часы</span>
                 <b>{fmtHours(hoursForDay)}</b>
               </div>
-              {/* Список записей и удаление по одной. Без этого поправить
-                  неверно посчитанные часы (см. lib/activity.ts) было нечем —
-                  журнал только пополнялся. */}
+              {/* Список записей: правка числа и удаление по одной. Без этого
+                  поправить неверно посчитанные часы (см. lib/activity.ts)
+                  было нечем — журнал только пополнялся. */}
               <div className="flex flex-col gap-1 border-t border-border pt-2">
                 {dayEntries.map((e, i) => {
                   const order = orders.find((o) => o.id === e.orderId)
+                  const isEditing = editing?.entry === e
                   return (
                     <div key={i} className="flex items-center justify-between gap-2 text-[11.5px]">
                       <span className="min-w-0 truncate text-muted-foreground">
                         {order ? orderTitle(order) : "Заказ удалён"}
                       </span>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        <b className={cn(e.delta < 0 && "text-destructive")}>
-                          {e.delta > 0 ? "+" : ""}
-                          {fmtHours(Math.abs(e.delta))}
-                        </b>
-                        <button
-                          type="button"
-                          title="Удалить запись"
-                          onClick={() => removeEntry(e)}
-                          className="flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </span>
+                      {isEditing ? (
+                        <span className="flex shrink-0 items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            autoFocus
+                            value={editing.value}
+                            onChange={(ev) => setEditing({ entry: e, value: ev.target.value })}
+                            onKeyDown={(ev) => {
+                              if (ev.key === "Enter") saveEdit()
+                              if (ev.key === "Escape") setEditing(null)
+                            }}
+                            className="w-14 rounded border border-border bg-background px-1.5 py-0.5 text-right text-[11.5px] outline-none"
+                          />
+                          <button
+                            type="button"
+                            title="Сохранить"
+                            onClick={saveEdit}
+                            className="flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-success/15 hover:text-success-foreground"
+                          >
+                            <Check className="size-3" />
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <b className={cn(e.delta < 0 && "text-destructive")}>
+                            {e.delta > 0 ? "+" : ""}
+                            {fmtHours(Math.abs(e.delta))}
+                          </b>
+                          <button
+                            type="button"
+                            title="Поправить число"
+                            onClick={() => setEditing({ entry: e, value: String(e.delta) })}
+                            className="flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-overlay/10 hover:text-foreground"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Удалить запись"
+                            onClick={() => removeEntry(e)}
+                            className="flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      )}
                     </div>
                   )
                 })}

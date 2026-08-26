@@ -26,9 +26,10 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder } from "@/lib/cloudSync"
 import { recordActivityChanges } from "@/lib/activity"
 import { cn } from "@/lib/utils"
-import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, draftPaymentState } from "@/lib/money"
+import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, orderTaxRate, draftPaymentState } from "@/lib/money"
 import { getClientAdvanceStats } from "@/lib/advances"
 import { normalizePayment } from "@/lib/normalize"
+import { confirmDialog } from "@/store/useDialogStore"
 import type { Order, OrderLine, Payment, TaxType, OrderStatus } from "@/types/models"
 
 const STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
@@ -224,8 +225,40 @@ export function OrderFormDialog({
   function addLine() {
     setDraft((d) => ({ ...d, lines: [...d.lines, blankLine(defaults)] }))
   }
-  function removeLine(id: string) {
-    setDraft((d) => ({ ...d, lines: d.lines.filter((l) => l.id !== id) }))
+
+  /**
+   * Удаление позиции может «осиротить» уже учтённые деньги: аванс и платежи
+   * на заказе не пересчитываются вслед за ценой, и если сумма позиций падает
+   * ниже уже внесённого, разница молча выпадает из «Получено»/«К доплате»
+   * (см. overpaid в paymentBreakdown, lib/money.ts). Деньги при этом никуда
+   * не исчезают — просто переставали быть видны нигде, и обнаружить это
+   * можно было только листая цифры вручную. Спрашиваем заранее, если именно
+   * ЭТА позиция впервые создаёт или увеличивает переплату.
+   */
+  async function removeLine(id: string) {
+    const line = draft.lines.find((l) => l.id === id)
+    if (!line) return
+
+    const nextLines = draft.lines.filter((l) => l.id !== id)
+    const nextBase = nextLines.reduce((s, l) => s + calculateLineTotal(l), 0)
+    const nextFull = Math.round(nextBase * (1 + orderTaxRate(draft)))
+    const committed = parseNum(draft.advanceUsed) + paymentsTotal
+    const newlyOrphaned = Math.round((Math.max(0, committed - nextFull) - pay.overpaid) * 100) / 100
+
+    if (newlyOrphaned > 0.5) {
+      const ok = await confirmDialog({
+        title: "Удалить позицию?",
+        body:
+          `«${line.label || line.type}» — ${fmtMoney(calculateLineTotal(line))}.\n\n` +
+          `По заказу уже учтено ${fmtMoney(committed)} (аванс + платежи). После удаления заказ подешевеет до ${fmtMoney(nextFull)}, ` +
+          `и ${fmtMoney(newlyOrphaned)} перестанут попадать в «Получено» и «К доплате» — деньги никуда не денутся, просто заказ станет дешевле уже учтённой суммы.`,
+        confirmLabel: "Удалить позицию",
+        destructive: true,
+      })
+      if (!ok) return
+    }
+
+    setDraft((d) => ({ ...d, lines: nextLines }))
   }
 
   function updatePayment(id: string, patch: Partial<Payment>) {
@@ -461,6 +494,19 @@ export function OrderFormDialog({
                   <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(remaining)}</div>
                 </div>
               </div>
+
+              {/* Заказ подешевел ниже уже учтённых денег (снизили цену, убрали
+                  позицию) — «Получено» и «К доплате» выше молча обрезаны до
+                  стоимости заказа, эта сумма исправляет то же самое незаметно.
+                  Деньги никуда не делись: аванс и платежи на заказе не тронуты,
+                  просто перестали умещаться в его новую цену. Правится теми же
+                  полями — списанием аванса выше и платежами ниже. */}
+              {pay.overpaid > 0 && (
+                <div className="mt-3 rounded-lg bg-warning px-3 py-2 text-[12px] font-bold text-warning-foreground">
+                  Заказ стоит {fmtMoney(totalWithTax)}, а аванс и платежи по нему в сумме дают {fmtMoney(parseNum(draft.advanceUsed) + paymentsTotal)}.
+                  {" "}{fmtMoney(pay.overpaid)} не попадают ни в «Получено», ни в «К доплате». Уменьшите списание аванса или платёж, либо верните позицию.
+                </div>
+              )}
 
               {draft.payments.length > 0 && (
                 <div className="mt-3 flex flex-col gap-2">

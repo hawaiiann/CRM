@@ -188,6 +188,19 @@ export function OrderDetailsSheet({
                     </b>
                   </span>
                 </div>
+                {/* Заказ подешевел ниже уже учтённых денег (снизили цену, убрали
+                    позицию) — «Из аванса» и «К доплате» выше молча обрезаны до
+                    стоимости заказа. Деньги никуда не делись — просто перестали
+                    умещаться в новую цену; поправить можно только в форме
+                    редактирования (аванс, список платежей). */}
+                {pay.overpaid > 0 && (
+                  <div className="mt-2.5 flex gap-2 rounded-lg bg-warning px-3 py-2 text-warning-foreground">
+                    <TriangleAlert className="mt-px size-3.5 shrink-0" />
+                    <div className="text-[11.5px] leading-relaxed">
+                      <b className="font-bold">{fmtMoney(pay.overpaid)} не попадают в расчёт.</b> Аванс и платежи по заказу в сумме больше его стоимости — заказ подешевел уже после того, как деньги были учтены.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {order.notes && (

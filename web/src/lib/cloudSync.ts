@@ -33,6 +33,8 @@ import {
   BACKUP_CFG_KEY,
 } from "./storageKeys"
 import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries } from "./pendingDeletes"
+import { actualHours } from "./activity"
+import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
 type Row = Record<string, any>
@@ -612,21 +614,28 @@ function orderSeedDate(o: Order): string {
   return dateKey(new Date())
 }
 
-function getOrderDisplayHours(o: Order): number {
-  const manualAct = parseNum(o.actualHours)
-  const pomoSum = (o.lines || []).reduce((s, l) => s + parseNum(l.pomoHours), 0)
-  if (manualAct > 0) return manualAct
-  if (pomoSum > 0) return pomoSum
-  return parseNum(o.estimatedHours) || 0
-}
-
-function seedActivityLogIfEmpty(orders: Order[], activityLog: ActivityLogEntry[]): ActivityLogEntry[] {
+/**
+ * Досев пустого журнала оценками часов по заказам — для тех, кто переходит
+ * из версии, где журнала не было вовсе. Срабатывает не более одного раза на
+ * аккаунт (см. lib/activitySeed.ts): второй пустой журнал у уже досеянного
+ * аккаунта значит, что он опустел не просто потому, что его никогда не
+ * было, а по какой-то другой причине — и досевать его выдумкой второй раз
+ * нельзя.
+ *
+ * Часы считаются той же функцией, что и обычная запись в журнал
+ * (actualHours из lib/activity.ts) — только факт и таймер, «План. часы» не
+ * в счёт. Раньше здесь была отдельная копия с этим полем в приоритете, и
+ * досев тянул в журнал не отработанное время, а оценки на будущее.
+ */
+function seedActivityLogIfEmpty(orders: Order[], activityLog: ActivityLogEntry[], scope: string): ActivityLogEntry[] {
   if (activityLog.length) return activityLog
+  if (wasAccountSeeded(scope)) return activityLog
   const seeded: ActivityLogEntry[] = []
   orders.forEach((o) => {
-    const hours = getOrderDisplayHours(o)
+    const hours = actualHours(o)
     if (hours) seeded.push({ date: orderSeedDate(o), orderId: o.id, field: "hours", delta: hours })
   })
+  markAccountSeeded(scope)
   return seeded
 }
 
@@ -757,7 +766,7 @@ function loadFromLocalStorageFallback() {
   const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY)
   let activityLog: ActivityLogEntry[] = rawLog ? JSON.parse(rawLog) : []
   activityLog = purgeObsoleteJournalFields(activityLog).log
-  activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog)
+  activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog, store.cloudUserId || "local")
 
   store.setAppSettings(settings)
   store.setOrders(migratedOrders)
@@ -790,12 +799,14 @@ export async function loadData() {
     // (закрыли вкладку, моргнула сеть) уносил часы из облака насовсем, а на
     // следующей загрузке пустой журнал добивал seedActivityLogIfEmpty, подменяя
     // реальную историю выдумкой из дат начала заказов. Так на 20.08.2026 было
-    // потеряно 45 настоящих записей, причём на нескольких аккаунтах сразу —
-    // миграция прогоняется независимо на каждом при первом входе.
-    // Схлопывание — косметика и риска не стоит, в облачном пути его больше нет.
-    // В офлайновом фолбэке оно осталось: там сносить нечего, правка локальная.
+    // потеряно 45 настоящих записей, причём на нескольких аккаунтах сразу.
+    // Схлопывание убрано совсем. Но сам seedActivityLogIfEmpty тоже был не безопасен
+    // — он не знал, что уже досевал этот аккаунт, и повторял подмену выдумкой
+    // при ЛЮБОМ пустом журнале, а не только при первом визите. Теперь это
+    // помнится (readSeededAccounts) — см. предупреждение прямо в cloudSync.ts
+    // рядом с определением функции.
     const beforeSeedLen = activityLog.length
-    activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog)
+    activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog, store.cloudUserId || "local")
 
     store.setAppSettings(settings)
     store.setOrders(migratedOrders)

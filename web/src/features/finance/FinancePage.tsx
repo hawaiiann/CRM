@@ -60,13 +60,18 @@ const SORT_LABELS: Record<SortMode, string> = {
   client: "По клиенту (А–Я)",
 }
 
-type PayFilter = "all" | "debt" | "paid" | "partial"
+type PayFilter = "all" | "debt" | "paid" | "partial" | "overpaid"
 
 const PAY_FILTER_LABELS: Record<PayFilter, string> = {
   all: "Оплата: любая",
   debt: "Есть долг",
   partial: "Оплачено частично",
   paid: "Оплачено полностью",
+  // Найти разом все заказы, где аванс и платежи в сумме больше стоимости
+  // заказа (см. pay.overpaid, lib/money.ts) — обычно после того, как заказ
+  // подешевел ПОСЛЕ того, как деньги уже были учтены. Без этого фильтра
+  // расхождение можно было заметить только открыв заказ по одному.
+  overpaid: "Есть переплата",
 }
 
 type PeriodFilter = "all" | "month" | "prev_month" | "year"
@@ -108,6 +113,7 @@ function matchesPayFilter(o: Order, f: PayFilter): boolean {
   const p = orderPaymentState(o)
   if (f === "paid") return p.isFullyPaid
   if (f === "debt") return !p.isFullyPaid
+  if (f === "overpaid") return p.overpaid > 0
   return !p.isFullyPaid && (p.covered > 0 || p.advUsed > 0) // частично
 }
 

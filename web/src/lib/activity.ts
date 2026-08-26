@@ -12,7 +12,7 @@ import { parseNum, dateKey } from "./money"
  * работа ещё не начиналась. Именно так набегали лишние часы за день: сумма
  * планов по нескольким заведённым заказам, а не реально потраченное время.
  */
-function actualHours(o: Order): number {
+export function actualHours(o: Order): number {
   const manual = parseNum(o.actualHours)
   if (manual > 0) return manual
   return (o.lines || []).reduce((s, l) => s + parseNum(l.pomoHours), 0)
