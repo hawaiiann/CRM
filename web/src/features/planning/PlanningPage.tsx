@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Download } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { BoardCard } from "./BoardCard"
 import { BoardFormDialog } from "./BoardFormDialog"
 import { LessonSheet } from "./LessonSheet"
+import { PlanningExportDialog } from "./PlanningExportDialog"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 
 type SortMode = "class" | "subject" | "deadline"
@@ -26,6 +27,7 @@ export function PlanningPage() {
   const [boardFormOpen, setBoardFormOpen] = useState(false)
   const [editingBoard, setEditingBoard] = useState<PlanningBoard | null>(null)
   const [activeLesson, setActiveLesson] = useState<{ board: PlanningBoard; lesson: PlanningLesson } | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const sorted = useMemo(() => {
     let list = boards.slice()
@@ -55,6 +57,10 @@ export function PlanningPage() {
                 <SelectItem value="deadline">Сортировка: по дедлайну</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => setExportOpen(true)}>
+              <Download />
+              Экспорт
+            </Button>
             <Button onClick={() => { setEditingBoard(null); setBoardFormOpen(true) }} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
               <Plus />
               Добавить класс
@@ -98,6 +104,11 @@ export function PlanningPage() {
       )}
 
       <BoardFormDialog open={boardFormOpen} board={editingBoard} onOpenChange={setBoardFormOpen} />
+      {/* Все доски, а не отфильтрованный по поиску sorted: поиск на странице
+          сужает то, что видно на экране, а экспорт по четверти должен
+          охватывать все классы этого периода, включая те, что сейчас
+          отфильтрованы поиском. */}
+      <PlanningExportDialog open={exportOpen} boards={boards} onOpenChange={setExportOpen} />
       <LessonSheet
         board={activeLesson?.board ?? null}
         lesson={activeLesson?.lesson ?? null}

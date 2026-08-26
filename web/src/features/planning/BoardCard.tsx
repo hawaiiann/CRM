@@ -7,6 +7,7 @@ import { fmtDeadline } from "@/lib/dates"
 import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
+import { computeBoardProgress } from "@/lib/planningStats"
 
 function lessonColorClass(lesson: PlanningLesson, colorLocked: boolean, orderLinked: boolean): string {
   let c = lesson.color || "gray"
@@ -68,26 +69,12 @@ export function BoardCard({
   }, [deleteArmedId])
 
   const lessons = board.lessons || []
-  let totalItems = 0
-  let doneItems = 0
-  let greenLessons = 0
+  // Расчёт вынесен в lib/planningStats.ts — тот же самый использует экспорт
+  // в CSV, и он обязан сходиться с тем, что нарисовано на этой карточке.
+  const progress = computeBoardProgress(board)
+  const { itemsTotal: totalItems, itemsDone: doneItems, lessonsDone: greenLessons } = progress
   const typeBreakdown: Record<string, { done: number; total: number }> = {}
-
-  lessons.forEach((l) => {
-    const items = l.items || []
-    const totalInLesson = items.length
-    const doneInLesson = items.filter((i) => i.done).length
-    if ((l.color && l.color.startsWith("green")) || (totalInLesson > 0 && doneInLesson === totalInLesson)) greenLessons++
-    items.forEach((item) => {
-      const name = item.text.trim()
-      if (!name) return
-      if (!typeBreakdown[name]) typeBreakdown[name] = { done: 0, total: 0 }
-      typeBreakdown[name].total++
-      if (item.done) typeBreakdown[name].done++
-      totalItems++
-      if (item.done) doneItems++
-    })
-  })
+  progress.byItem.forEach(({ name, done, total }) => { typeBreakdown[name] = { done, total } })
 
   const mainPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
   const lessonsPct = lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
