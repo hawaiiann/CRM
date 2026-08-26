@@ -15,16 +15,16 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
-import { downloadCsvSections } from "@/lib/csv"
-import { computeBoardProgress, distinctQuarters } from "@/lib/planningStats"
-import { fmtDeadline } from "@/lib/dates"
+import { distinctQuarters } from "@/lib/planningStats"
 import { dateKey, pluralizeRu } from "@/lib/money"
+import { alertDialog } from "@/store/useDialogStore"
 import type { PlanningBoard } from "@/types/models"
 
 const ALL_QUARTERS = "__all__"
 
 /**
- * Экспорт планирования в CSV (Excel открывает его как обычную таблицу).
+ * Экспорт планирования в настоящий .xlsx (не CSV — нужна заливка строк
+ * цветом урока, а у CSV нет форматирования вообще).
  *
  * Период — это четверть, а не диапазон дат: у урока нет своей даты, только
  * номер и четверть доски, поэтому «период» здесь означает «какие четверти
@@ -44,49 +44,40 @@ export function PlanningExportDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const [quarter, setQuarter] = useState(ALL_QUARTERS)
+  const [exporting, setExporting] = useState(false)
 
   const quarters = distinctQuarters(boards)
   const matched = quarter === ALL_QUARTERS ? boards : boards.filter((b) => (b.quarter || "").trim() === quarter)
-  // Порядок такой же, как на странице по умолчанию: по названию класса.
-  const sorted = matched.slice().sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru"))
 
-  function handleExport() {
-    const byClassRows: (string | number)[][] = []
-    const byItemRows: (string | number)[][] = []
-
-    sorted.forEach((board) => {
-      const p = computeBoardProgress(board)
-      const lessonsPct = p.lessonsTotal > 0 ? Math.round((p.lessonsDone / p.lessonsTotal) * 100) : 0
-      const itemsPct = p.itemsTotal > 0 ? Math.round((p.itemsDone / p.itemsTotal) * 100) : 0
-      byClassRows.push([
-        board.title || "Без названия",
-        board.subject || "",
-        board.quarter || "",
-        board.deadline ? fmtDeadline(board.deadline) : "",
-        p.lessonsTotal, p.lessonsDone, lessonsPct,
-        p.itemsTotal, p.itemsDone, itemsPct,
+  async function handleExport() {
+    setExporting(true)
+    try {
+      // exceljs — не самая лёгкая библиотека, поэтому подключается только
+      // здесь, по клику, а не статическим импортом наверху файла (см.
+      // комментарий в lib/planningExcel.ts).
+      const [ExcelJS, { buildPlanningWorkbook, planningExportFilename }] = await Promise.all([
+        import("exceljs"),
+        import("@/lib/planningExcel"),
       ])
-
-      p.byItem.forEach(({ name, done, total }) => {
-        const pct = total > 0 ? Math.round((done / total) * 100) : 0
-        byItemRows.push([board.title || "Без названия", board.subject || "", board.quarter || "", name, done, total, pct])
+      const buffer = await buildPlanningWorkbook(ExcelJS.default ?? ExcelJS, matched)
+      const scopeLabel = quarter === ALL_QUARTERS ? "все-четверти" : quarter.replace(/\s+/g, "-")
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = planningExportFilename(scopeLabel, dateKey(new Date()))
+      a.click()
+      URL.revokeObjectURL(url)
+      onOpenChange(false)
+    } catch (err) {
+      console.error("Не удалось собрать экспорт планирования:", err)
+      await alertDialog({
+        title: "Не удалось собрать файл",
+        body: "Попробуйте ещё раз. Если не поможет — проверьте соединение с интернетом: библиотека для сборки .xlsx подгружается отдельно.",
       })
-    })
-
-    const scopeLabel = quarter === ALL_QUARTERS ? "все-четверти" : quarter.replace(/\s+/g, "-")
-    downloadCsvSections(`planning-${scopeLabel}-${dateKey(new Date())}.csv`, [
-      {
-        title: "Прогресс по классам",
-        header: ["Класс", "Предмет", "Четверть", "Дедлайн", "Уроков всего", "Уроков готово", "% уроков", "Пунктов всего", "Пунктов готово", "% пунктов"],
-        rows: byClassRows,
-      },
-      {
-        title: "Прогресс по позициям",
-        header: ["Класс", "Предмет", "Четверть", "Позиция", "Готово", "Всего", "%"],
-        rows: byItemRows,
-      },
-    ])
-    onOpenChange(false)
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -95,7 +86,7 @@ export function PlanningExportDialog({
         <DialogHeader>
           <DialogTitle>Экспорт планирования</DialogTitle>
           <DialogDescription>
-            CSV-файл с двумя таблицами: прогресс по классам и прогресс по позициям чек-листа. Открывается в Excel.
+            Файл .xlsx с тремя листами: по классам, по позициям чек-листа и по каждому уроку — со строкой, закрашенной тем же цветом, что и клетка урока в планировании.
           </DialogDescription>
         </DialogHeader>
 
@@ -109,8 +100,8 @@ export function PlanningExportDialog({
             </SelectContent>
           </Select>
           <div className="mt-2 text-[11.5px] text-muted-foreground">
-            {sorted.length > 0
-              ? `Попадёт в файл: ${sorted.length} ${pluralizeRu(sorted.length, "класс", "класса", "классов")}.`
+            {matched.length > 0
+              ? `Попадёт в файл: ${matched.length} ${pluralizeRu(matched.length, "класс", "класса", "классов")}.`
               : "На этот период классов не найдено."}
           </div>
         </div>
@@ -119,11 +110,11 @@ export function PlanningExportDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
           <Button
             type="button"
-            disabled={sorted.length === 0}
+            disabled={matched.length === 0 || exporting}
             onClick={handleExport}
             className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"
           >
-            Скачать CSV
+            {exporting ? "Собираю файл…" : "Скачать .xlsx"}
           </Button>
         </DialogFooter>
       </DialogContent>

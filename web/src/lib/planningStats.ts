@@ -9,6 +9,31 @@ export interface BoardProgress {
   byItem: { name: string; done: number; total: number }[]
 }
 
+export type LessonColor = "gray" | "yellow" | "green-1" | "green-2" | "green-3" | "red"
+
+/**
+ * Цвет клетки урока — то же самое, что решает раскраску сетки в BoardCard.
+ *
+ * Раньше это была локальная функция внутри компонента (lessonColorClass) и
+ * годилась только для отрисовки на экране. Вынесена сюда, чтобы экспорт мог
+ * закрасить строку «По урокам» ТЕМ ЖЕ цветом, что виден в самом планировании,
+ * а не считать его заново своими правилами и рано или поздно разойтись.
+ *
+ * Закреплённый вручную или пришедший от заказа цвет побеждает — тогда состав
+ * чек-листа на цвет клетки не влияет. Иначе цвет считается по доле готовых
+ * пунктов: 0 — серый, до половины — green-1, до почти всех — green-2, иначе
+ * green-3.
+ */
+export function lessonDisplayColor(l: PlanningLesson): LessonColor {
+  if (l.colorLocked || l.orderLinked) return (l.color as LessonColor) || "gray"
+  const items = l.items || []
+  const total = items.length
+  const done = items.filter((i) => i.done).length
+  if (total === 0 || done === 0) return "gray"
+  const ratio = done / total
+  return ratio >= 0.99 ? "green-3" : ratio >= 0.5 ? "green-2" : "green-1"
+}
+
 /**
  * Урок готов, если у него нет незакрытых пунктов — либо если цвет клетки
  * зелёный (его можно закрепить вручную или он приходит от статуса связанного

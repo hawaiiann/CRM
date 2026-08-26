@@ -7,22 +7,7 @@ import { fmtDeadline } from "@/lib/dates"
 import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
-import { computeBoardProgress } from "@/lib/planningStats"
-
-function lessonColorClass(lesson: PlanningLesson, colorLocked: boolean, orderLinked: boolean): string {
-  let c = lesson.color || "gray"
-  if (!colorLocked && !orderLinked) {
-    const items = lesson.items || []
-    const total = items.length
-    const done = items.filter((i) => i.done).length
-    if (total === 0 || done === 0) c = "gray"
-    else {
-      const ratio = done / total
-      c = ratio >= 0.99 ? "green-3" : ratio >= 0.5 ? "green-2" : "green-1"
-    }
-  }
-  return c
-}
+import { computeBoardProgress, lessonDisplayColor } from "@/lib/planningStats"
 
 const CELL_STYLE: Record<string, string> = {
   gray: "bg-neutral-tone text-neutral-tone-foreground",
@@ -178,7 +163,7 @@ export function BoardCard({
 
           <div className="flex flex-wrap gap-1.5">
             {lessons.map((lesson) => {
-              const colorClass = lessonColorClass(lesson, lesson.colorLocked, lesson.orderLinked)
+              const colorClass = lessonDisplayColor(lesson)
               if (colorClass === "green-3" && !showCompleted) { hiddenCompletedCount++; return null }
               const armed = deleteArmedId === lesson.id
               return (
