@@ -13,7 +13,7 @@ import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
-import { saveData } from "@/lib/cloudSync"
+import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 
 function randId(prefix: string) {
@@ -108,6 +108,13 @@ export function BoardFormDialog({
           // Точечный diff по номерам уроков: уроки, чей номер остался в lessonNums,
           // сохраняют id/прогресс; убранные номера удаляются; новые номера создаются с нуля.
           const keepSet = new Set(lessonNums)
+          const removedLessons = b.lessons.filter((l) => !keepSet.has(l.num))
+          // Раньше отсюда уроки убирались только из локального состояния —
+          // строка в облаке оставалась навсегда и при следующей синхронизации
+          // приезжала обратно. Убранная кнопкой в LessonSheet карточка урока
+          // так не терялась (там deleteFromCloud вызывался), а вот сокращённый
+          // здесь диапазон — терялся.
+          removedLessons.forEach((l) => deleteFromCloud("planning_lessons", l.id))
           let lessons = b.lessons.filter((l) => keepSet.has(l.num))
           const existingNums = new Set(lessons.map((l) => l.num))
           const addedNums = lessonNums.filter((n) => !existingNums.has(n))

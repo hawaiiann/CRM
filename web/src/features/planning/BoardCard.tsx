@@ -124,6 +124,10 @@ export function BoardCard({
   }
   function deleteLesson(id: string) {
     updateBoard({ lessons: lessons.filter((l) => l.id !== id) })
+    // Раньше это правило только локальный список — строка урока оставалась в
+    // облаке и при следующей синхронизации приезжала обратно. Тот же провал,
+    // что был у удаления доски целиком (см. v2.14.0).
+    deleteFromCloud("planning_lessons", id)
     setDeleteArmedId(null)
   }
 
