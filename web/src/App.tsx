@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route } from "react-router-dom"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppShell } from "@/components/layout/AppShell"
 import { AuthGate } from "@/components/auth/AuthGate"
-import { DashboardPage } from "@/features/dashboard/DashboardPage"
+import { TodayPage } from "@/features/today/TodayPage"
 import { DashboardPreviewHarness } from "@/features/dashboard/DashboardPreviewHarness"
 
 // Дашборд грузится сразу — это стартовый экран, откладывать его нечего.
@@ -45,7 +45,7 @@ function App() {
         <HashRouter>
           <Routes>
             <Route element={<AppShell />}>
-              <Route index element={<DashboardPage />} />
+              <Route index element={<TodayPage />} />
               {/* Адресные маршруты на сущности: раньше любая «ссылка на заказ»
                   вела на список, и открывать нужную карточку приходилось
                   руками. Параметр в адресе — открытая карточка. */}

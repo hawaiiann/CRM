@@ -25,6 +25,7 @@ import {
 import { confirmDialog, alertDialog } from "@/store/useDialogStore"
 import { cn } from "@/lib/utils"
 import type { ActivityLogEntry, Order } from "@/types/models"
+import { ActiveDaysCalendar } from "@/features/dashboard/ActiveDaysCalendar"
 
 /**
  * Журнал часов: таблица «день × заказ» с правкой на месте и сверка с заказами.
@@ -179,6 +180,12 @@ export function TimeJournalTab() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      {/* Календарь активных дней с бывшего дашборда — здесь он рядом с
+          таблицей, которую и правит. */}
+      <div className="glass-surface rounded-xl p-4.5 lg:max-w-[420px]">
+        <ActiveDaysCalendar />
+      </div>
+
       <div className="glass-surface rounded-xl p-4.5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>

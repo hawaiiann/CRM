@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppStore } from "@/store/useAppStore"
 import { dateKey } from "@/lib/money"
 import { AppShell } from "@/components/layout/AppShell"
-import { DashboardPage } from "./DashboardPage"
+import { TodayPage } from "@/features/today/TodayPage"
 import { OrdersPage } from "@/features/orders/OrdersPage"
 import { TimelinePage } from "@/features/timeline/TimelinePage"
 import { TasksPage } from "@/features/tasks/TasksPage"
@@ -135,7 +135,7 @@ export function DashboardPreviewHarness() {
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<DashboardPage />} />
+            <Route index element={<TodayPage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:orderId" element={<OrdersPage />} />
             <Route path="timeline" element={<TimelinePage />} />

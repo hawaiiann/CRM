@@ -36,6 +36,7 @@ import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
 import { ReceivePaymentDialog } from "./ReceivePaymentDialog"
 import { TimeJournalTab } from "./TimeJournalTab"
+import { AnalyticsTab } from "./AnalyticsTab"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order, Advance } from "@/types/models"
@@ -367,6 +368,7 @@ export function FinancePage() {
             <span className="sm:hidden">Журнал</span>
             <span className="hidden sm:inline">Журнал часов</span>
           </TabsTrigger>
+          <TabsTrigger value="analytics">Аналитика</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -671,6 +673,10 @@ export function FinancePage() {
 
         <TabsContent value="journal" className="mt-4">
           <TimeJournalTab />
+        </TabsContent>
+
+        <TabsContent value="analytics" className="mt-4">
+          <AnalyticsTab />
         </TabsContent>
       </Tabs>
 

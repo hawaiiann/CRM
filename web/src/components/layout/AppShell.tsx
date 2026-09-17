@@ -1,7 +1,6 @@
 import { useEffect, useState, Suspense, type ReactNode } from "react"
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
-  LayoutGrid,
   BarChart3,
   Users,
   FileText,
@@ -29,7 +28,7 @@ import { APP_VERSION } from "@/lib/version"
 
 type NavItem = {
   label: string
-  icon: typeof LayoutGrid
+  icon: typeof Sun
   to: string
 }
 
@@ -42,7 +41,7 @@ const NAV: NavGroup[] = [
   {
     label: "Обзор",
     items: [
-      { label: "Дашборд", icon: LayoutGrid, to: "/" },
+      { label: "Сегодня", icon: Sun, to: "/" },
       { label: "Финансы", icon: BarChart3, to: "/finance" },
       { label: "Клиенты", icon: Users, to: "/clients" },
     ],
