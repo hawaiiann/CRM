@@ -41,12 +41,15 @@ interface AppState {
 
   // sync status surfaced in the UI (sidebar indicator)
   syncStatus: SyncStatus
+  // Почему не сохранилось — коротко, для индикатора. Раньше в сайдбаре была
+  // только надпись «Не сохранено», без причины и без способа повторить.
+  syncError: string | null
 
   setAuth: (userId: string | null, email: string | null) => void
   setAuthLoading: (v: boolean) => void
   setAddAccountOverlayOpen: (v: boolean) => void
   setDataLoaded: (v: boolean) => void
-  setSyncStatus: (v: SyncStatus) => void
+  setSyncStatus: (v: SyncStatus, error?: string | null) => void
 
   setOrders: (u: Updater<Order[]>) => void
   setTasks: (u: Updater<Task[]>) => void
@@ -73,12 +76,13 @@ export const useAppStore = create<AppState>((set) => ({
 
   dataLoaded: false,
   syncStatus: "idle",
+  syncError: null,
 
   setAuth: (userId, email) => set({ cloudUserId: userId, cloudUserEmail: email }),
   setAuthLoading: (v) => set({ authLoading: v }),
   setAddAccountOverlayOpen: (v) => set({ addAccountOverlayOpen: v }),
   setDataLoaded: (v) => set({ dataLoaded: v }),
-  setSyncStatus: (v) => set({ syncStatus: v }),
+  setSyncStatus: (v, error) => set({ syncStatus: v, syncError: v === "failed" ? (error ?? null) : null }),
 
   setOrders: (u) => set((s) => ({ orders: resolve(u, s.orders) })),
   setTasks: (u) => set((s) => ({ tasks: resolve(u, s.tasks) })),

@@ -31,8 +31,11 @@ import {
   PLANNING_KEY,
   ACTIVITY_LOG_KEY,
   BACKUP_CFG_KEY,
+  CLOUD_SNAPSHOT_KEY,
+  accountKey,
 } from "./storageKeys"
-import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries } from "./pendingDeletes"
+import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries, setPendingDeletesScope } from "./pendingDeletes"
+import { useToastStore } from "@/store/useToastStore"
 import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
 import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
@@ -151,6 +154,62 @@ function resetSyncedEntries(log: ActivityLogEntry[]) {
   cloudSnapshot.activityLogSyncedCount = log.length
 }
 
+/* ---------- Ключи локального кэша: свои у каждого аккаунта ---------- */
+
+function lsKey(base: string): string {
+  return accountKey(base, useAppStore.getState().cloudUserId)
+}
+
+/* ---------- Снимок облака переживает перезагрузку ----------
+ * Снимок — это то, относительно чего считается «что изменилось локально».
+ * Раньше он жил только в памяти: если облако при старте не ответило и данные
+ * поднялись из кэша, снимок оставался пустым, ВСЁ считалось новым, и при
+ * первой же синхронизации локальный (возможно, устаревший) кэш перезаписывал
+ * более свежее облако. Теперь снимок хранится рядом с кэшем, а если его нет
+ * (старый кэш) — перед первой отправкой сверяемся с облаком заново.
+ */
+let snapshotTrusted = false
+
+function persistSnapshot() {
+  try {
+    localStorage.setItem(lsKey(CLOUD_SNAPSHOT_KEY), JSON.stringify({
+      orders: cloudSnapshot.orders,
+      tasks: cloudSnapshot.tasks,
+      advances: cloudSnapshot.advances,
+      planningBoards: cloudSnapshot.planningBoards,
+      planningLessons: cloudSnapshot.planningLessons,
+      appSettings: cloudSnapshot.appSettings,
+      activityLogSynced: cloudSnapshot.activityLogSynced,
+      activityLogSyncedCount: cloudSnapshot.activityLogSyncedCount,
+      updatedAt: cloudSnapshot.updatedAt,
+    }))
+  } catch (err) {
+    console.error("Не удалось сохранить снимок облака:", err)
+  }
+}
+
+function restoreSnapshot(): boolean {
+  try {
+    const raw = localStorage.getItem(lsKey(CLOUD_SNAPSHOT_KEY))
+    if (!raw) return false
+    const s = JSON.parse(raw)
+    if (!s || typeof s !== "object" || !s.updatedAt) return false
+    cloudSnapshot.orders = s.orders || {}
+    cloudSnapshot.tasks = s.tasks || {}
+    cloudSnapshot.advances = s.advances || {}
+    cloudSnapshot.planningBoards = s.planningBoards || {}
+    cloudSnapshot.planningLessons = s.planningLessons || {}
+    cloudSnapshot.appSettings = s.appSettings || null
+    cloudSnapshot.activityLogSynced = s.activityLogSynced || {}
+    cloudSnapshot.activityLogSyncedIds = new Set(Object.keys(cloudSnapshot.activityLogSynced))
+    cloudSnapshot.activityLogSyncedCount = s.activityLogSyncedCount || 0
+    cloudSnapshot.updatedAt = { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {}, ...s.updatedAt }
+    return true
+  } catch {
+    return false
+  }
+}
+
 function snapshotCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value))
 }
@@ -247,7 +306,7 @@ async function upsertWithConflictCheck<T extends { id: string }>(
       cloudSnapshotMap[id] = snapshotCopy(item)
     } catch (err) {
       console.error(`Ошибка синхронизации записи (${table}/${id}):`, err)
-      markSyncFailed()
+      markSyncFailed(errorText(err))
     }
   }
 }
@@ -273,20 +332,28 @@ function dropFromSnapshot(table: string, id: string) {
 // activity_log — единственная таблица, где клиентский идентификатор это не
 // "id" (его назначает сервер), а "entry_id". Остальной механизм очереди тот
 // же самый, поэтому не заводим отдельный путь, а просто бьём по нужной колонке.
-function deleteMatchColumn(table: string): string {
-  return table === "activity_log" ? "entry_id" : "id"
+// Псевдотаблица "activity_log@order" — удаление всех записей журнала по
+// заказу: раньше оно шло мимо очереди и при сбое сети терялось молча.
+export const ACTIVITY_BY_ORDER = "activity_log@order"
+
+function deleteTarget(table: string): { table: string; column: string } {
+  if (table === "activity_log") return { table, column: "entry_id" }
+  if (table === ACTIVITY_BY_ORDER) return { table: "activity_log", column: "order_id" }
+  return { table, column: "id" }
 }
 
 /** Одна попытка удаления. true — облако подтвердило. */
 async function tryDelete(table: string, id: string): Promise<boolean> {
   try {
-    const { error } = await supabaseClient.from(table).delete().eq(deleteMatchColumn(table), id)
+    const target = deleteTarget(table)
+    const { error } = await supabaseClient.from(target.table).delete().eq(target.column, id)
     if (error) throw error
     forgetDelete(table, id)
     dropFromSnapshot(table, id)
     return true
   } catch (err) {
     console.error(`Не удалось удалить запись из облака (${table}/${id}):`, err)
+    lastSyncError = errorText(err)
     return false
   }
 }
@@ -297,7 +364,7 @@ async function flushPendingDeletes() {
   for (const { table, id } of pendingDeleteEntries()) {
     if (!(await tryDelete(table, id))) allOk = false
   }
-  if (!allOk) markSyncFailed()
+  if (!allOk) markSyncFailed("не прошло удаление")
 }
 
 export async function deleteFromCloud(table: string, id: string) {
@@ -307,7 +374,7 @@ export async function deleteFromCloud(table: string, id: string) {
   rememberDelete(table, id)
   dropFromSnapshot(table, id)
   if (!useAppStore.getState().cloudUserId) return
-  if (!(await tryDelete(table, id))) markSyncFailed()
+  if (!(await tryDelete(table, id))) markSyncFailed("не прошло удаление")
 }
 
 /**
@@ -376,16 +443,17 @@ export function compactJournal(): number {
   return change.removed.length
 }
 
-export async function deleteActivityLogForOrder(orderId: string) {
-  const userId = useAppStore.getState().cloudUserId
-  if (!userId || !orderId) return
-  try {
-    await supabaseClient.from("activity_log").delete().eq("order_id", orderId)
-    cloudSnapshot.activityLogSyncedCount = useAppStore.getState().activityLog.length
-  } catch (err) {
-    console.error("Не удалось удалить записи статистики заказа из облака:", err)
-    markSyncFailed()
-  }
+/** Удалить из облака все записи журнала по заказу — через очередь, как и всё остальное. */
+export function deleteActivityLogForOrder(orderId: string) {
+  if (!orderId) return
+  // Локально записи уже отфильтрованы вызывающим кодом; из снимка их надо
+  // убрать самим, иначе они числятся «отправленными» и не переотправятся.
+  const alive = new Set(useAppStore.getState().activityLog.map((e) => e.entryId).filter(Boolean))
+  Object.keys(cloudSnapshot.activityLogSynced).forEach((entryId) => {
+    if (!alive.has(entryId)) { delete cloudSnapshot.activityLogSynced[entryId]; cloudSnapshot.activityLogSyncedIds.delete(entryId) }
+  })
+  cloudSnapshot.activityLogSyncedCount = useAppStore.getState().activityLog.length
+  deleteFromCloud(ACTIVITY_BY_ORDER, orderId)
 }
 
 async function deleteObsoleteJournalFieldsFromCloud(fields: string[]) {
@@ -397,7 +465,7 @@ async function deleteObsoleteJournalFieldsFromCloud(fields: string[]) {
     resetSyncedEntries(useAppStore.getState().activityLog)
   } catch (err) {
     console.error("Не удалось убрать устаревшие записи журнала из облака:", err)
-    markSyncFailed()
+    markSyncFailed(errorText(err))
   }
 }
 
@@ -415,6 +483,10 @@ export async function performCloudSync() {
   cloudSyncInFlight = true
   useAppStore.getState().setSyncStatus("syncing")
   try {
+    // Снимку облака верить нельзя (данные подняты из старого кэша без него):
+    // сначала сверяемся с облаком, и только потом что-то отправляем.
+    if (!snapshotTrusted) await reconcileWithCloud()
+
     // Сначала доводим до конца удаления, не подтверждённые прошлый раз, и
     // только потом отправляем изменения — иначе запись, которую не удалось
     // удалить, могла бы уехать обратно в облако как «изменённая».
@@ -526,14 +598,34 @@ export async function performCloudSync() {
     }
 
     await syncActivityLog()
-    markSyncHealthy()
+    if (useAppStore.getState().syncStatus !== "failed") markSyncHealthy()
   } catch (err) {
     console.error("Ошибка облачной синхронизации:", err)
-    markSyncFailed()
+    markSyncFailed(errorText(err))
   } finally {
+    // Снимок отражает то, что облако реально подтвердило, — даже если часть
+    // отправки не прошла. Иначе после перезагрузки уже принятое ушло бы снова.
+    if (snapshotTrusted) persistSnapshot()
     cloudSyncInFlight = false
     if (cloudSyncPending) { cloudSyncPending = false; performCloudSync() }
   }
+}
+
+/** Повтор по кнопке из сайдбара. */
+export function retryCloudSync() {
+  syncRetryAttempt = 0
+  if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null }
+  performCloudSync()
+}
+
+function errorText(err: unknown): string {
+  if (!err) return "неизвестная ошибка"
+  if (typeof err === "string") return err
+  const e = err as { message?: string; code?: string }
+  const msg = e.message || String(err)
+  if (/fetch|network|Failed to fetch|NetworkError/i.test(msg)) return "нет связи с облаком"
+  if (/JWT|token|401|403/i.test(msg)) return "сессия устарела — войдите заново"
+  return msg.length > 80 ? msg.slice(0, 77) + "…" : msg
 }
 
 function resyncPlanning() {
@@ -576,9 +668,12 @@ async function syncActivityLog() {
     if (!unsent.length) return
     unsent.forEach((e) => { if (!e.entryId) e.entryId = makeEntryId() })
     const rows = unsent.map((e) => ({ user_id: userId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }))
-    const { error } = await supabaseClient.from("activity_log").insert(rows)
+    // id строки нужен для realtime-DELETE: в событии удаления приходит только
+    // серверный id, а не наш entry_id.
+    const { data, error } = await supabaseClient.from("activity_log").insert(rows).select("id, entry_id")
     if (!error) {
       unsent.forEach(rememberSyncedEntry)
+      ;(data || []).forEach((r: Row) => rememberServerId(r))
       cloudSnapshot.activityLogSyncedCount = activityLog.length
       return
     }
@@ -618,9 +713,13 @@ function scheduleSyncRetry() {
   syncRetryTimer = setTimeout(() => { syncRetryTimer = null; performCloudSync() }, delay)
 }
 
-function markSyncFailed() {
+let lastSyncError: string | null = null
+
+function markSyncFailed(reason?: string) {
   if (!syncFailedSince) syncFailedSince = Date.now()
-  useAppStore.getState().setSyncStatus("failed")
+  const text = reason || lastSyncError || "ошибка синхронизации"
+  lastSyncError = null
+  useAppStore.getState().setSyncStatus("failed", text)
   scheduleSyncRetry()
 }
 function markSyncHealthy() {
@@ -797,9 +896,15 @@ async function cloudLoadData() {
     if (board) board.lessons.push(rowToLesson(r))
   })
   const pulledSettings = settingsRes.data ? (settingsRes.data as Row).data : null
+  serverIdByEntry = {}
+  entryByServerId = {}
   const pulledLog: ActivityLogEntry[] = (logRes.data || [])
     .filter((r: Row) => !r.entry_id || !isPendingDelete("activity_log", r.entry_id))
-    .map((r: Row) => ({ date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }))
+    .filter((r: Row) => !isPendingDelete(ACTIVITY_BY_ORDER, r.order_id))
+    .map((r: Row) => {
+      rememberServerId(r)
+      return { date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }
+    })
 
   cloudSnapshot.orders = {}
   pulledOrdersRaw.forEach((o) => { if (o.id) cloudSnapshot.orders[o.id] = snapshotCopy(o) })
@@ -818,26 +923,54 @@ async function cloudLoadData() {
   ;(boardsRes.data || []).forEach((r: Row) => { cloudSnapshot.updatedAt.planningBoards[r.id] = r.updated_at })
   ;(lessonsRes.data || []).forEach((r: Row) => { cloudSnapshot.updatedAt.planningLessons[r.id] = r.updated_at })
 
+  snapshotTrusted = true
+  persistSnapshot()
   return { pulledOrdersRaw, pulledTasks, pulledAdvances, boards, pulledSettings, pulledLog }
 }
 
 /* ---------- Локальный офлайн-фолбэк ---------- */
+
+// Читает ключ кэша текущего аккаунта, а если его ещё нет — старый общий ключ.
+// Общий ключ годится только пока никто не записал, чей он (маркер владельца):
+// иначе после переключения аккаунта из него поднялись бы чужие данные.
+const CACHE_OWNER_KEY = "design_crm_cache_owner_v1"
+
+function readCached(base: string): string | null {
+  const scoped = localStorage.getItem(lsKey(base))
+  if (scoped !== null) return scoped
+  const owner = localStorage.getItem(CACHE_OWNER_KEY)
+  const userId = useAppStore.getState().cloudUserId
+  if (owner && owner !== userId) return null
+  return localStorage.getItem(base)
+}
+
+function writeCache(settings: AppSettings, orders: Order[], tasks: Task[], advances: Advance[], boards: PlanningBoard[], log: ActivityLogEntry[]) {
+  localStorage.setItem(lsKey(STORAGE_KEY), JSON.stringify(orders))
+  localStorage.setItem(lsKey(SETTINGS_KEY), JSON.stringify(settings))
+  localStorage.setItem(lsKey(TASKS_KEY), JSON.stringify(tasks))
+  localStorage.setItem(lsKey(ADVANCES_KEY), JSON.stringify(advances))
+  localStorage.setItem(lsKey(PLANNING_KEY), JSON.stringify(boards))
+  localStorage.setItem(lsKey(ACTIVITY_LOG_KEY), JSON.stringify(log))
+  const userId = useAppStore.getState().cloudUserId
+  if (userId) localStorage.setItem(CACHE_OWNER_KEY, userId)
+}
+
 function loadFromLocalStorageFallback() {
   const store = useAppStore.getState()
 
-  const rawS = localStorage.getItem(SETTINGS_KEY)
+  const rawS = readCached(SETTINGS_KEY)
   const settings = applySettingsMigrations(rawS ? JSON.parse(rawS) : null)
 
-  const raw = localStorage.getItem(STORAGE_KEY)
+  const raw = readCached(STORAGE_KEY)
   const orders = raw ? (JSON.parse(raw) as Partial<Order>[]).map((o) => normalizeOrder(o, settings)) : []
 
-  const rawT = localStorage.getItem(TASKS_KEY)
+  const rawT = readCached(TASKS_KEY)
   const tasks = rawT ? (JSON.parse(rawT) as Partial<Task>[]).map(normalizeTask) : []
 
-  const rawAdv = localStorage.getItem(ADVANCES_KEY)
+  const rawAdv = readCached(ADVANCES_KEY)
   const advances = rawAdv ? (JSON.parse(rawAdv) as Partial<Advance>[]).map(normalizeAdvance) : []
 
-  const rawP = localStorage.getItem(PLANNING_KEY)
+  const rawP = readCached(PLANNING_KEY)
   let planningBoards: PlanningBoard[] = rawP ? JSON.parse(rawP) : defaultPlanningBoards()
   planningBoards = planningBoards.map((b) => ({
     ...b,
@@ -847,7 +980,7 @@ function loadFromLocalStorageFallback() {
 
   const { orders: migratedOrders } = migrateLegacyPayments(orders)
 
-  const rawLog = localStorage.getItem(ACTIVITY_LOG_KEY)
+  const rawLog = readCached(ACTIVITY_LOG_KEY)
   let activityLog: ActivityLogEntry[] = rawLog ? JSON.parse(rawLog) : []
   activityLog = purgeObsoleteJournalFields(activityLog).log
   activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog, store.cloudUserId || "local")
@@ -858,40 +991,109 @@ function loadFromLocalStorageFallback() {
   store.setAdvances(advances)
   store.setPlanningBoards(syncPlanningWithOrders(migratedOrders, planningBoards))
   store.setActivityLog(activityLog)
+
+  // Снимок облака из кэша: с ним диф считается как обычно, и старые данные не
+  // уедут поверх свежих. Без него (старый кэш) первая отправка начнётся со
+  // сверки с облаком — см. reconcileWithCloud.
+  snapshotTrusted = restoreSnapshot()
+}
+
+/**
+ * Сверка после старта из кэша без снимка. Облако — источник истины для всего,
+ * что в нём есть; локально остаются только записи, которых в облаке нет
+ * (созданные офлайн). Правки существующих записей, сделанные офлайн, при
+ * этом теряются — и об этом честно сообщается, а не молча.
+ */
+async function reconcileWithCloud() {
+  const before = useAppStore.getState()
+  const localOrders = before.orders, localTasks = before.tasks, localAdv = before.advances
+  const localBoards = before.planningBoards, localLog = before.activityLog
+
+  const pulled = await cloudLoadData()
+  const state = buildStateFromCloud(pulled)
+
+  const keepMissing = <T extends { id: string }>(local: T[], cloud: T[]) => {
+    const have = new Set(cloud.map((x) => x.id))
+    return [...cloud, ...local.filter((x) => !have.has(x.id))]
+  }
+  const countChanged = <T extends { id: string }>(local: T[], cloud: T[]) => {
+    const byId = new Map(cloud.map((x) => [x.id, JSON.stringify(x)]))
+    return local.filter((x) => byId.has(x.id) && byId.get(x.id) !== JSON.stringify(x)).length
+  }
+
+  const orders = keepMissing(localOrders, state.orders)
+  const tasks = keepMissing(localTasks, state.tasks)
+  const advances = keepMissing(localAdv, state.advances)
+  const boards = keepMissing(localBoards, state.planningBoards).map((b) => {
+    const local = localBoards.find((x) => x.id === b.id)
+    return local ? { ...b, lessons: keepMissing(local.lessons || [], b.lessons || []) } : b
+  })
+  const cloudEntryIds = new Set(state.activityLog.map((e) => e.entryId).filter(Boolean))
+  const activityLog = [...state.activityLog, ...localLog.filter((e) => !e.entryId || !cloudEntryIds.has(e.entryId))]
+
+  const dropped = countChanged(localOrders, state.orders) + countChanged(localTasks, state.tasks) + countChanged(localAdv, state.advances)
+
+  const store = useAppStore.getState()
+  store.setAppSettings(state.settings)
+  store.setOrders(orders)
+  store.setTasks(tasks)
+  store.setAdvances(advances)
+  store.setPlanningBoards(syncPlanningWithOrders(orders, boards))
+  store.setActivityLog(activityLog)
+  writeCache(state.settings, orders, tasks, advances, useAppStore.getState().planningBoards, activityLog)
+
+  if (dropped > 0) {
+    useToastStore.getState().addToast({
+      title: "Данные сверены с облаком",
+      sub: `Правки офлайн по ${dropped} уже существующим записям не перенесены — облако новее.`,
+      danger: true,
+    }, 12000)
+  }
+}
+
+interface CloudState {
+  settings: AppSettings
+  orders: Order[]
+  tasks: Task[]
+  advances: Advance[]
+  planningBoards: PlanningBoard[]
+  activityLog: ActivityLogEntry[]
+  migratedPaid: number
+  purged: number
+  seeded: boolean
+}
+
+function buildStateFromCloud(pulled: Awaited<ReturnType<typeof cloudLoadData>>): CloudState {
+  const { pulledOrdersRaw, pulledTasks, pulledAdvances, boards, pulledSettings, pulledLog } = pulled
+  const settings = applySettingsMigrations(pulledSettings)
+  const orders = pulledOrdersRaw.map((o) => normalizeOrder(o, settings))
+  const planningBoards = boards.length ? boards : defaultPlanningBoards()
+  const { orders: migratedOrders, migrated: migratedPaid } = migrateLegacyPayments(orders)
+  const { log: purgedLog, purged } = purgeObsoleteJournalFields(pulledLog)
+  // ВНИМАНИЕ: здесь раньше вызывался compactHoursJournal(), а ниже — снос всех
+  // записей "hours" из облака с последующей заливкой схлопнутых. Порядок был
+  // "сначала удалить, потом переслать", без атомарности: обрыв между шагами
+  // уносил часы из облака насовсем, а на следующей загрузке пустой журнал
+  // добивал seedActivityLogIfEmpty. Так 20.08.2026 было потеряно 45 записей.
+  // Схлопывание убрано совсем; досев одноразовый (lib/activitySeed.ts).
+  const activityLog = seedActivityLogIfEmpty(migratedOrders, purgedLog, useAppStore.getState().cloudUserId || "local")
+  return {
+    settings, orders: migratedOrders, tasks: pulledTasks, advances: pulledAdvances, planningBoards, activityLog,
+    migratedPaid, purged, seeded: activityLog.length !== purgedLog.length,
+  }
 }
 
 export async function loadData() {
   const store = useAppStore.getState()
+  setPendingDeletesScope(store.cloudUserId)
   try {
-    const { pulledOrdersRaw, pulledTasks, pulledAdvances, boards, pulledSettings, pulledLog } = await cloudLoadData()
-
-    const settings = applySettingsMigrations(pulledSettings)
-    const orders = pulledOrdersRaw.map((o) => normalizeOrder(o, settings))
-    const planningBoards = boards.length ? boards : defaultPlanningBoards()
+    const state = buildStateFromCloud(await cloudLoadData())
+    const { settings, orders: migratedOrders, tasks: pulledTasks, advances: pulledAdvances, planningBoards, migratedPaid, purged, seeded } = state
 
     const rawBcfg = localStorage.getItem(BACKUP_CFG_KEY)
     if (rawBcfg) store.setBackupSettings((prev) => ({ ...prev, ...JSON.parse(rawBcfg) }))
 
-    const { orders: migratedOrders, migrated: migratedPaid } = migrateLegacyPayments(orders)
-
-    let activityLog = pulledLog
-    const { log: purgedLog, purged } = purgeObsoleteJournalFields(activityLog)
-    activityLog = purgedLog
-    // ВНИМАНИЕ: здесь раньше вызывался compactHoursJournal(), а ниже — снос всех
-    // записей "hours" из облака с последующей заливкой схлопнутых. Порядок был
-    // "сначала удалить, потом переслать", без атомарности: обрыв между шагами
-    // (закрыли вкладку, моргнула сеть) уносил часы из облака насовсем, а на
-    // следующей загрузке пустой журнал добивал seedActivityLogIfEmpty, подменяя
-    // реальную историю выдумкой из дат начала заказов. Так на 20.08.2026 было
-    // потеряно 45 настоящих записей, причём на нескольких аккаунтах сразу.
-    // Схлопывание убрано совсем. Но сам seedActivityLogIfEmpty тоже был не безопасен
-    // — он не знал, что уже досевал этот аккаунт, и повторял подмену выдумкой
-    // при ЛЮБОМ пустом журнале, а не только при первом визите. Теперь это
-    // помнится (readSeededAccounts) — см. предупреждение прямо в cloudSync.ts
-    // рядом с определением функции.
-    const beforeSeedLen = activityLog.length
-    activityLog = seedActivityLogIfEmpty(migratedOrders, activityLog, store.cloudUserId || "local")
-
+    const activityLog = state.activityLog
     store.setAppSettings(settings)
     store.setOrders(migratedOrders)
     store.setTasks(pulledTasks)
@@ -899,15 +1101,10 @@ export async function loadData() {
     store.setPlanningBoards(syncPlanningWithOrders(migratedOrders, planningBoards))
     store.setActivityLog(activityLog)
 
-    if (activityLog.length !== beforeSeedLen || migratedPaid) scheduleCloudSync()
+    if (seeded || migratedPaid) scheduleCloudSync()
     if (purged) await deleteObsoleteJournalFieldsFromCloud(JOURNAL_OBSOLETE_FIELDS)
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedOrders))
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
-    localStorage.setItem(TASKS_KEY, JSON.stringify(pulledTasks))
-    localStorage.setItem(ADVANCES_KEY, JSON.stringify(pulledAdvances))
-    localStorage.setItem(PLANNING_KEY, JSON.stringify(useAppStore.getState().planningBoards))
-    localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activityLog))
+    writeCache(settings, migratedOrders, pulledTasks, pulledAdvances, useAppStore.getState().planningBoards, activityLog)
   } catch (e) {
     console.error("Не удалось загрузить данные из облака, работаем из локального кэша:", e)
     try { loadFromLocalStorageFallback() }
@@ -921,12 +1118,8 @@ export function saveData() {
   const store = useAppStore.getState()
   store.setPlanningBoards((prev) => syncPlanningWithOrders(store.orders, prev))
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(useAppStore.getState().orders))
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(useAppStore.getState().appSettings))
-  localStorage.setItem(TASKS_KEY, JSON.stringify(useAppStore.getState().tasks))
-  localStorage.setItem(ADVANCES_KEY, JSON.stringify(useAppStore.getState().advances))
-  localStorage.setItem(PLANNING_KEY, JSON.stringify(useAppStore.getState().planningBoards))
-  localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(useAppStore.getState().activityLog))
+  const s = useAppStore.getState()
+  writeCache(s.appSettings, s.orders, s.tasks, s.advances, s.planningBoards, s.activityLog)
 
   scheduleCloudSync()
 
@@ -966,7 +1159,65 @@ export function subscribeRealtime() {
     .on("postgres_changes", { event: "*", schema: "public", table: "planning_boards", filter: `user_id=eq.${userId}` }, handleRealtimeBoards)
     .on("postgres_changes", { event: "*", schema: "public", table: "planning_lessons", filter: `user_id=eq.${userId}` }, handleRealtimeLessons)
     .on("postgres_changes", { event: "*", schema: "public", table: "app_settings", filter: `user_id=eq.${userId}` }, handleRealtimeSettings)
+    .on("postgres_changes", { event: "*", schema: "public", table: "activity_log", filter: `user_id=eq.${userId}` }, handleRealtimeActivity)
     .subscribe()
+}
+
+/** Отписка при смене аккаунта — раньше канал жил до перезагрузки страницы. */
+export function unsubscribeRealtime() {
+  if (!realtimeChannel) return
+  supabaseClient.removeChannel(realtimeChannel)
+  realtimeChannel = null
+}
+
+/* Журнал часов по realtime. Раньше его не было вовсе: часы, записанные на
+ * другом устройстве, появлялись здесь только после перезагрузки. В событии
+ * DELETE приходит только серверный id, поэтому держим соответствие id ↔ entry_id. */
+let serverIdByEntry: Record<string, number> = {}
+let entryByServerId: Record<string, string> = {}
+
+function rememberServerId(r: Row) {
+  if (!r.entry_id || r.id == null) return
+  serverIdByEntry[r.entry_id] = r.id
+  entryByServerId[String(r.id)] = r.entry_id
+}
+
+function handleRealtimeActivity(payload: any) {
+  const store = useAppStore.getState()
+  if (payload.eventType === "DELETE") {
+    const entryId = entryByServerId[String(payload.old?.id)]
+    if (!entryId) return
+    delete entryByServerId[String(payload.old.id)]
+    delete serverIdByEntry[entryId]
+    cloudSnapshot.activityLogSyncedIds.delete(entryId)
+    delete cloudSnapshot.activityLogSynced[entryId]
+    store.setActivityLog((prev) => prev.filter((e) => e.entryId !== entryId))
+    return
+  }
+  const row: Row = payload.new
+  if (!row?.entry_id) return
+  rememberServerId(row)
+  if (isPendingDelete("activity_log", row.entry_id) || isPendingDelete(ACTIVITY_BY_ORDER, row.order_id)) return
+
+  const incoming: ActivityLogEntry = { date: row.date, orderId: row.order_id, field: row.field, delta: row.delta, entryId: row.entry_id }
+  const local = store.activityLog.find((e) => e.entryId === row.entry_id)
+  if (local) {
+    const known = cloudSnapshot.activityLogSynced[row.entry_id]
+    // Наша неотправленная правка новее — не затираем, но запоминаем, что
+    // теперь лежит в облаке, чтобы следующая отправка ушла как UPDATE.
+    if (known && (known.delta !== local.delta || known.date !== local.date)) {
+      cloudSnapshot.activityLogSynced[row.entry_id] = { delta: row.delta, date: row.date }
+      return
+    }
+    if (local.delta !== incoming.delta || local.date !== incoming.date) {
+      store.setActivityLog((prev) => prev.map((e) => (e === local ? incoming : e)))
+    }
+  } else {
+    store.setActivityLog((prev) => [...prev, incoming])
+  }
+  rememberSyncedEntry(incoming)
+  cloudSnapshot.activityLogSyncedCount = useAppStore.getState().activityLog.length
+  localStorage.setItem(lsKey(ACTIVITY_LOG_KEY), JSON.stringify(useAppStore.getState().activityLog))
 }
 
 function handleRealtimeOrders(payload: any) {

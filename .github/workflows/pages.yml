@@ -1,0 +1,67 @@
+# Сборка и публикация на GitHub Pages через Actions.
+#
+# Сейчас Pages отдаёт корень ветки main, а собранные файлы лежат в репозитории.
+# Это ломается двумя способами: сборку легко забыть перед коммитом, а вебхук
+# Pages однажды просто не сработал (v2.16.0 не выкатилась, пока не подтолкнули
+# пустым коммитом). Здесь сборка делается на сервере из исходников, а
+# публикация — явным шагом с проверяемым статусом.
+#
+# Чтобы включить: Settings → Pages → Source: «GitHub Actions». До переключения
+# workflow только собирает и проверяет проект (шаг deploy пропускается).
+name: Сборка и публикация
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Установка зависимостей
+        run: npm ci
+        working-directory: web
+      - name: Проверка типов и линт
+        run: npx tsc --noEmit -p tsconfig.app.json && npx oxlint src
+        working-directory: web
+      - name: Сборка
+        # Собираем в отдельную папку, а не в корень репозитория, как локально:
+        # артефакт должен содержать только то, что реально отдаётся сайтом.
+        run: npx vite build --outDir ../_site --emptyOutDir
+        working-directory: web
+      - name: Статика рядом с приложением
+        run: |
+          cp favicon.svg icons.svg _site/ 2>/dev/null || true
+          cp -r legacy _site/legacy
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    # Пока источник Pages — ветка, а не Actions, публикация отсюда невозможна;
+    # шаг пропускается, чтобы workflow не краснел без причины.
+    if: ${{ vars.PAGES_VIA_ACTIONS == 'true' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

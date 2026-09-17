@@ -9,7 +9,7 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { useAppStore } from "@/store/useAppStore"
-import { saveData, runSyncSelfCheck } from "@/lib/cloudSync"
+import { saveData, runSyncSelfCheck, deleteFromCloud } from "@/lib/cloudSync"
 import { dateKey } from "@/lib/money"
 import { normalizeOrder, normalizeTask, normalizeAdvance, applySettingsMigrations } from "@/lib/normalize"
 import { selectBackupDirectory, hasDirectoryAccess, backupPathSupported, saveManualBackupToFolder } from "@/lib/diskBackup"
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DEFAULT_BACKUP_PATH } from "@/lib/version"
 import type { BackupSettings as BackupSettingsType, Order, Task, Advance, PlanningBoard, ActivityLogEntry } from "@/types/models"
-import { alertDialog } from "@/store/useDialogStore"
+import { alertDialog, choiceDialog } from "@/store/useDialogStore"
 
 export function BackupSettings() {
   const backupSettings = useAppStore((s) => s.backupSettings)
@@ -80,28 +80,99 @@ export function BackupSettings() {
     setTimeout(() => setExportNote(null), 6000)
   }
 
-  function importJson(file: File) {
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      try {
-        const parsed = JSON.parse(String(evt.target?.result))
-        const settings = parsed.settings ? applySettingsMigrations({ ...appSettings, ...parsed.settings }) : appSettings
-        if (parsed.settings) store.getState().setAppSettings(settings)
-        if (Array.isArray(parsed.orders)) store.getState().setOrders((parsed.orders as Partial<Order>[]).map((o) => normalizeOrder(o, settings)))
-        if (Array.isArray(parsed.tasks)) store.getState().setTasks((parsed.tasks as Partial<Task>[]).map(normalizeTask))
-        if (Array.isArray(parsed.advances)) store.getState().setAdvances((parsed.advances as Partial<Advance>[]).map(normalizeAdvance))
-        if (Array.isArray(parsed.planning)) store.getState().setPlanningBoards(parsed.planning as PlanningBoard[])
-        if (Array.isArray(parsed.activityLog)) store.getState().setActivityLog(parsed.activityLog as ActivityLogEntry[])
-        saveData()
-      } catch (err) {
-        console.error(err)
-        alertDialog({
-          title: "Не удалось прочитать файл",
-          body: "Проверьте, что это корректный JSON-бэкап. Данные в приложении не тронуты.",
-        })
-      }
+  /**
+   * Импорт бэкапа. Раньше файл молча заменял всё в приложении, но НЕ в
+   * облаке: записи, которых в файле нет, оставались там и при следующей
+   * загрузке возвращались. Теперь два явных режима:
+   *   • «Заменить всё» — состояние приложения становится равным файлу, а
+   *     записи, которых в файле нет, удаляются и из облака;
+   *   • «Дополнить» — добавляются только записи с неизвестными id, ничего
+   *     существующего не трогается.
+   */
+  async function importJson(file: File) {
+    let parsed: any
+    try {
+      parsed = JSON.parse(await file.text())
+      if (!parsed || typeof parsed !== "object") throw new Error("not an object")
+    } catch (err) {
+      console.error(err)
+      await alertDialog({
+        title: "Не удалось прочитать файл",
+        body: "Проверьте, что это корректный JSON-бэкап. Данные в приложении не тронуты.",
+      })
+      return
     }
-    reader.readAsText(file)
+
+    const settings = parsed.settings ? applySettingsMigrations({ ...appSettings, ...parsed.settings }) : appSettings
+    const fileOrders = Array.isArray(parsed.orders) ? (parsed.orders as Partial<Order>[]).map((o) => normalizeOrder(o, settings)) : null
+    const fileTasks = Array.isArray(parsed.tasks) ? (parsed.tasks as Partial<Task>[]).map(normalizeTask) : null
+    const fileAdvances = Array.isArray(parsed.advances) ? (parsed.advances as Partial<Advance>[]).map(normalizeAdvance) : null
+    const fileBoards = Array.isArray(parsed.planning) ? (parsed.planning as PlanningBoard[]) : null
+    const fileLog = Array.isArray(parsed.activityLog) ? (parsed.activityLog as ActivityLogEntry[]) : null
+
+    const s = store.getState()
+    const when = parsed.timestamp ? new Date(parsed.timestamp).toLocaleString("ru") : "дата неизвестна"
+    const answer = await choiceDialog({
+      title: "Как загрузить бэкап?",
+      body: `Файл от ${when}${parsed.account ? `, аккаунт ${parsed.account}` : ""}.`,
+      bullets: [
+        `Заказы: в файле ${fileOrders?.length ?? "—"}, сейчас ${s.orders.length}`,
+        `Задачи: в файле ${fileTasks?.length ?? "—"}, сейчас ${s.tasks.length}`,
+        `Авансы: в файле ${fileAdvances?.length ?? "—"}, сейчас ${s.advances.length}`,
+        `Доски планирования: в файле ${fileBoards?.length ?? "—"}, сейчас ${s.planningBoards.length}`,
+        `Журнал часов: в файле ${fileLog?.length ?? "—"}, сейчас ${s.activityLog.length}`,
+      ],
+      note: "«Заменить всё» приводит приложение и облако к содержимому файла: чего нет в файле — будет удалено. «Дополнить» только добавляет записи, которых ещё нет.",
+      confirmLabel: "Заменить всё",
+      altLabel: "Дополнить",
+      destructive: true,
+    })
+    if (answer === "cancel") return
+
+    if (answer === "alt") {
+      const addMissing = <T extends { id: string }>(current: T[], incoming: T[] | null) => {
+        if (!incoming) return current
+        const have = new Set(current.map((x) => x.id))
+        return [...current, ...incoming.filter((x) => !have.has(x.id))]
+      }
+      s.setOrders((prev) => addMissing(prev, fileOrders))
+      s.setTasks((prev) => addMissing(prev, fileTasks))
+      s.setAdvances((prev) => addMissing(prev, fileAdvances))
+      s.setPlanningBoards((prev) => addMissing(prev, fileBoards))
+      if (fileLog) {
+        const have = new Set(s.activityLog.map((e) => e.entryId).filter(Boolean))
+        s.setActivityLog((prev) => [...prev, ...fileLog.filter((e) => !e.entryId || !have.has(e.entryId))])
+      }
+      saveData()
+      return
+    }
+
+    // Заменить всё: то, чего нет в файле, уходит и из облака через очередь.
+    const removeAbsent = <T extends { id: string }>(current: T[], incoming: T[] | null, table: string) => {
+      if (!incoming) return
+      const keep = new Set(incoming.map((x) => x.id))
+      current.forEach((x) => { if (!keep.has(x.id)) deleteFromCloud(table, x.id) })
+    }
+    removeAbsent(s.orders, fileOrders, "orders")
+    removeAbsent(s.tasks, fileTasks, "tasks")
+    removeAbsent(s.advances, fileAdvances, "advances")
+    if (fileBoards) {
+      removeAbsent(s.planningBoards, fileBoards, "planning_boards")
+      const fileLessonIds = new Set(fileBoards.flatMap((b) => (b.lessons || []).map((l) => l.id)))
+      s.planningBoards.forEach((b) => (b.lessons || []).forEach((l) => { if (!fileLessonIds.has(l.id)) deleteFromCloud("planning_lessons", l.id) }))
+    }
+    if (fileLog) {
+      const fileEntryIds = new Set(fileLog.map((e) => e.entryId).filter(Boolean))
+      s.activityLog.forEach((e) => { if (e.entryId && !fileEntryIds.has(e.entryId)) deleteFromCloud("activity_log", e.entryId) })
+    }
+
+    if (parsed.settings) s.setAppSettings(settings)
+    if (fileOrders) s.setOrders(fileOrders)
+    if (fileTasks) s.setTasks(fileTasks)
+    if (fileAdvances) s.setAdvances(fileAdvances)
+    if (fileBoards) s.setPlanningBoards(fileBoards)
+    if (fileLog) s.setActivityLog(fileLog)
+    saveData()
   }
 
   async function selfCheck() {

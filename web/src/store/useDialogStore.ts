@@ -25,24 +25,29 @@ export interface DialogRequest {
   note?: string
   confirmLabel?: string
   cancelLabel?: string
+  /** Третья кнопка — второй вариант ответа (например «дополнить» рядом с «заменить»). */
+  altLabel?: string
   /** Красная кнопка подтверждения — для удаления и прочего необратимого. */
   destructive?: boolean
-  resolve: (ok: boolean) => void
+  resolve: (answer: DialogAnswer) => void
 }
+
+/** Ответ на вопрос: подтверждение, отказ или третья кнопка. */
+export type DialogAnswer = "confirm" | "cancel" | "alt"
 
 interface DialogState {
   queue: DialogRequest[]
   push: (r: DialogRequest) => void
-  settle: (id: string, ok: boolean) => void
+  settle: (id: string, answer: DialogAnswer) => void
 }
 
 export const useDialogStore = create<DialogState>((set, get) => ({
   queue: [],
   push: (r) => set((s) => ({ queue: [...s.queue, r] })),
-  settle: (id, ok) => {
+  settle: (id, answer) => {
     const req = get().queue.find((r) => r.id === id)
     set((s) => ({ queue: s.queue.filter((r) => r.id !== id) }))
-    req?.resolve(ok)
+    req?.resolve(answer)
   },
 }))
 
@@ -50,10 +55,17 @@ function nextId() {
   return "dlg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-type ConfirmOptions = Omit<DialogRequest, "id" | "kind" | "resolve">
+type ConfirmOptions = Omit<DialogRequest, "id" | "kind" | "resolve" | "altLabel">
 
 /** Спросить подтверждение. Промис отвечает true, если человек согласился. */
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
+  return new Promise((resolve) => {
+    useDialogStore.getState().push({ id: nextId(), kind: "confirm", ...options, resolve: (a) => resolve(a === "confirm") })
+  })
+}
+
+/** Вопрос с тремя ответами: подтвердить, второй вариант (altLabel) или отмена. */
+export function choiceDialog(options: ConfirmOptions & { altLabel: string }): Promise<DialogAnswer> {
   return new Promise((resolve) => {
     useDialogStore.getState().push({ id: nextId(), kind: "confirm", ...options, resolve })
   })

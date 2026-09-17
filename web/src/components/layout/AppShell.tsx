@@ -19,6 +19,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { useTimerStore } from "@/store/useTimerStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { restoreBackupDirectoryHandle, triggerDiskBackup } from "@/lib/diskBackup"
+import { retryCloudSync } from "@/lib/cloudSync"
 import { SidebarTimerCard } from "./SidebarTimerCard"
 import { ToastRoot } from "./ToastRoot"
 import { AppDialogRoot } from "./AppDialogRoot"
@@ -213,13 +214,26 @@ function ThemeToggle() {
 
 function SidebarFooter() {
   const syncStatus = useAppStore((s) => s.syncStatus)
+  const syncError = useAppStore((s) => s.syncError)
 
   return (
     <div className="pt-3">
+      {/* Причина и кнопка повтора: раньше была только надпись, и оставалось
+          гадать, что случилось и ждать ли автоматического повтора. */}
       {syncStatus === "failed" && (
-        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] font-bold text-destructive">
-          <CloudOff className="size-3.5 shrink-0" />
-          Не сохранено в облако
+        <div className="mb-2 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
+          <div className="flex items-center gap-1.5 font-bold">
+            <CloudOff className="size-3.5 shrink-0" />
+            Не сохранено в облако
+          </div>
+          {syncError && <div className="mt-0.5 pl-5 opacity-80">{syncError}</div>}
+          <button
+            type="button"
+            onClick={retryCloudSync}
+            className="mt-1.5 ml-5 rounded-md border border-destructive/40 px-2 py-0.5 font-bold hover:bg-destructive/10"
+          >
+            Повторить сейчас
+          </button>
         </div>
       )}
       {/* Версия внизу сайдбара — как было в ванильной версии: по скриншоту

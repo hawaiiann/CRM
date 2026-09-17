@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js"
 import { X } from "lucide-react"
 import { supabaseClient, setRememberMeOnNextSignIn } from "@/lib/supabase"
 import { useAppStore } from "@/store/useAppStore"
-import { loadData, subscribeRealtime } from "@/lib/cloudSync"
+import { loadData, subscribeRealtime, unsubscribeRealtime } from "@/lib/cloudSync"
 import { getKnownAccounts, rememberAccount } from "@/lib/accountSwitcher"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +47,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (!cloudUserId) return
     loadData()
     subscribeRealtime()
+    return unsubscribeRealtime
   }, [cloudUserId])
 
   if (authLoading) return null

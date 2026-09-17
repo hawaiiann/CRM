@@ -40,7 +40,7 @@ export function AppDialogRoot() {
       onOpenChange={(open) => {
         // Закрытие крестиком, Esc или кликом мимо — это отказ. Для сообщения
         // отказываться не от чего, поэтому просто закрываем.
-        if (!open) settle(current.id, false)
+        if (!open) settle(current.id, "cancel")
       }}
     >
       <DialogContent className="sm:max-w-[440px]">
@@ -66,8 +66,13 @@ export function AppDialogRoot() {
 
         <DialogFooter>
           {isConfirm && (
-            <Button type="button" variant="outline" onClick={() => settle(current.id, false)}>
+            <Button type="button" variant="outline" onClick={() => settle(current.id, "cancel")}>
               {current.cancelLabel || "Отмена"}
+            </Button>
+          )}
+          {isConfirm && current.altLabel && (
+            <Button type="button" variant="outline" onClick={() => settle(current.id, "alt")}>
+              {current.altLabel}
             </Button>
           )}
           <Button
@@ -75,7 +80,7 @@ export function AppDialogRoot() {
             type="button"
             variant={current.destructive ? "destructive" : "default"}
             className={current.destructive ? undefined : "bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"}
-            onClick={() => settle(current.id, true)}
+            onClick={() => settle(current.id, "confirm")}
           >
             {current.confirmLabel || (isConfirm ? "Подтвердить" : "Понятно")}
           </Button>
