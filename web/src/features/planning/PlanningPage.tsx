@@ -25,6 +25,7 @@ type SortMode = "class" | "subject" | "deadline"
 
 export function PlanningPage() {
   const boards = useAppStore((s) => s.planningBoards)
+  const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState<SortMode>("class")
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -76,10 +77,12 @@ export function PlanningPage() {
                 <SelectItem value="deadline">Сортировка: по дедлайну</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => setKtpOpen(true)} title="Вставить таблицу КТП: темы, даты, график">
-              <FileInput />
-              Импорт КТП
-            </Button>
+            {ktpMode && (
+              <Button variant="outline" onClick={() => setKtpOpen(true)} title="Вставить таблицу КТП: темы, даты, график">
+                <FileInput />
+                Импорт КТП
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setExportOpen(true)}>
               <Download />
               Экспорт

@@ -223,6 +223,7 @@ function SortHead({
 export function OrdersPage() {
   const orders = useAppStore((s) => s.orders)
   const boards = useAppStore((s) => s.planningBoards)
+  const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
   const setOrders = useAppStore((s) => s.setOrders)
   const [search, setSearch] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
@@ -399,8 +400,8 @@ export function OrdersPage() {
 
   // Тема урока из планирования — в заголовок строки (после импорта КТП
   // «Урок 14» превращается в «Пушкин. Лирика»).
-  const topics = useMemo(() => new Map(orders.map((o) => [o.id, lessonTopicForOrder(boards, o)])), [orders, boards])
-  const fullTitle = (o: Order) => orderTitleWithTopic(boards, o)
+  const topics = useMemo(() => new Map(orders.map((o) => [o.id, lessonTopicForOrder(boards, o, { ktpMode })])), [orders, boards, ktpMode])
+  const fullTitle = (o: Order) => orderTitleWithTopic(boards, o, { ktpMode })
   const rowTitle = (o: Order) => (grouped ? rowTitleInGroup(o, topics.get(o.id) || null) : fullTitle(o))
 
   // Дубли: два заказа на один урок. Объединение — из меню строки.

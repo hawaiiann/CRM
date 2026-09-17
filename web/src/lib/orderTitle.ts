@@ -1,8 +1,9 @@
-import type { Order, PlanningBoard } from "@/types/models"
+import type { AppSettings, Order, PlanningBoard } from "@/types/models"
 import { findLessonForOrder } from "./planningSync"
 
 /** Тема урока из планирования, если она задана (а не «Урок 14» по умолчанию). */
-export function lessonTopicForOrder(boards: PlanningBoard[], order: Order): string | null {
+export function lessonTopicForOrder(boards: PlanningBoard[], order: Order, settings: Pick<AppSettings, "ktpMode">): string | null {
+  if (!settings.ktpMode) return null
   const hit = findLessonForOrder(boards, order)
   if (!hit) return null
   const t = (hit.lesson.title || "").trim()
@@ -14,9 +15,9 @@ export function lessonTopicForOrder(boards: PlanningBoard[], order: Order): stri
  * Заголовок заказа с темой урока: «Урок 14 · Пушкин. Лирика». Своё название
  * заказа (title) важнее темы. Без темы — как раньше: предмет, класс, номер.
  */
-export function orderTitleWithTopic(boards: PlanningBoard[], order: Order): string {
+export function orderTitleWithTopic(boards: PlanningBoard[], order: Order, settings: Pick<AppSettings, "ktpMode">): string {
   if (order.title) return order.title
-  const topic = lessonTopicForOrder(boards, order)
+  const topic = lessonTopicForOrder(boards, order, settings)
   const base = [order.subject, order.grade, order.lesson && `Урок ${order.lesson}`].filter(Boolean).join(", ") || "Без названия"
   return topic ? `${order.lesson ? `Урок ${order.lesson} · ` : ""}${topic}` : base
 }

@@ -3,6 +3,7 @@ import { CatalogList } from "./CatalogList"
 import { DashboardMetricsSettings } from "./DashboardMetricsSettings"
 import { OrderTemplatesSettings } from "./OrderTemplatesSettings"
 import { BackupSettings } from "./BackupSettings"
+import { ModesSettings } from "./ModesSettings"
 
 export function SettingsPage() {
   return (
@@ -21,6 +22,7 @@ export function SettingsPage() {
         <DashboardMetricsSettings />
         <OrderTemplatesSettings />
         <BackupSettings />
+        <ModesSettings />
       </div>
     </div>
   )

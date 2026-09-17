@@ -47,6 +47,7 @@ export function BoardCard({
   const orders = useAppStore((s) => s.orders)
   const schedule = useAppStore((s) => s.appSettings.boardSchedules?.[board.id])
   const materialsLink = useAppStore((s) => s.appSettings.boardLinks?.[board.id])
+  const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
   const setOrders = useAppStore((s) => s.setOrders)
   const setAppSettings = useAppStore((s) => s.setAppSettings)
@@ -180,7 +181,7 @@ export function BoardCard({
     const items = lesson.items || []
     const done = items.filter((i) => i.done).length
     const week = plan?.weeks.find((w) => w.lessons.some((l) => l.id === lesson.id))
-    const topic = lesson.title && !/^урок\s*\d+$/i.test(lesson.title) ? lesson.title : ""
+    const topic = ktpMode && lesson.title && !/^урок\s*\d+$/i.test(lesson.title) ? lesson.title : ""
     const armed = deleteArmedId === lesson.id
     return (
       <button
@@ -195,7 +196,7 @@ export function BoardCard({
           {armed ? <X className="size-4" strokeWidth={2.5} /> : lesson.num}
         </span>
         <span className="min-w-0 flex-1">
-          <span className={cn("block truncate text-sm", topic ? "font-bold" : "text-muted-foreground")}>{topic || "Без темы"}</span>
+          <span className={cn("block truncate text-sm", topic ? "font-bold" : ktpMode ? "text-muted-foreground" : "font-bold")}>{topic || (ktpMode ? "Без темы" : lesson.title || `Урок ${lesson.num}`)}</span>
           <span className="block truncate text-2xs text-muted-foreground">
             {items.length ? `${done}/${items.length}: ${items.map((i) => (i.done ? "✓ " : "") + i.text).join(", ")}` : "состав пуст"}
           </span>

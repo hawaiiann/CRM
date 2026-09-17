@@ -31,6 +31,7 @@ export function OrderDetailsSheet({
   // Связь с уроком была видна только из планирования: отсюда нельзя было ни
   // узнать, что заказ вообще чем-то управляет, ни сверить состав.
   const planningBoards = useAppStore((s) => s.planningBoards)
+  const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
   const linked = order ? findLessonForOrder(planningBoards, order) : null
   const missingInOrder = order && linked ? lessonItemsMissingInOrder(linked.lesson, order) : []
 
@@ -52,7 +53,7 @@ export function OrderDetailsSheet({
         {order && pay && (
           <>
             <SheetHeader className="pr-10">
-              <SheetTitle>{orderTitleWithTopic(planningBoards, order)}</SheetTitle>
+              <SheetTitle>{orderTitleWithTopic(planningBoards, order, { ktpMode })}</SheetTitle>
               <SheetDescription>
                 {order.client ? (
                   <Link to={`/clients/${encodeURIComponent(order.client)}`} onClick={() => onOpenChange(false)} className="hover:underline">

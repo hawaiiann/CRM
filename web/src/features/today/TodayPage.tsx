@@ -50,6 +50,7 @@ export function TodayPage() {
   const advances = useAppStore((s) => s.advances)
   const activityLog = useAppStore((s) => s.activityLog)
   const boards = useAppStore((s) => s.planningBoards)
+  const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
   const setOrders = useAppStore((s) => s.setOrders)
   const [receiveOpen, setReceiveOpen] = useState(false)
 
@@ -113,7 +114,7 @@ export function TodayPage() {
               <EmptyHint icon={Play} text="Ничего не в работе. Возьмите урок из очереди ниже — статус меняется прямо в строке." />
             ) : (
               <div className="flex flex-col gap-1.5">
-                {inWork.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o)} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
+                {inWork.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o, { ktpMode })} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
               </div>
             )}
           </section>
@@ -129,7 +130,7 @@ export function TodayPage() {
               <EmptyHint icon={CalendarClock} text="Очередь пуста. Новый урок заводится из планирования — кнопкой в карточке урока." />
             ) : (
               <div className="flex flex-col gap-1.5">
-                {upcoming.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o)} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
+                {upcoming.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o, { ktpMode })} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
               </div>
             )}
           </section>

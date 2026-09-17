@@ -121,6 +121,7 @@ export function defaultAppSettings(): AppSettings {
     boardTemplates: {},
     boardSchedules: {},
     boardLinks: {},
+    ktpMode: false,
     dashboardMetrics: [
       { id: "dm1", type: "hours", goal: 4 },
       { id: "dm2", type: "presentations", goal: 0 },
@@ -148,6 +149,7 @@ export function applySettingsMigrations(parsed: Partial<AppSettings> | null | un
   if (!merged.boardTemplates || typeof merged.boardTemplates !== "object") merged.boardTemplates = {}
   if (!merged.boardSchedules || typeof merged.boardSchedules !== "object") merged.boardSchedules = {}
   if (!merged.boardLinks || typeof merged.boardLinks !== "object") merged.boardLinks = {}
+  merged.ktpMode = !!merged.ktpMode
   if (!merged.hiddenEntries) merged.hiddenEntries = base.hiddenEntries
   ;(["clients", "types", "units", "subjects", "classes"] as const).forEach((k) => {
     if (!merged.hiddenEntries[k]) merged.hiddenEntries[k] = []

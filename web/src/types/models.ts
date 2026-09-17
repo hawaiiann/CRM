@@ -155,6 +155,11 @@ export interface AppSettings {
   boardSchedules: Record<string, { start: string; perWeek: number; firstWeekLessons?: number; exceptions?: Record<string, number> }>
   /** Ссылка на материалы класса (папка на диске). Ключ — id доски. */
   boardLinks: Record<string, string>
+  /**
+   * Режим КТП: кнопка импорта тем из КТП и темы уроков в названиях заказов.
+   * По умолчанию выключен — привычные названия «Литература, 9 класс, Урок 10».
+   */
+  ktpMode: boolean
 }
 
 export interface ActivityLogEntry {
