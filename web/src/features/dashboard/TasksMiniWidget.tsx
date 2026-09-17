@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Plus, Trash2, Check } from "lucide-react"
+import { Link } from "react-router-dom"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
 import { deleteFromCloud } from "@/lib/cloudSync"
@@ -46,7 +47,10 @@ export function TasksMiniWidget() {
     <div className="glass-surface flex h-full flex-col rounded-xl p-4.5">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[14px] font-bold">Задачи: сегодня</div>
-        <span className="text-[11px] font-bold text-muted-foreground">{active.length} активных</span>
+        <div className="flex items-center gap-2.5 text-[11px] font-bold text-muted-foreground">
+          <span>{active.length} активных</span>
+          <Link to="/tasks" className="hover:text-foreground hover:underline">Все задачи</Link>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">

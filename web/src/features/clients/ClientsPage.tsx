@@ -33,6 +33,16 @@ const STATE_LABELS: Record<StateFilter, string> = {
 }
 
 export function ClientsPage() {
+  return (
+    <div>
+      <PageHeader title="Клиенты" subtitle="Все заказчики: активные заказы, остаток аванса, сумма к доплате" />
+      <ClientsContent />
+    </div>
+  )
+}
+
+/** Содержимое без шапки — то же самое встроено вкладкой в Финансы. */
+export function ClientsContent() {
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
   const appSettings = useAppStore((s) => s.appSettings)
@@ -97,8 +107,6 @@ export function ClientsPage() {
 
   return (
     <div>
-      <PageHeader title="Клиенты" subtitle="Все заказчики: активные заказы, остаток аванса, сумма к доплате" />
-
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по клиентам..." className="w-full sm:w-64" />
         <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>

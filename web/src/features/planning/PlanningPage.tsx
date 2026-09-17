@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { Plus, Download } from "lucide-react"
 import { OrderFormDialog } from "@/features/orders/OrderFormDialog"
 import type { Order } from "@/types/models"
-import { PageHeader } from "@/components/layout/AppShell"
+import { LessonsHeader } from "@/components/layout/LessonsHeader"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -62,9 +62,8 @@ export function PlanningPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Планирование"
-        subtitle="Сетка уроков по классам с автосинхронизацией заказов и архивом"
+      <LessonsHeader
+        subtitle="Сетка уроков по классам: клик по клетке открывает урок с заказом внутри"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>

@@ -2,10 +2,6 @@ import { useEffect, useState, Suspense, type ReactNode } from "react"
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
   BarChart3,
-  Users,
-  FileText,
-  GanttChartSquare,
-  CheckCircle2,
   CalendarDays,
   Database,
   CloudOff,
@@ -30,6 +26,8 @@ type NavItem = {
   label: string
   icon: typeof Sun
   to: string
+  /** Дополнительные пути, при которых пункт считается активным (виды одного раздела). */
+  match?: string[]
 }
 
 type NavGroup = {
@@ -37,23 +35,20 @@ type NavGroup = {
   items: NavItem[]
 }
 
+// Четыре раздела вместо восьми. Заказы, таймлайн и планирование — три вида
+// одних данных (см. LessonsHeader), клиенты — вкладка Финансов, задачи живут
+// на «Сегодня». Меньше переходов, меньше вопросов «где это».
 const NAV: NavGroup[] = [
-  {
-    label: "Обзор",
-    items: [
-      { label: "Сегодня", icon: Sun, to: "/" },
-      { label: "Финансы", icon: BarChart3, to: "/finance" },
-      { label: "Клиенты", icon: Users, to: "/clients" },
-    ],
-  },
   {
     label: "Работа",
     items: [
-      { label: "Заказы", icon: FileText, to: "/orders" },
-      { label: "Таймлайн", icon: GanttChartSquare, to: "/timeline" },
-      { label: "Задачи", icon: CheckCircle2, to: "/tasks" },
-      { label: "Планирование", icon: CalendarDays, to: "/planning" },
+      { label: "Сегодня", icon: Sun, to: "/", match: ["/tasks"] },
+      { label: "Уроки", icon: CalendarDays, to: "/planning", match: ["/orders", "/timeline"] },
     ],
+  },
+  {
+    label: "Деньги",
+    items: [{ label: "Финансы", icon: BarChart3, to: "/finance", match: ["/clients"] }],
   },
   {
     label: "Настройки",
@@ -127,7 +122,7 @@ export function AppShell() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13.5px] font-bold transition-colors",
-                    isActive
+                    isActive || (item.match || []).some((m) => location.pathname.startsWith(m))
                       ? "bg-emphasis/88 text-emphasis-foreground"
                       : "text-muted-foreground hover:bg-overlay/10 hover:text-foreground"
                   )

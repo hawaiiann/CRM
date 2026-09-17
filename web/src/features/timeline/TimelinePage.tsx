@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
-import { PageHeader } from "@/components/layout/AppShell"
+import { LessonsHeader } from "@/components/layout/LessonsHeader"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
 import { addDays, dateKey } from "@/lib/money"
@@ -91,9 +91,8 @@ export function TimelinePage() {
 
   return (
     <div>
-      <PageHeader
-        title="Таймлайн"
-        subtitle="Визуализация нахлеста и параллельных заказов"
+      <LessonsHeader
+        subtitle="Заказы на календарной шкале: нахлёсты и параллельная работа"
         actions={
           <Button onClick={() => { setEditingOrder(null); setFormOpen(true) }} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
             <Plus />

@@ -37,6 +37,7 @@ import { DepositDialog } from "./DepositDialog"
 import { ReceivePaymentDialog } from "./ReceivePaymentDialog"
 import { TimeJournalTab } from "./TimeJournalTab"
 import { AnalyticsTab } from "./AnalyticsTab"
+import { ClientsContent } from "@/features/clients/ClientsPage"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order, Advance } from "@/types/models"
@@ -356,10 +357,8 @@ export function FinancePage() {
             <span className="sm:hidden">Обзор</span>
             <span className="hidden sm:inline">Обзор финансов</span>
           </TabsTrigger>
-          <TabsTrigger value="advances">
-            <span className="sm:hidden">Авансы</span>
-            <span className="hidden sm:inline">Баланс авансов по клиентам</span>
-          </TabsTrigger>
+          <TabsTrigger value="advances">Авансы</TabsTrigger>
+          <TabsTrigger value="clients">Клиенты</TabsTrigger>
           <TabsTrigger value="timereport">
             <span className="sm:hidden">Время</span>
             <span className="hidden sm:inline">Отчёт по времени</span>
@@ -677,6 +676,10 @@ export function FinancePage() {
 
         <TabsContent value="analytics" className="mt-4">
           <AnalyticsTab />
+        </TabsContent>
+
+        <TabsContent value="clients" className="mt-4">
+          <ClientsContent />
         </TabsContent>
       </Tabs>
 

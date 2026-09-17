@@ -11,20 +11,11 @@ import {
   Trash2,
   ChevronRight,
   ArrowUp,
-  TrendingUp,
-  AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LessonsHeader } from "@/components/layout/LessonsHeader"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardAction,
-  CardContent,
-} from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -365,92 +356,16 @@ export function OrdersPage() {
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-heading text-[30px] font-bold tracking-tight">Заказы</h1>
-        <p className="text-[13.5px] text-muted-foreground">
-          Управление всеми проектами и их наполнением
-        </p>
-      </div>
+      <LessonsHeader subtitle="Все заказы списком: поиск, сортировка, статусы и оплата" />
 
-      {/* KPI row */}
-      <div className="mb-5.5 grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="glass-surface ring-0">
-          <CardHeader>
-            <CardDescription>К доплате всего</CardDescription>
-            <CardTitle className="font-heading text-[34px] font-bold tabular-nums">
-              {fmtMoney(dueTotal)}
-            </CardTitle>
-            <CardAction>
-              <span className="inline-flex items-center gap-1 rounded-full border border-overlay/20 px-2 py-0.5 text-[11px] font-bold text-foreground/80">
-                <TrendingUp className="size-3" />
-                {dueRows.length} заказов
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-[12.5px] text-muted-foreground">
-            <div className="font-bold text-foreground">Без учёта авансов клиентов</div>
-            По всем заказам, кроме отменённых — включая завершённые, если по ним ещё не заплатили
-          </CardContent>
-        </Card>
-
-        <Card className="glass-surface glass-surface-accent ring-1 ring-cta/25">
-          <CardHeader>
-            <CardDescription>Активные заказы</CardDescription>
-            <CardTitle className="font-heading text-[34px] font-bold tabular-nums">
-              {active.length}
-            </CardTitle>
-            <CardAction>
-              <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-                из {rows.length} всего
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-[12.5px] text-muted-foreground">
-            <div className="font-bold text-foreground">
-              {active.filter((r) => r.order.status === "queue").length} в очереди ·{" "}
-              {active.filter((r) => r.order.status === "progress").length} в работе
-            </div>
-            Без завершённых и отменённых
-          </CardContent>
-        </Card>
-
-        <Card className="glass-surface ring-0">
-          <CardHeader>
-            <CardDescription>Просрочено</CardDescription>
-            <CardTitle className="font-heading text-[34px] font-bold text-destructive tabular-nums">
-              {overdueRows.length}
-            </CardTitle>
-            <CardAction>
-              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 px-2 py-0.5 text-[11px] font-bold text-destructive">
-                <AlertTriangle className="size-3" />
-                внимание
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-[12.5px] text-muted-foreground">
-            <div className="font-bold text-destructive">Срок сдачи уже прошёл</div>
-            {overdueRows.map((r) => orderDisplayTitle(r.order).split(",")[0]).join(", ") || "—"}
-          </CardContent>
-        </Card>
-
-        <Card className="glass-surface ring-0">
-          <CardHeader>
-            <CardDescription>Завершено</CardDescription>
-            <CardTitle className="font-heading text-[34px] font-bold tabular-nums">
-              {doneThisMonthCount}
-            </CardTitle>
-            <CardAction>
-              <span className="inline-flex items-center gap-1 rounded-full border border-overlay/20 px-2 py-0.5 text-[11px] font-bold text-foreground/80">
-                <TrendingUp className="size-3" />
-                архив
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-[12.5px] text-muted-foreground">
-            <div className="font-bold text-foreground">Готовые и отменённые заказы</div>
-            Смотрите архив под таблицей
-          </CardContent>
-        </Card>
+      {/* Сводка одной полосой: четыре числа без бейджей и подписей в три
+          строки — раньше карточки занимали четверть экрана и говорили одно и
+          то же дважды. */}
+      <div className="glass-surface mb-4 grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl px-5 py-3.5 sm:grid-cols-4">
+        <Kpi label="К доплате" value={fmtMoney(dueTotal)} hint={`${dueRows.length} заказов, без учёта авансов`} tone={dueTotal > 0 ? "destructive" : undefined} />
+        <Kpi label="В работе" value={String(active.length)} hint={`${active.filter((r) => r.order.status === "queue").length} в очереди · ${active.filter((r) => r.order.status === "progress").length} в работе`} />
+        <Kpi label="Просрочено" value={String(overdueRows.length)} hint={overdueRows.length ? overdueRows.map((r) => orderDisplayTitle(r.order).split(",")[0]).slice(0, 3).join(", ") : "срок сдачи не прошёл ни у кого"} tone={overdueRows.length ? "destructive" : undefined} />
+        <Kpi label="В архиве" value={String(doneThisMonthCount)} hint="завершённые, см. под таблицей" />
       </div>
 
       {/* toolbar */}
@@ -771,6 +686,16 @@ export function OrdersPage() {
           }
         }}
       />
+    </div>
+  )
+}
+
+function Kpi({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "destructive" }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">{label}</div>
+      <div className={cn("font-heading mt-0.5 text-[24px] font-bold tabular-nums", tone === "destructive" && "text-destructive")}>{value}</div>
+      <div className="truncate text-[11.5px] text-muted-foreground" title={hint}>{hint}</div>
     </div>
   )
 }
