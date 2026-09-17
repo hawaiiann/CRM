@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 import { useAppStore } from "@/store/useAppStore"
 import { fmtMoney } from "@/lib/money"
-import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
+import { revenueEvents, revenueForMonth } from "@/lib/dashboardMetrics"
 import {
   ChartContainer,
   ChartTooltip,
@@ -21,26 +21,16 @@ const chartConfig = {
 
 export function RevenueChart() {
   const orders = useAppStore((s) => s.orders)
+  const advances = useAppStore((s) => s.advances)
 
+  // По датам платежей и авансов — то же определение, что у плитки «Выручка»
+  // и метрик «Активность». Раньше месяц брался по сроку сдачи заказа.
   const data = useMemo(() => {
     const now = new Date()
+    const events = revenueEvents(orders, advances)
     const months = Array.from({ length: 6 }, (_, i) => new Date(now.getFullYear(), now.getMonth() - (5 - i), 1))
-    return months.map((m) => {
-      const mYear = m.getFullYear()
-      const mMonth = m.getMonth()
-      const revenue = orders
-        .filter((o) => {
-          if (o.status === "cancelled") return false
-          const dStr = o.deadline || o.start
-          if (!dStr) return false
-          const parts = dStr.split("-").map(Number)
-          if (parts.length < 2) return false
-          return parts[0] === mYear && parts[1] - 1 === mMonth
-        })
-        .reduce((s, o) => s + orderRecognizedRevenue(o).revenue, 0)
-      return { month: MONTH_NAMES[m.getMonth()], revenue }
-    })
-  }, [orders])
+    return months.map((m) => ({ month: MONTH_NAMES[m.getMonth()], revenue: revenueForMonth(events, m.getFullYear(), m.getMonth()) }))
+  }, [orders, advances])
 
   return (
     <ChartContainer config={chartConfig} className="aspect-auto h-[190px] w-full">

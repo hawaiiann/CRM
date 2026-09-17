@@ -20,6 +20,16 @@ export interface Payment {
   note: string
 }
 
+/**
+ * Списание аванса с привязкой к конкретному поступлению. Сумма списаний не
+ * больше advanceUsed; разница (advanceUsed − Σ allocations) — старые заказы,
+ * где списание было только числом по клиенту, без привязки к авансу.
+ */
+export interface AdvanceAllocation {
+  advanceId: string
+  amount: number
+}
+
 export interface Order {
   id: string
   title: string
@@ -31,7 +41,10 @@ export interface Order {
   status: OrderStatus
   isPaid: boolean
   priority: boolean
+  /** Итого списано аванса на заказ — источник истины для денег. */
   advanceUsed: number
+  /** Из каких именно авансов (см. AdvanceAllocation). Может быть пустым у старых заказов. */
+  advanceAllocations: AdvanceAllocation[]
   payments: Payment[]
   paidAmount: number
   taxType: TaxType

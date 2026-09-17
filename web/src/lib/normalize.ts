@@ -2,6 +2,7 @@ import { parseNum, dateKey, addDays } from "./money"
 import type {
   Order,
   OrderLine,
+  AdvanceAllocation,
   Payment,
   Task,
   Advance,
@@ -20,6 +21,13 @@ export function normalizePayment(p: Partial<Payment>): Payment {
     date: p.date || dateKey(new Date()),
     note: p.note || "",
   }
+}
+
+export function normalizeAllocations(raw: unknown): AdvanceAllocation[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((a) => ({ advanceId: String((a && (a as Partial<AdvanceAllocation>).advanceId) || ""), amount: parseNum((a as Partial<AdvanceAllocation>)?.amount) }))
+    .filter((a) => a.advanceId && a.amount > 0)
 }
 
 export function normalizeOrderLine(l: Partial<OrderLine>, defaults: { type: string; unit: string }): OrderLine {
@@ -50,6 +58,7 @@ export function normalizeOrder(o: Partial<Order> & { class?: string }, settings:
     isPaid: !!o.isPaid,
     priority: !!o.priority,
     advanceUsed: parseNum(o.advanceUsed),
+    advanceAllocations: normalizeAllocations(o.advanceAllocations),
     payments: (o.payments && Array.isArray(o.payments) ? o.payments : []).map(normalizePayment),
     paidAmount: parseNum(o.paidAmount),
     taxType: o.taxType || "none",

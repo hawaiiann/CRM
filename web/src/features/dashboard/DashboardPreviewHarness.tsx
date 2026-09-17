@@ -37,6 +37,7 @@ function fakeOrder(daysOffset: number, total: number, status: Order["status"] = 
     isPaid: status === "done",
     priority: daysOffset === 0,
     advanceUsed: 0,
+    advanceAllocations: [],
     payments: status === "done" ? [{ id: "p" + daysOffset, amount: total, date: deadline, note: "" }] : [],
     paidAmount: status === "done" ? total : 0,
     taxType: "none",

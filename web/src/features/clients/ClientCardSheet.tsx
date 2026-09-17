@@ -48,8 +48,11 @@ export function ClientCardSheet({
             <div className="flex flex-1 flex-col gap-4.5 overflow-y-auto px-4">
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl bg-muted px-3.5 py-2.5">
-                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказов (активных)</div>
-                  <div className="font-heading mt-0.5 text-[22px] font-bold">{clientOrders.length}</div>
+                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Активных заказов</div>
+                  <div className="font-heading mt-0.5 text-[22px] font-bold">
+                    {clientOrders.filter((o) => o.status !== "done").length}
+                    <span className="ml-1.5 text-[12px] font-semibold text-muted-foreground">из {clientOrders.length}</span>
+                  </div>
                 </div>
                 <div className="rounded-xl bg-muted px-3.5 py-2.5">
                   <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Выручка (с налогом)</div>

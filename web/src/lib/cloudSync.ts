@@ -50,6 +50,9 @@ function orderToRow(o: Order, userId: string): Row {
     id: o.id, user_id: userId, title: o.title || "", client: o.client || "", subject: o.subject || "",
     grade: o.grade || "", quarter: o.quarter || "", lesson: o.lesson || "", status: o.status || "queue",
     is_paid: !!o.isPaid, priority: !!o.priority, advance_used: parseNum(o.advanceUsed),
+    // Колонка advance_allocations (jsonb) новая — см. CHANGELOG v2.22.0. Пока её
+    // нет в базе, она отбрасывается (stripKnownMissingColumns), остальное идёт.
+    advance_allocations: o.advanceAllocations || [],
     payments: o.payments || [],
     paid_amount: orderPaymentsTotal(o),
     tax_type: o.taxType || "none", start_date: o.start || null, deadline: o.deadline || null,
@@ -64,6 +67,7 @@ function rowToOrder(r: Row): Partial<Order> {
     id: r.id, title: r.title || "", client: r.client || "", subject: r.subject || "",
     grade: r.grade || "", quarter: r.quarter || "", lesson: r.lesson || "", status: r.status || "queue",
     isPaid: !!r.is_paid, priority: !!r.priority, advanceUsed: r.advance_used || 0,
+    advanceAllocations: Array.isArray(r.advance_allocations) ? r.advance_allocations : [],
     payments: Array.isArray(r.payments) ? r.payments : [],
     paidAmount: r.paid_amount || 0,
     taxType: r.tax_type || "none", start: r.start_date || "", deadline: r.deadline || "",
@@ -751,7 +755,7 @@ export async function runSyncSelfCheck(): Promise<string[] | null> {
   const problems: string[] = []
   const store = useAppStore.getState()
 
-  function compare<T extends { id: string }>(name: string, localArr: T[], cloudRows: Row[] | null, toRow: (x: T) => Row, rowToLocal: (r: Row) => T) {
+  function compare<T extends { id: string }>(name: string, table: string, localArr: T[], cloudRows: Row[] | null, toRow: (x: T) => Row, rowToLocal: (r: Row) => T) {
     const cloudById: Record<string, Row> = {}
     ;(cloudRows || []).forEach((r) => { cloudById[r.id] = r })
     const localById: Record<string, T> = {}
@@ -763,21 +767,24 @@ export async function runSyncSelfCheck(): Promise<string[] | null> {
     localArr.forEach((x) => {
       const r = cloudById[x.id]
       if (!r) return
-      if (JSON.stringify(toRow(x)) !== JSON.stringify(toRow(rowToLocal(r)))) different++
+      // Колонки, которых в базе ещё нет, не сравниваем — они и не могли доехать.
+      const a = stripKnownMissingColumns(table, toRow(x))
+      const b = stripKnownMissingColumns(table, toRow(rowToLocal(r)))
+      if (JSON.stringify(a) !== JSON.stringify(b)) different++
     })
     if (missingInCloud) problems.push(`${name}: нет в облаке — ${missingInCloud}`)
     if (missingLocally) problems.push(`${name}: есть в облаке, но нет здесь — ${missingLocally}`)
     if (different) problems.push(`${name}: расходится содержимое — ${different}`)
   }
 
-  compare("Заказы", store.orders, ordersRes.data, (o) => orderToRow(o, userId), (r) => normalizeOrder(rowToOrder(r), store.appSettings))
-  compare("Задачи", store.tasks, tasksRes.data, (t) => taskToRow(t, userId), (r) => normalizeTask(rowToTask(r)))
-  compare("Авансы", store.advances, advRes.data, (a) => advanceToRow(a, userId), (r) => normalizeAdvance(rowToAdvance(r)))
-  compare("Доски планирования", store.planningBoards, boardsRes.data, (b) => boardToRow(b, userId), rowToBoard)
+  compare("Заказы", "orders", store.orders, ordersRes.data, (o) => orderToRow(o, userId), (r) => normalizeOrder(rowToOrder(r), store.appSettings))
+  compare("Задачи", "tasks", store.tasks, tasksRes.data, (t) => taskToRow(t, userId), (r) => normalizeTask(rowToTask(r)))
+  compare("Авансы", "advances", store.advances, advRes.data, (a) => advanceToRow(a, userId), (r) => normalizeAdvance(rowToAdvance(r)))
+  compare("Доски планирования", "planning_boards", store.planningBoards, boardsRes.data, (b) => boardToRow(b, userId), rowToBoard)
 
   const localLessons: (PlanningLesson & { boardId: string })[] = []
   store.planningBoards.forEach((b) => (b.lessons || []).forEach((l) => localLessons.push({ ...l, boardId: b.id })))
-  compare("Уроки", localLessons, lessonsRes.data, (l) => lessonToRow(l, userId), (r) => ({ ...rowToLesson(r), boardId: r.board_id }))
+  compare("Уроки", "planning_lessons", localLessons, lessonsRes.data, (l) => lessonToRow(l, userId), (r) => ({ ...rowToLesson(r), boardId: r.board_id }))
 
   const cloudLogCount = (logRes.data || []).length
   if (cloudLogCount !== store.activityLog.length) {

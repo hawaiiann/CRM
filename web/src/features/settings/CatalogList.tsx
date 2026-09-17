@@ -1,5 +1,7 @@
+import { useState } from "react"
 import { ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { planCatalogRename } from "@/lib/catalogRename"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
@@ -24,10 +26,38 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
     saveData()
   }
 
-  function rename(idx: number, val: string) {
-    const oldVal = list[idx]
-    const nextHidden = hidden.includes(oldVal) ? hidden.map((h) => (h === oldVal ? val : h)) : hidden
-    update(list.map((v, i) => (i === idx ? val : v)), nextHidden)
+  /**
+   * Переименование — по уходу из поля, с каскадом по заказам, авансам и
+   * доскам (lib/catalogRename.ts). Раньше правилось на каждое нажатие клавиши
+   * и только в самом списке: клиент «раздваивался» — новое имя в справочнике,
+   * старое во всех заказах.
+   */
+  async function commitRename(idx: number, val: string) {
+    const from = list[idx]
+    const to = val.trim()
+    if (!to || to === from) return
+    const s = useAppStore.getState()
+    const plan = planCatalogRename(catalogKey, from, to, { settings: s.appSettings, orders: s.orders, advances: s.advances, planningBoards: s.planningBoards })
+    const total = plan.touched.orders + plan.touched.advances + plan.touched.boards
+    if (total > 0 || plan.merges) {
+      const bullets: string[] = []
+      if (plan.touched.orders) bullets.push(`Заказы: ${plan.touched.orders}${plan.touched.lines ? ` (позиций: ${plan.touched.lines})` : ""}`)
+      if (plan.touched.advances) bullets.push(`Авансы: ${plan.touched.advances}`)
+      if (plan.touched.boards) bullets.push(`Доски планирования: ${plan.touched.boards}`)
+      if (plan.merges) bullets.push(`«${to}» уже есть в справочнике — записи сольются в одну`)
+      const ok = await confirmDialog({
+        title: `Переименовать «${from}» в «${to}»?`,
+        body: total ? "Новое имя будет подставлено везде, где встречается старое:" : undefined,
+        bullets,
+        confirmLabel: "Переименовать",
+      })
+      if (!ok) return
+    }
+    s.setAppSettings(plan.settings)
+    if (plan.touched.orders) s.setOrders(plan.orders)
+    if (plan.touched.advances) s.setAdvances(plan.advances)
+    if (plan.touched.boards) s.setPlanningBoards(plan.planningBoards)
+    saveData()
   }
   function move(idx: number, dir: -1 | 1) {
     const newIdx = idx + dir
@@ -90,9 +120,9 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
                   <ChevronDown className="size-3" />
                 </button>
               </div>
-              <Input
+              <CatalogNameInput
                 value={val}
-                onChange={(e) => rename(idx, e.target.value)}
+                onCommit={(v) => commitRename(idx, v)}
                 className={cn("h-8 flex-1 text-[12.5px]", isHidden && "line-through")}
               />
               <Button type="button" variant="ghost" size="icon-sm" title={isHidden ? "Показать в списках выбора" : "Скрыть из списков выбора"} onClick={() => toggleHidden(idx)}>
@@ -109,5 +139,22 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
         <Plus />Добавить
       </Button>
     </div>
+  )
+}
+
+/** Поле имени: правится свободно, сохраняется по Enter или уходу из поля. */
+function CatalogNameInput({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <Input
+      value={text ?? value}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => { if (text !== null && text !== value) onCommit(text); setText(null) }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+        if (e.key === "Escape") { setText(null); (e.target as HTMLInputElement).blur() }
+      }}
+      className={className}
+    />
   )
 }

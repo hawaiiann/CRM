@@ -27,7 +27,8 @@ import { saveData, deleteFromCloud, deleteActivityLogForOrder, applyHoursDelta }
 import { actualHours } from "@/lib/activity"
 import { cn } from "@/lib/utils"
 import { parseNum, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, orderTaxRate, draftPaymentState } from "@/lib/money"
-import { getClientAdvanceStats } from "@/lib/advances"
+import { getClientAdvanceStats, clientAdvanceRows, orderUnallocatedAdvance, allocateGreedy } from "@/lib/advances"
+import { fmtDeadline } from "@/lib/dates"
 import { normalizePayment } from "@/lib/normalize"
 import { confirmDialog } from "@/store/useDialogStore"
 import type { Order, OrderLine, Payment, TaxType, OrderStatus } from "@/types/models"
@@ -73,6 +74,7 @@ function emptyDraft(defaults: { type: string; unit: string }): Order {
     isPaid: false,
     priority: false,
     advanceUsed: 0,
+    advanceAllocations: [],
     payments: [],
     paidAmount: 0,
     taxType: "none",
@@ -295,8 +297,37 @@ export function OrderFormDialog({
     if (remaining <= 0) return
     addPayment(Math.round(remaining * 100) / 100)
   }
+  // Списание по конкретным авансам. advanceUsed остаётся итогом (по нему
+  // считаются деньги), advanceAllocations — разбивка; их разница — списание
+  // без привязки у старых заказов, его можно уменьшить до нуля здесь же.
+  const advanceRows = useMemo(
+    () => clientAdvanceRows(draft.client, advances, orders, draft.id),
+    [advances, orders, draft.client, draft.id]
+  )
+  const unallocated = orderUnallocatedAdvance(draft)
+  const allocationOf = (advanceId: string) => (draft.advanceAllocations || []).find((a) => a.advanceId === advanceId)?.amount || 0
+
+  function setAllocation(advanceId: string, amount: number) {
+    setDraft((d) => {
+      const rest = (d.advanceAllocations || []).filter((a) => a.advanceId !== advanceId)
+      const next = amount > 0 ? [...rest, { advanceId, amount }] : rest
+      const keepUnallocated = orderUnallocatedAdvance(d)
+      return { ...d, advanceAllocations: next, advanceUsed: Math.round((next.reduce((s, a) => s + a.amount, 0) + keepUnallocated) * 100) / 100 }
+    })
+  }
+  function setUnallocated(amount: number) {
+    setDraft((d) => {
+      const allocated = (d.advanceAllocations || []).reduce((s, a) => s + a.amount, 0)
+      return { ...d, advanceUsed: Math.round((allocated + Math.max(0, amount)) * 100) / 100 }
+    })
+  }
   function fillMaxAdvance() {
-    setDraft((d) => ({ ...d, advanceUsed: Math.round(Math.min(advanceAvailableHere, totalWithTax)) }))
+    // Старые первыми, не больше остатка каждого и не больше стоимости заказа;
+    // сверху — не больше, чем у клиента вообще осталось (с учётом списаний
+    // без привязки у других заказов).
+    const target = Math.round(Math.min(advanceAvailableHere, totalWithTax))
+    const next = allocateGreedy(advanceRows, target)
+    setDraft((d) => ({ ...d, advanceAllocations: next, advanceUsed: next.reduce((s, a) => s + a.amount, 0) }))
   }
 
   function applyTemplate(templateId: string) {
@@ -331,6 +362,7 @@ export function OrderFormDialog({
       lesson: draft.lesson.trim(),
       payments: cleanPayments,
       advanceUsed: parseNum(draft.advanceUsed),
+      advanceAllocations: (draft.advanceAllocations || []).filter((a) => parseNum(a.amount) > 0),
       lines: cleanLines,
       notes: draft.notes.trim(),
       createdAt: editingOrder ? editingOrder.createdAt : Date.now(),
@@ -491,25 +523,67 @@ export function OrderFormDialog({
                   <div className="text-[10.5px] font-bold text-muted-foreground">Доступно у клиента</div>
                   <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(clientStats.available)}</div>
                 </div>
-                <Field label="Списать на этот заказ">
-                  <NumberInput
-                    value={draft.advanceUsed}
-                    onChange={(n) => setDraft((d) => ({ ...d, advanceUsed: n }))}
-                    className={advanceExceedsOrder || advanceOverdraft > 0 ? "border-destructive" : undefined}
-                    title={
-                      advanceOverdraft > 0
-                        ? `У клиента доступно только ${fmtMoney(advanceAvailableHere)} — не хватает ${fmtMoney(advanceOverdraft)}.`
-                        : advanceExceedsOrder
-                          ? `Это больше, чем стоимость заказа (${fmtMoney(totalWithTax)}).`
-                          : undefined
-                    }
-                  />
-                </Field>
+                <div>
+                  <div className="text-[10.5px] font-bold text-muted-foreground">Списано на этот заказ</div>
+                  <div className={cn("font-heading mt-0.5 text-[15px] font-bold", (advanceExceedsOrder || advanceOverdraft > 0) && "text-destructive")}>
+                    {fmtMoney(draft.advanceUsed)}
+                  </div>
+                </div>
                 <div>
                   <div className="text-[10.5px] font-bold text-muted-foreground">Остаток после аванса</div>
                   <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(Math.max(0, totalWithTax - advUsed))}</div>
                 </div>
               </div>
+
+              {/* Построчно по авансам клиента: видно, какой именно аванс
+                  тратится. Раньше было одно число по клиенту, и в реестре
+                  авансов нельзя было понять, что из них уже потрачено. */}
+              <div className="mt-3 flex flex-col gap-1.5">
+                {advanceRows.length === 0 && unallocated === 0 && (
+                  <div className="text-[11.5px] text-muted-foreground">
+                    У клиента нет внесённых авансов — внести можно на Финансах или в карточке клиента.
+                  </div>
+                )}
+                {advanceRows.map((r) => {
+                  const mine = allocationOf(r.advance.id)
+                  const over = mine > r.available + 0.01
+                  return (
+                    <div key={r.advance.id} className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg bg-background/70 px-2.5 py-1.5">
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-bold">
+                          {fmtDeadline(r.advance.date).replace(" г.", "")}{r.advance.note ? ` · ${r.advance.note}` : ""}
+                        </div>
+                        <div className={cn("text-[11px]", over ? "font-bold text-destructive" : "text-muted-foreground")}>
+                          внесено {fmtMoney(r.advance.amount)} · остаток {fmtMoney(r.available)}
+                          {over && ` — не хватает ${fmtMoney(mine - r.available)}`}
+                        </div>
+                      </div>
+                      <NumberInput
+                        value={mine}
+                        onChange={(n) => setAllocation(r.advance.id, n)}
+                        className={cn("h-8", over && "border-destructive")}
+                        placeholder="0"
+                      />
+                    </div>
+                  )
+                })}
+                {unallocated > 0 && (
+                  <div className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5">
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-bold">Без привязки к авансу</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Списание из прежних версий — по клиенту, без указания аванса. Можно перенести в строки выше и обнулить здесь.
+                      </div>
+                    </div>
+                    <NumberInput value={unallocated} onChange={setUnallocated} className="h-8" />
+                  </div>
+                )}
+              </div>
+              {advanceExceedsOrder && (
+                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">
+                  Списано больше, чем стоит заказ ({fmtMoney(totalWithTax)}).
+                </div>
+              )}
               {advanceOverdraft > 0 && (
                 <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">
                   Списано больше, чем внесено: у клиента доступно {fmtMoney(advanceAvailableHere)}, не хватает {fmtMoney(advanceOverdraft)}.

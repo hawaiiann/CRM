@@ -29,7 +29,7 @@ import {
   orderPaymentsTotal,
 } from "@/lib/money"
 import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
-import { getClientAdvanceStats, getTotalAdvanceStats } from "@/lib/advances"
+import { getTotalAdvanceStats, advanceAllocated, clientUnallocatedAdvance } from "@/lib/advances"
 import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
@@ -37,7 +37,7 @@ import { DepositDialog } from "./DepositDialog"
 import { TimeJournalTab } from "./TimeJournalTab"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
-import type { Order } from "@/types/models"
+import type { Order, Advance } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
 import { usePagination } from "@/lib/usePagination"
 
@@ -247,15 +247,40 @@ export function FinancePage() {
   )
   const advSum = useMemo(() => advList.reduce((s, a) => s + parseNum(a.amount), 0), [advList])
 
+  // «Списано» и «Остаток» — по КАЖДОМУ авансу (разбивка advanceAllocations в
+  // заказах). Раньше в каждой строке стоял итог по клиенту, и понять, какой
+  // аванс уже потрачен, было нельзя.
+  function advanceRowStats(a: Advance) {
+    const used = advanceAllocated(a.id, orders)
+    return { used, available: Math.max(0, Math.round((parseNum(a.amount) - used) * 100) / 100) }
+  }
+  // Списания из прежних версий — по клиенту, без привязки к авансу. Их видно
+  // отдельно, чтобы «Остаток» по строкам не выглядел завышенным.
+  const unallocatedByClient = useMemo(() => {
+    const map = new Map<string, number>()
+    advClientOptions.forEach((c) => { const v = clientUnallocatedAdvance(c, orders); if (v > 0) map.set(c, v) })
+    return map
+  }, [advClientOptions, orders])
+
   const {
     page: advCurrentPage, pageSize: advPageSize, pageItems: pagedAdvances,
     setPage: setAdvPage, setPageSize: setAdvPageSize,
   } = usePagination(advList, { resetKey: [advSearch, advClient, advSort].join("|") })
 
-  function togglePayment(o: Order) {
+  async function togglePayment(o: Order) {
     const pay = orderPaymentState(o)
     let next: Order
     if (pay.isFullyPaid) {
+      // Снятие оплаты стирает все платежи заказа — одним кликом и без
+      // подтверждения это было слишком легко сделать случайно.
+      const payments = orderPayments(o)
+      const ok = await confirmDialog({
+        title: "Снять оплату с заказа?",
+        body: `${o.title || "Без названия"}: будут удалены ${payments.length} ${payments.length === 1 ? "платёж" : payments.length < 5 ? "платежа" : "платежей"} на ${fmtMoney(orderPaymentsTotal(o))}. Списание аванса не тронется.`,
+        confirmLabel: "Снять оплату",
+        destructive: true,
+      })
+      if (!ok) return
       next = { ...o, payments: [], paidAmount: 0, isPaid: false, paidAt: null }
     } else {
       const rest = Math.max(0, Math.round(pay.remaining * 100) / 100)
@@ -546,11 +571,19 @@ export function FinancePage() {
               <b className="text-foreground">{fmtMoney(advSum)}</b>
             </div>
 
+            {unallocatedByClient.size > 0 && (
+              <div className="mb-3 rounded-lg bg-warning px-3 py-2.5 text-[12px] text-warning-foreground">
+                <b className="font-bold">Списания без привязки к авансу</b> (заказы из прежних версий):{" "}
+                {[...unallocatedByClient.entries()].map(([c, v]) => `${c} — ${fmtMoney(v)}`).join(", ")}.
+                {" "}В остатках по строкам они не учтены. Привязать можно в форме заказа, блок «Аванс клиента по заказу».
+              </div>
+            )}
+
             {/* mobile — stacked cards */}
             <div className="flex flex-col gap-2.5 sm:hidden">
               {advList.length === 0 && <div className="py-8 text-center text-muted-foreground">{advances.length ? "Ничего не найдено" : "Авансы ещё не вносились"}</div>}
               {pagedAdvances.map((a) => {
-                const stats = getClientAdvanceStats(a.client, advances, orders)
+                const stats = advanceRowStats(a)
                 return (
                   <div key={a.id} className="rounded-xl bg-muted/60 p-3.5">
                     <div className="flex items-start justify-between gap-2">
@@ -597,7 +630,7 @@ export function FinancePage() {
                     <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">{advances.length ? "Ничего не найдено" : "Авансы ещё не вносились"}</TableCell></TableRow>
                   )}
                   {pagedAdvances.map((a) => {
-                    const stats = getClientAdvanceStats(a.client, advances, orders)
+                    const stats = advanceRowStats(a)
                     return (
                       <TableRow key={a.id}>
                         <TableCell>{a.date}</TableCell>

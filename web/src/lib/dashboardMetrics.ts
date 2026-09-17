@@ -59,25 +59,39 @@ function orderContributionDate(o: Order): string {
   return o.start || o.deadline || (o.createdAt ? dateKey(new Date(o.createdAt)) : dateKey(new Date()))
 }
 
-interface RevenueEvent { date: string; orderId: string; revenue: number; net: number }
+export interface RevenueEvent { date: string; orderId: string; revenue: number; net: number }
 
-function revenueEventsForOrder(o: Order, advances: Advance[]): RevenueEvent[] {
+/**
+ * Выручка заказа как события по датам: списания аванса — датой самого
+ * аванса (по разбивке advanceAllocations; старое списание без привязки —
+ * датой первого аванса клиента), платежи — датой платежа. Всё обрезано
+ * стоимостью заказа, как и в orderPaymentState. Это ЕДИНСТВЕННОЕ
+ * определение «выручки за период» в приложении: плитка дашборда, график по
+ * месяцам и метрики «Активность» считают по этим же событиям. Раньше плитка
+ * и график шли по месяцу срока сдачи, а метрики — по датам денег, и три
+ * числа на одном экране не сходились между собой.
+ */
+export function revenueEventsForOrder(o: Order, advances: Advance[]): RevenueEvent[] {
   const events: RevenueEvent[] = []
-  // Стоимость и списанный аванс — из общего расчёта покрытия. Разбивать по
-  // датам приходится здесь: график строится по событиям, а не по итогу.
   const { full, fullExact, advUsed } = orderPaymentState(o)
   const base = orderBaseTotal(o)
   if (full <= 0) return events
 
-  const netForAdvance = fullExact > 0 ? advUsed * (base / fullExact) : 0
-  if (advUsed > 0) {
-    events.push({
-      date: advanceDateForClient(advances, o.client) || orderContributionDate(o),
-      orderId: o.id,
-      revenue: Math.round(advUsed * 100) / 100,
-      net: Math.round(netForAdvance * 100) / 100,
-    })
+  const netRatio = fullExact > 0 ? base / fullExact : 0
+  const advanceById = new Map(advances.map((a) => [a.id, a]))
+  const fallbackDate = advanceDateForClient(advances, o.client) || orderContributionDate(o)
+  let advRoom = advUsed
+  const pushAdvance = (amount: number, date: string) => {
+    const take = Math.min(amount, advRoom)
+    if (take <= 0) return
+    advRoom -= take
+    events.push({ date, orderId: o.id, revenue: Math.round(take * 100) / 100, net: Math.round(take * netRatio * 100) / 100 })
   }
+  ;(o.advanceAllocations || []).forEach((a) => {
+    const adv = advanceById.get(a.advanceId)
+    pushAdvance(parseNum(a.amount), (adv && adv.date) || fallbackDate)
+  })
+  if (advRoom > 0) pushAdvance(advRoom, fallbackDate)
 
   let room = Math.max(0, full - advUsed)
   orderPayments(o).forEach((p) => {
@@ -96,10 +110,19 @@ function revenueEventsForOrder(o: Order, advances: Advance[]): RevenueEvent[] {
   return events
 }
 
-function revenueEvents(orders: Order[], advances: Advance[]): RevenueEvent[] {
+export function revenueEvents(orders: Order[], advances: Advance[]): RevenueEvent[] {
   const all: RevenueEvent[] = []
-  orders.forEach((o) => revenueEventsForOrder(o, advances).forEach((e) => all.push(e)))
+  orders.forEach((o) => {
+    if (o.status === "cancelled") return
+    revenueEventsForOrder(o, advances).forEach((e) => all.push(e))
+  })
   return all
+}
+
+/** Выручка за календарный месяц (по датам денег, см. revenueEventsForOrder). */
+export function revenueForMonth(events: RevenueEvent[], year: number, month0: number): number {
+  const prefix = `${year}-${String(month0 + 1).padStart(2, "0")}-`
+  return Math.round(events.filter((e) => e.date.startsWith(prefix)).reduce((s, e) => s + e.revenue, 0) * 100) / 100
 }
 
 function countEvents(orders: Order[]) {
