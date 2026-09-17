@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
+import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 
 function randId(prefix: string) {
@@ -32,6 +33,7 @@ export function BoardFormDialog({
   const appSettings = useAppStore((s) => s.appSettings)
   const setAppSettings = useAppStore((s) => s.setAppSettings)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
+  const setOrders = useAppStore((s) => s.setOrders)
 
   const [subject, setSubject] = useState("")
   const [title, setTitle] = useState("")
@@ -115,6 +117,7 @@ export function BoardFormDialog({
           // так не терялась (там deleteFromCloud вызывался), а вот сокращённый
           // здесь диапазон — терялся.
           removedLessons.forEach((l) => deleteFromCloud("planning_lessons", l.id))
+          if (removedLessons.length) setOrders((prev) => unlinkOrdersFromLessons(prev, removedLessons.map((l) => l.id)))
           let lessons = b.lessons.filter((l) => keepSet.has(l.num))
           const existingNums = new Set(lessons.map((l) => l.num))
           const addedNums = lessonNums.filter((n) => !existingNums.has(n))

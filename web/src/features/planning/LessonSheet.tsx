@@ -20,6 +20,7 @@ import {
   addLessonItemsToOrderLines,
   addOrderLinesToLessonItems,
   planUnlink,
+  unlinkOrdersFromLessons,
 } from "@/lib/planningOrderSync"
 import { getVisibleCatalog } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
@@ -126,9 +127,17 @@ export function LessonSheet({
       prev.map((b) => (b.id !== liveBoard.id ? b : { ...b, lessons: b.lessons.filter((l) => l.id !== liveLesson.id) }))
     )
     deleteFromCloud("planning_lessons", liveLesson.id)
+    setOrders((prev) => unlinkOrdersFromLessons(prev, [liveLesson.id]))
     saveData()
     onOpenChange(false)
   }
+
+  // Второй урок с тем же номером: нечёткая привязка заказа станет
+  // неоднозначной (совпадёт первый попавшийся), а форма доски, сверяющая
+  // уроки по номерам, при следующем сохранении удалит один из них.
+  const duplicateNum = liveBoard && liveLesson
+    ? liveBoard.lessons.find((l) => l.id !== liveLesson.id && l.num === liveLesson.num)
+    : null
 
   const governingOrder = liveBoard && liveLesson ? findGoverningOrder(orders, liveBoard, liveLesson) : null
 
@@ -282,9 +291,18 @@ export function LessonSheet({
                   type="number"
                   value={liveLesson.num}
                   onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 }, { debounce: true })}
-                  className="w-16 rounded-full border border-border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none"
+                  className={cn(
+                    "w-16 rounded-full border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none",
+                    duplicateNum ? "border-destructive" : "border-border"
+                  )}
                 />
               </div>
+              {duplicateNum && (
+                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[11.5px] font-bold text-destructive">
+                  Номер {liveLesson.num} уже есть у урока «{duplicateNum.title || `Урок ${duplicateNum.num}`}». Два урока с одним номером
+                  путают привязку заказов, а при правке доски один из них будет удалён.
+                </div>
+              )}
 
               <div>
                 <Input

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
 import { computeBoardProgress, lessonDisplayColor } from "@/lib/planningStats"
+import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
 
 const CELL_STYLE: Record<string, string> = {
   gray: "bg-neutral-tone text-neutral-tone-foreground",
@@ -32,7 +33,11 @@ export function BoardCard({
   onOpenLesson: (lesson: PlanningLesson) => void
 }) {
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
-  const [collapsed, setCollapsed] = useState(false)
+  const setOrders = useAppStore((s) => s.setOrders)
+  // Свёрнутость хранится в самой доске (и в облаке): раньше поле board.collapsed
+  // сохранялось, но карточка держала своё локальное состояние и после
+  // перезагрузки всё открывалось развёрнутым.
+  const collapsed = !!board.collapsed
   const [showCompleted, setShowCompleted] = useState(false)
   const [deleteArmedId, setDeleteArmedId] = useState<string | null>(null)
 
@@ -86,6 +91,7 @@ export function BoardCard({
     // (урок без доски никуда не попадает), но копятся они молча.
     lessons.forEach((l) => deleteFromCloud("planning_lessons", l.id))
     deleteFromCloud("planning_boards", board.id)
+    setOrders((prev) => unlinkOrdersFromLessons(prev, lessons.map((l) => l.id)))
     saveData()
   }
   function addLesson() {
@@ -100,6 +106,7 @@ export function BoardCard({
     // облаке и при следующей синхронизации приезжала обратно. Тот же провал,
     // что был у удаления доски целиком (см. v2.14.0).
     deleteFromCloud("planning_lessons", id)
+    setOrders((prev) => unlinkOrdersFromLessons(prev, [id]))
     setDeleteArmedId(null)
   }
 
@@ -130,7 +137,7 @@ export function BoardCard({
             {board.archived ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}
           </IconBtn>
           <IconBtn title="Удалить класс" onClick={deleteBoard} danger><X className="size-3.5" /></IconBtn>
-          <IconBtn title={collapsed ? "Развернуть" : "Свернуть"} onClick={() => setCollapsed((v) => !v)}>
+          <IconBtn title={collapsed ? "Развернуть" : "Свернуть"} onClick={() => updateBoard({ collapsed: !collapsed })}>
             <ChevronDown className={cn("size-4 transition-transform", collapsed && "-rotate-90")} />
           </IconBtn>
         </div>
@@ -184,6 +191,14 @@ export function BoardCard({
               )
             })}
           </div>
+
+          {/* Жест удаления правой кнопкой раньше нигде не был подписан —
+              о нём просто не знали. Основной путь — корзина в карточке урока. */}
+          {lessons.length > 0 && (
+            <div className="mt-2 text-[10.5px] text-muted-foreground">
+              Клик — открыть урок. Удалить: корзина в карточке урока или правая кнопка по клетке.
+            </div>
+          )}
 
           {(hiddenCompletedCount > 0 || showCompleted) && (
             <button

@@ -67,7 +67,13 @@ export function syncPlanningWithOrders(orders: Order[], boardsIn: PlanningBoard[
         item = { id: "i_" + Date.now() + Math.random().toString(36).slice(2, 7), text: lineLabel, done: false, fromOrder: true }
         lesson.items.push(item)
       }
-      item.done = !!line.ready
+      // Пункт, пришедший из заказа, повторяет готовность позиции в обе
+      // стороны. Пункт, заведённый вручную (из шаблона доски или руками),
+      // заказ может только ЗАКРЫТЬ — снять галочку он не вправе: раньше
+      // ручная отметка откатывалась при каждом сохранении, и в планировании
+      // нельзя было отметить сделанное, пока позиция заказа не «готова».
+      if (item.fromOrder) item.done = !!line.ready
+      else if (line.ready) item.done = true
     })
 
     const currentLineLabels = new Set(

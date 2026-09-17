@@ -134,6 +134,23 @@ export function planUnlink(order: Order, board: PlanningBoard, lesson: PlanningL
   }
 }
 
+/**
+ * Снять явную привязку у заказов, чьи уроки удалены. Раньше linkedLessonId
+ * оставался указывать в никуда: заказ молча терял связь с планированием, и
+ * даже нечёткое совпадение по полям для него больше не срабатывало
+ * (явная привязка проверяется первой и «выигрывает» даже пустая).
+ */
+export function unlinkOrdersFromLessons(orders: Order[], lessonIds: Iterable<string>): Order[] {
+  const gone = new Set(lessonIds)
+  if (!gone.size) return orders
+  let changed = false
+  const next = orders.map((o) => {
+    if (o.linkedLessonId && gone.has(o.linkedLessonId)) { changed = true; return { ...o, linkedLessonId: null } }
+    return o
+  })
+  return changed ? next : orders
+}
+
 /** Добавляет недостающие позиции заказа в чек-лист урока. */
 export function addOrderLinesToLessonItems(
   order: Order,
