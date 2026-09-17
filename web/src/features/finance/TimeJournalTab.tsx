@@ -189,8 +189,8 @@ export function TimeJournalTab() {
       <div className="glass-surface rounded-xl p-4.5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-bold">Журнал часов по дням</h3>
-            <div className="text-[12px] text-muted-foreground">Одна строка — один день по одному заказу. Число можно поправить прямо в таблице.</div>
+            <h3 className="text-lg font-bold">Журнал часов по дням</h3>
+            <div className="text-xs text-muted-foreground">Одна строка — один день по одному заказу. Число можно поправить прямо в таблице.</div>
           </div>
           {legacyGroups > 0 && (
             <Button variant="outline" size="sm" onClick={compact} title="Старые версии писали по строке на каждую минуту таймера">
@@ -201,15 +201,15 @@ export function TimeJournalTab() {
 
         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div>
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">С</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">С</label>
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
           </div>
           <div>
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">По</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">По</label>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">Заказ</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказ</label>
             <Select value={orderFilter} onValueChange={setOrderFilter}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -220,7 +220,7 @@ export function TimeJournalTab() {
           </div>
         </div>
 
-        <div className="mb-2 text-[12px] text-muted-foreground">
+        <div className="mb-2 text-xs text-muted-foreground">
           Строк <b className="text-foreground">{rows.length}</b> · всего <b className="text-foreground">{fmtHours(totalHours)}</b>
         </div>
 
@@ -246,7 +246,7 @@ export function TimeJournalTab() {
                     <TableCell className={cn("min-w-0 whitespace-normal", !o && "text-destructive")}>
                       {orderTitle(o, r.orderId)}
                       {r.entries.length > 1 && (
-                        <span className="ml-2 rounded-full bg-muted px-1.5 text-[10.5px] font-bold text-muted-foreground" title="Несколько строк за день — старый формат">
+                        <span className="ml-2 rounded-full bg-muted px-1.5 text-2xs font-bold text-muted-foreground" title="Несколько строк за день — старый формат">
                           {r.entries.length} стр.
                         </span>
                       )}
@@ -268,11 +268,11 @@ export function TimeJournalTab() {
 
         <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
           <div>
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">День</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">День</label>
             <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-9" />
           </div>
           <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">Заказ</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказ</label>
             <Select value={newOrder} onValueChange={setNewOrder}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Выберите заказ..." /></SelectTrigger>
               <SelectContent>
@@ -281,7 +281,7 @@ export function TimeJournalTab() {
             </Select>
           </div>
           <div>
-            <label className="mb-1 block text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">Часов</label>
+            <label className="mb-1 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Часов</label>
             <Input value={newHours} onChange={(e) => setNewHours(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addEntry()} placeholder="1.5 или 1:30" className="h-9 w-28" />
           </div>
           <Button type="button" variant="outline" onClick={addEntry} disabled={!newOrder || !parseHours(newHours)}>
@@ -293,19 +293,19 @@ export function TimeJournalTab() {
       <div className="glass-surface rounded-xl p-4.5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-bold">Сверка с заказами</h3>
-            <div className="text-[12px] text-muted-foreground">
+            <h3 className="text-lg font-bold">Сверка с заказами</h3>
+            <div className="text-xs text-muted-foreground">
               «На заказе» — «Факт. часы» или сумма часов по позициям. «В журнале» — всё, что записано по заказу за все дни.
             </div>
           </div>
-          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>Разницу писать за</span>
             <Input type="date" value={fixDate} onChange={(e) => setFixDate(e.target.value)} className="h-8 w-auto" />
           </div>
         </div>
 
         {reconcile.mismatched.length === 0 ? (
-          <div className="py-4 text-[12.5px] text-muted-foreground">Расхождений нет — журнал сходится с заказами.</div>
+          <div className="py-4 text-sm text-muted-foreground">Расхождений нет — журнал сходится с заказами.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -368,7 +368,7 @@ function HoursCell({ hours, onCommit }: { hours: number; onCommit: (text: string
         if (e.key === "Enter") (e.target as HTMLInputElement).blur()
         if (e.key === "Escape") { cancelled.current = true; (e.target as HTMLInputElement).blur() }
       }}
-      className="h-8 w-24 rounded-md border border-border bg-background px-2 text-right text-[12.5px] tabular-nums outline-none focus-visible:border-ring"
+      className="h-8 w-24 rounded-md border border-border bg-background px-2 text-right text-sm tabular-nums outline-none focus-visible:border-ring"
     />
   )
 }

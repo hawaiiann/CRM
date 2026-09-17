@@ -97,18 +97,18 @@ function MetricColumn({
           />
         </AreaChart>
       </ChartContainer>
-      <div className="mt-1.5 text-[13px] text-muted-foreground">{info.label}</div>
+      <div className="mt-1.5 text-sm text-muted-foreground">{info.label}</div>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
-        <span className="font-heading text-[28px] font-bold tabular-nums sm:text-[34px]" style={{ color }}>{fmt(curVal)}</span>
+        <span className="font-heading text-3xl font-bold tabular-nums sm:text-3xl" style={{ color }}>{fmt(curVal)}</span>
         {info.secondary && secCurVal !== null && (
-          <span className="text-[13px] font-semibold text-muted-foreground">· {Math.round(secCurVal)} {info.secondary.label}</span>
+          <span className="text-sm font-semibold text-muted-foreground">· {Math.round(secCurVal)} {info.secondary.label}</span>
         )}
       </div>
-      <div className="mt-3.5 flex justify-between text-[12px] text-muted-foreground">
+      <div className="mt-3.5 flex justify-between text-xs text-muted-foreground">
         <span>Цель</span>
         <span className="text-right font-semibold text-foreground/80">{fmt(goalVal)}</span>
       </div>
-      <div className="mt-1 flex justify-between text-[12px] text-muted-foreground">
+      <div className="mt-1 flex justify-between text-xs text-muted-foreground">
         <span>Среднее</span>
         <span className="text-right font-semibold text-foreground/80">{fmt(avgVal)}</span>
       </div>
@@ -132,11 +132,11 @@ export function ActivityMetricsGrid() {
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-[16px] font-bold">Активность</h3>
-          <div className="text-[12.5px] text-muted-foreground">{subtitleByPeriod[period]}</div>
+          <h3 className="text-lg font-bold">Активность</h3>
+          <div className="text-sm text-muted-foreground">{subtitleByPeriod[period]}</div>
         </div>
         <Select value={period} onValueChange={(v) => setPeriod(v as MetricPeriod)}>
-          <SelectTrigger size="sm" className="h-8 text-[12.5px] font-semibold">
+          <SelectTrigger size="sm" className="h-8 text-sm font-semibold">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">

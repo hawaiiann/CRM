@@ -52,40 +52,40 @@ export function ClientCardSheet({
             <div className="flex flex-1 flex-col gap-4.5 overflow-y-auto px-4">
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl bg-muted px-3.5 py-2.5">
-                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Активных заказов</div>
-                  <div className="font-heading mt-0.5 text-[22px] font-bold">
+                  <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Активных заказов</div>
+                  <div className="font-heading mt-0.5 text-2xl font-bold">
                     {clientOrders.filter((o) => o.status !== "done").length}
-                    <span className="ml-1.5 text-[12px] font-semibold text-muted-foreground">из {clientOrders.length}</span>
+                    <span className="ml-1.5 text-xs font-semibold text-muted-foreground">из {clientOrders.length}</span>
                   </div>
                 </div>
                 <div className="rounded-xl bg-muted px-3.5 py-2.5">
-                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Выручка (с налогом)</div>
-                  <div className="font-heading mt-0.5 text-[22px] font-bold">{fmtMoney(revenue)}</div>
+                  <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Выручка (с налогом)</div>
+                  <div className="font-heading mt-0.5 text-2xl font-bold">{fmtMoney(revenue)}</div>
                 </div>
               </div>
 
               <div className="rounded-2xl bg-muted px-4 py-3.5">
-                <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Доступный остаток аванса</div>
-                <div className="font-heading mt-1 text-[26px] font-bold text-foreground">{fmtMoney(stats.available)}</div>
-                <div className="mt-2.5 flex justify-between border-t border-dashed border-border pt-2.5 text-[11.5px] text-muted-foreground">
+                <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Доступный остаток аванса</div>
+                <div className="font-heading mt-1 text-2xl font-bold text-foreground">{fmtMoney(stats.available)}</div>
+                <div className="mt-2.5 flex justify-between border-t border-dashed border-border pt-2.5 text-xs text-muted-foreground">
                   <span>Внесено <b className="text-foreground">{fmtMoney(stats.totalIn)}</b></span>
                   <span>Списано <b className="text-foreground">{fmtMoney(stats.used)}</b></span>
                 </div>
               </div>
 
               <div>
-                <div className="mb-2 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказы клиента</div>
+                <div className="mb-2 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Заказы клиента</div>
                 <div className="flex max-h-[320px] flex-col gap-2 overflow-y-auto">
-                  {sortedOrders.length === 0 && <div className="text-[12.5px] text-muted-foreground">Заказов не найдено</div>}
+                  {sortedOrders.length === 0 && <div className="text-sm text-muted-foreground">Заказов не найдено</div>}
                   {sortedOrders.map((o) => {
                     const title = o.title || [o.subject, o.grade, o.quarter, o.lesson && `Урок ${o.lesson}`].filter(Boolean).join(", ") || "Без названия"
                     return (
                       <div key={o.id} className="flex items-center justify-between gap-2.5 rounded-xl bg-muted px-3.5 py-2.5">
                         <div className="min-w-0">
-                          <div className="truncate text-[13px] font-bold">{title}</div>
-                          <div className="text-[11.5px] text-muted-foreground">{STATUS_LABEL[o.status] || o.status} · сдача {fmtDeadline(o.deadline)}</div>
+                          <div className="truncate text-sm font-bold">{title}</div>
+                          <div className="text-xs text-muted-foreground">{STATUS_LABEL[o.status] || o.status} · сдача {fmtDeadline(o.deadline)}</div>
                         </div>
-                        <div className="shrink-0 text-[13px] font-bold">{fmtMoney(orderTotal(o))}</div>
+                        <div className="shrink-0 text-sm font-bold">{fmtMoney(orderTotal(o))}</div>
                       </div>
                     )
                   })}

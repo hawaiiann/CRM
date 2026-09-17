@@ -28,6 +28,10 @@ function dayKey(d = new Date()) {
 }
 
 let directoryHandle: FileSystemDirectoryHandle | null = null
+function setHandle(h: FileSystemDirectoryHandle | null) {
+  directoryHandle = h
+  useAppStore.getState().setBackupDirAccess(!!h)
+}
 
 function isFsAccessSupported() {
   return typeof window !== "undefined" && "showDirectoryPicker" in window
@@ -67,18 +71,44 @@ export async function restoreBackupDirectoryHandle(): Promise<boolean> {
       req.onsuccess = () => resolve(req.result || null)
       req.onerror = () => reject(req.error)
     })
-    if (!handle) { directoryHandle = null; return false }
+    if (!handle) { setHandle(null); return false }
     const perm = await handle.queryPermission({ mode: "readwrite" })
     if (perm === "granted") {
-      directoryHandle = handle
+      setHandle(handle)
       return true
     }
     // Браузер требует явного клика пользователя, чтобы разрешить доступ заново —
     // сама папка "помнится", но её нужно один раз подтвердить кнопкой.
-    directoryHandle = null
+    setHandle(null)
     return false
   } catch {
-    directoryHandle = null
+    setHandle(null)
+    return false
+  }
+}
+
+/**
+ * Подтвердить доступ к уже выбранной папке по клику (из предупреждения в
+ * сайдбаре). requestPermission разрешён только в обработчике клика — поэтому
+ * это отдельная функция, а не часть restoreBackupDirectoryHandle. Папки в
+ * памяти браузера нет — вернёт false, и дальше надо выбирать папку заново.
+ */
+export async function confirmBackupDirectoryAccess(): Promise<boolean> {
+  try {
+    const db = await openHandleDB()
+    const handle = await new Promise<FileSystemDirectoryHandle | null>((resolve, reject) => {
+      const tx = db.transaction(BACKUP_HANDLE_STORE, "readonly")
+      const req = tx.objectStore(BACKUP_HANDLE_STORE).get("backupDir")
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => reject(req.error)
+    })
+    if (!handle) return false
+    const perm = await handle.requestPermission({ mode: "readwrite" })
+    if (perm !== "granted") return false
+    setHandle(handle)
+    await triggerDiskBackup()
+    return true
+  } catch {
     return false
   }
 }
@@ -101,7 +131,7 @@ export async function selectBackupDirectory(): Promise<string | null> {
   }
   try {
     const handle = await window.showDirectoryPicker()
-    directoryHandle = handle
+    setHandle(handle)
     await saveDirectoryHandleToDB(handle)
     const store = useAppStore.getState()
     const next = { ...store.backupSettings, path: handle.name }

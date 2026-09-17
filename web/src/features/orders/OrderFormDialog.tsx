@@ -412,7 +412,7 @@ export function OrderFormDialog({
 
         {confirmDelete ? (
           <div className="flex flex-col gap-3 overflow-y-auto px-1 py-2">
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Заказ будет удалён безвозвратно. Выберите, что сделать со статистикой (часы), которая уже была по нему записана в журнал активности.
             </p>
             <Button variant="destructive" onClick={() => handleDelete(true)}>Удалить и очистить статистику по нему</Button>
@@ -430,7 +430,7 @@ export function OrderFormDialog({
                 <ComboInput value={draft.client} onChange={(v) => setDraft((d) => ({ ...d, client: v }))} options={catalogWithCurrent(appSettings, "clients", draft.client)} placeholder="Введите или выберите..." />
               </Field>
               <Field label={<div className="flex items-center justify-between"><span>Статус</span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-destructive normal-case">
+                <label className="flex cursor-pointer items-center gap-1.5 text-2xs font-bold text-destructive normal-case">
                   <Checkbox checked={draft.priority} onCheckedChange={(c) => setDraft((d) => ({ ...d, priority: !!c }))} />
                   Приоритетный
                 </label>
@@ -496,7 +496,7 @@ export function OrderFormDialog({
                 входят и «Факт. часы», и часы у позиций. Без этого блока
                 разница записывалась в журнал за сегодня без спроса. */}
             {hoursDelta !== 0 && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-[12px]">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-xs">
                 <span>
                   Часы по заказу {hoursDelta > 0 ? "вырастут" : "уменьшатся"} на{" "}
                   <b className="font-bold">{fmtHours(Math.abs(hoursDelta))}</b>. Записать в журнал за
@@ -517,21 +517,21 @@ export function OrderFormDialog({
 
             {/* Аванс */}
             <div className="rounded-xl border border-border bg-muted/60 p-4">
-              <div className="mb-3 text-[11px] font-extrabold tracking-wide text-muted-foreground uppercase">Аванс клиента по заказу</div>
+              <div className="mb-3 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Аванс клиента по заказу</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">Доступно у клиента</div>
-                  <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(clientStats.available)}</div>
+                  <div className="text-2xs font-bold text-muted-foreground">Доступно у клиента</div>
+                  <div className="font-heading mt-0.5 text-lg font-bold">{fmtMoney(clientStats.available)}</div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">Списано на этот заказ</div>
-                  <div className={cn("font-heading mt-0.5 text-[15px] font-bold", (advanceExceedsOrder || advanceOverdraft > 0) && "text-destructive")}>
+                  <div className="text-2xs font-bold text-muted-foreground">Списано на этот заказ</div>
+                  <div className={cn("font-heading mt-0.5 text-lg font-bold", (advanceExceedsOrder || advanceOverdraft > 0) && "text-destructive")}>
                     {fmtMoney(draft.advanceUsed)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">Остаток после аванса</div>
-                  <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(Math.max(0, totalWithTax - advUsed))}</div>
+                  <div className="text-2xs font-bold text-muted-foreground">Остаток после аванса</div>
+                  <div className="font-heading mt-0.5 text-lg font-bold">{fmtMoney(Math.max(0, totalWithTax - advUsed))}</div>
                 </div>
               </div>
 
@@ -540,7 +540,7 @@ export function OrderFormDialog({
                   авансов нельзя было понять, что из них уже потрачено. */}
               <div className="mt-3 flex flex-col gap-1.5">
                 {advanceRows.length === 0 && unallocated === 0 && (
-                  <div className="text-[11.5px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     У клиента нет внесённых авансов — внести можно на Финансах или в карточке клиента.
                   </div>
                 )}
@@ -550,10 +550,10 @@ export function OrderFormDialog({
                   return (
                     <div key={r.advance.id} className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg bg-background/70 px-2.5 py-1.5">
                       <div className="min-w-0">
-                        <div className="truncate text-[12px] font-bold">
+                        <div className="truncate text-xs font-bold">
                           {fmtDeadline(r.advance.date).replace(" г.", "")}{r.advance.note ? ` · ${r.advance.note}` : ""}
                         </div>
-                        <div className={cn("text-[11px]", over ? "font-bold text-destructive" : "text-muted-foreground")}>
+                        <div className={cn("text-2xs", over ? "font-bold text-destructive" : "text-muted-foreground")}>
                           внесено {fmtMoney(r.advance.amount)} · остаток {fmtMoney(r.available)}
                           {over && ` — не хватает ${fmtMoney(mine - r.available)}`}
                         </div>
@@ -570,8 +570,8 @@ export function OrderFormDialog({
                 {unallocated > 0 && (
                   <div className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5">
                     <div className="min-w-0">
-                      <div className="text-[12px] font-bold">Без привязки к авансу</div>
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="text-xs font-bold">Без привязки к авансу</div>
+                      <div className="text-2xs text-muted-foreground">
                         Списание из прежних версий — по клиенту, без указания аванса. Можно перенести в строки выше и обнулить здесь.
                       </div>
                     </div>
@@ -580,36 +580,36 @@ export function OrderFormDialog({
                 )}
               </div>
               {advanceExceedsOrder && (
-                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">
+                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
                   Списано больше, чем стоит заказ ({fmtMoney(totalWithTax)}).
                 </div>
               )}
               {advanceOverdraft > 0 && (
-                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">
+                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
                   Списано больше, чем внесено: у клиента доступно {fmtMoney(advanceAvailableHere)}, не хватает {fmtMoney(advanceOverdraft)}.
                   Внесите аванс на Финансах или уменьшите сумму.
                 </div>
               )}
-              <button type="button" onClick={fillMaxAdvance} className="mt-2 text-[11.5px] font-bold text-foreground hover:underline">
+              <button type="button" onClick={fillMaxAdvance} className="mt-2 text-xs font-bold text-foreground hover:underline">
                 Списать всё
               </button>
             </div>
 
             {/* Оплата */}
             <div className="rounded-xl border border-border bg-muted/60 p-4">
-              <div className="mb-3 text-[11px] font-extrabold tracking-wide text-muted-foreground uppercase">Оплата по заказу</div>
+              <div className="mb-3 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Оплата по заказу</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">Стоимость заказа</div>
-                  <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(totalWithTax)}</div>
+                  <div className="text-2xs font-bold text-muted-foreground">Стоимость заказа</div>
+                  <div className="font-heading mt-0.5 text-lg font-bold">{fmtMoney(totalWithTax)}</div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">Получено деньгами</div>
-                  <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(paymentsTotal)}</div>
+                  <div className="text-2xs font-bold text-muted-foreground">Получено деньгами</div>
+                  <div className="font-heading mt-0.5 text-lg font-bold">{fmtMoney(paymentsTotal)}</div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-bold text-muted-foreground">К доплате</div>
-                  <div className="font-heading mt-0.5 text-[15px] font-bold">{fmtMoney(remaining)}</div>
+                  <div className="text-2xs font-bold text-muted-foreground">К доплате</div>
+                  <div className="font-heading mt-0.5 text-lg font-bold">{fmtMoney(remaining)}</div>
                 </div>
               </div>
 
@@ -620,7 +620,7 @@ export function OrderFormDialog({
                   просто перестали умещаться в его новую цену. Правится теми же
                   полями — списанием аванса выше и платежами ниже. */}
               {pay.overpaid > 0 && (
-                <div className="mt-3 rounded-lg bg-warning px-3 py-2 text-[12px] font-bold text-warning-foreground">
+                <div className="mt-3 rounded-lg bg-warning px-3 py-2 text-xs font-bold text-warning-foreground">
                   Заказ стоит {fmtMoney(totalWithTax)}, а аванс и платежи по нему в сумме дают {fmtMoney(parseNum(draft.advanceUsed) + paymentsTotal)}.
                   {" "}{fmtMoney(pay.overpaid)} не попадают ни в «Получено», ни в «К доплате». Уменьшите списание аванса или платёж, либо верните позицию.
                 </div>
@@ -641,7 +641,7 @@ export function OrderFormDialog({
                 </div>
               )}
 
-              <div className="mt-3 flex flex-wrap gap-4 text-[11.5px] font-bold text-foreground">
+              <div className="mt-3 flex flex-wrap gap-4 text-xs font-bold text-foreground">
                 <button type="button" onClick={() => addPayment()} className="hover:underline">+ Добавить платёж</button>
                 <button type="button" onClick={fillFullPayment} className="hover:underline">Получил всё</button>
               </div>
@@ -674,7 +674,7 @@ export function OrderFormDialog({
                     )}
                   >
                     {line.id === timerLineId && (
-                      <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-bold text-cta">
+                      <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-2xs font-bold text-cta">
                         <Clock className="size-3" strokeWidth={2.5} />
                         Сюда таймер записывает время
                       </div>
@@ -687,7 +687,7 @@ export function OrderFormDialog({
                       <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
                       <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
                       <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
-                      <div className="text-center text-[12.5px] font-bold tabular-nums">{fmtMoney(calculateLineTotal(line))}</div>
+                      <div className="text-center text-sm font-bold tabular-nums">{fmtMoney(calculateLineTotal(line))}</div>
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
                     </div>
 
@@ -712,7 +712,7 @@ export function OrderFormDialog({
                           <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
                         </MiniField>
                       </div>
-                      <div className="flex justify-between text-[12.5px] font-bold">
+                      <div className="flex justify-between text-sm font-bold">
                         <span className="text-muted-foreground">Итого по позиции</span>
                         <span className="tabular-nums">{fmtMoney(calculateLineTotal(line))}</span>
                       </div>
@@ -734,11 +734,11 @@ export function OrderFormDialog({
                 </Select>
               </Field>
 
-              <div className="mt-3 flex justify-between text-[13px] font-bold">
+              <div className="mt-3 flex justify-between text-sm font-bold">
                 <span className="text-muted-foreground">Сумма позиций:</span>
                 <span className="tabular-nums">{fmtMoney(baseTotal)}</span>
               </div>
-              <div className="flex justify-between text-[13px] font-bold">
+              <div className="flex justify-between text-sm font-bold">
                 <span className="text-muted-foreground">Конечная цена (с учётом налога):</span>
                 <span className="tabular-nums">{fmtMoney(totalWithTax)}</span>
               </div>
@@ -769,7 +769,7 @@ export function OrderFormDialog({
 function Field({ label, children, className }: { label: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">{label}</Label>
+      <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">{label}</Label>
       {children}
     </div>
   )
@@ -778,7 +778,7 @@ function Field({ label, children, className }: { label: React.ReactNode; childre
 function MiniField({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
   return (
     <div title={title}>
-      <div className="mb-1 text-[10px] font-bold tracking-wide text-muted-foreground uppercase">{label}</div>
+      <div className="mb-1 text-2xs font-bold tracking-wide text-muted-foreground uppercase">{label}</div>
       {children}
     </div>
   )

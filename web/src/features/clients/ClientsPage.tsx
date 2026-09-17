@@ -128,7 +128,7 @@ export function ClientsContent() {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-[12px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           Показано <b className="text-foreground">{rows.length}</b>
         </span>
       </div>
@@ -136,33 +136,33 @@ export function ClientsContent() {
       {/* mobile — stacked cards */}
       <div className="flex flex-col gap-2.5 sm:hidden">
         {rows.length === 0 && (
-          <div className="py-10 text-center text-[13px] text-muted-foreground">{search ? "Ничего не найдено" : "Клиентов пока нет"}</div>
+          <div className="py-10 text-center text-sm text-muted-foreground">{search ? "Ничего не найдено" : "Клиентов пока нет"}</div>
         )}
         {pagedRows.map((r) => (
           <button key={r.name} type="button" onClick={() => setActiveClient(r.name)} className="glass-surface rounded-xl p-3.5 text-left">
             <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-[14px] font-bold">{r.name}</span>
+              <span className="min-w-0 truncate text-base font-bold">{r.name}</span>
               {r.hasOverdue ? (
-                <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-[11px] font-bold text-destructive">
+                <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-2xs font-bold text-destructive">
                   <AlertTriangle className="size-3" />
                   Просрочка
                 </span>
               ) : r.activeCount ? (
-                <span className="inline-flex h-6 shrink-0 items-center rounded-full gap-1.5 bg-warning px-2.5 text-[11px] font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
+                <span className="inline-flex h-6 shrink-0 items-center rounded-full gap-1.5 bg-warning px-2.5 text-2xs font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
               ) : null}
             </div>
             <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border pt-2.5 text-left">
               <div>
-                <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Заказов</div>
-                <div className="text-[13px] font-bold tabular-nums">{r.activeCount}</div>
+                <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказов</div>
+                <div className="text-sm font-bold tabular-nums">{r.activeCount}</div>
               </div>
               <div>
-                <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Аванс</div>
-                <div className="text-[13px] font-bold tabular-nums">{fmtMoney(r.available)}</div>
+                <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Аванс</div>
+                <div className="text-sm font-bold tabular-nums">{fmtMoney(r.available)}</div>
               </div>
               <div>
-                <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
-                <div className="text-[13px] font-bold tabular-nums text-destructive">{r.totalDue > 0 ? fmtMoney(r.totalDue) : "—"}</div>
+                <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
+                <div className="text-sm font-bold tabular-nums text-destructive">{r.totalDue > 0 ? fmtMoney(r.totalDue) : "—"}</div>
               </div>
             </div>
           </button>
@@ -193,12 +193,12 @@ export function ClientsContent() {
                 <TableCell className="text-right font-bold tabular-nums text-destructive">{r.totalDue > 0 ? fmtMoney(r.totalDue) : "—"}</TableCell>
                 <TableCell className="pr-4">
                   {r.hasOverdue ? (
-                    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-[11px] font-bold text-destructive">
+                    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-2xs font-bold text-destructive">
                       <AlertTriangle className="size-3" />
                       Есть просрочка
                     </span>
                   ) : r.activeCount ? (
-                    <span className="inline-flex h-6 items-center rounded-full gap-1.5 bg-warning px-2.5 text-[11px] font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
+                    <span className="inline-flex h-6 items-center rounded-full gap-1.5 bg-warning px-2.5 text-2xs font-bold text-warning-foreground"><Clock className="size-3" strokeWidth={2.25} />В работе</span>
                   ) : (
                     "—"
                   )}

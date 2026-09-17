@@ -265,9 +265,9 @@ export function LessonSheet({
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Статус / цвет ячейки</span>
+                  <span className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Статус / цвет ячейки</span>
                   {liveLesson.colorLocked && (
-                    <button type="button" onClick={resetColorLock} className="flex items-center gap-1 text-[11px] font-bold text-foreground">
+                    <button type="button" onClick={resetColorLock} className="flex items-center gap-1 text-2xs font-bold text-foreground">
                       <RotateCcw className="size-3" />Сделать автоматическим
                     </button>
                   )}
@@ -279,7 +279,7 @@ export function LessonSheet({
                       type="button"
                       onClick={() => setColor(c.key)}
                       className={cn(
-                        "flex-1 rounded-full py-1.5 text-[11px] font-bold",
+                        "flex-1 rounded-full py-1.5 text-2xs font-bold",
                         liveLesson.color === c.key || (c.key === "green-3" && (liveLesson.color || "").startsWith("green")) ? c.className : "bg-muted text-muted-foreground"
                       )}
                     >
@@ -288,7 +288,7 @@ export function LessonSheet({
                   ))}
                 </div>
                 <div className="mt-1.5 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-2xs text-muted-foreground">
                     {liveLesson.colorLocked
                       ? "Цвет закреплён вручную — не пересчитывается автоматически."
                       : governingOrder
@@ -299,7 +299,7 @@ export function LessonSheet({
                     <OrderLink
                       orderId={governingOrder.id}
                       onClick={() => onOpenChange(false)}
-                      className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-foreground hover:underline"
+                      className="flex shrink-0 items-center gap-1 text-2xs font-bold text-foreground hover:underline"
                     >
                       Заказ <ArrowRight className="size-3" />
                     </OrderLink>
@@ -312,7 +312,7 @@ export function LessonSheet({
                   четверти/номера), но из урока об этом узнать было нельзя и
                   перейти к заказу тоже. */}
               <div>
-                <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказ</div>
+                <div className="mb-1.5 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Заказ</div>
                 {governingOrder ? (
                   <div className="flex flex-col gap-2">
                     {/* Заказ целиком, не выходя из урока: статус, деньги, часы,
@@ -325,33 +325,33 @@ export function LessonSheet({
                         <div className="rounded-xl bg-muted px-3.5 py-3">
                           <div className="flex items-start justify-between gap-2">
                             <OrderLink orderId={governingOrder.id} onClick={() => onOpenChange(false)} className="min-w-0 hover:underline">
-                              <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
-                              <div className="truncate text-[11.5px] text-muted-foreground">{governingOrder.client || "без клиента"}</div>
+                              <div className="truncate text-sm font-bold">{orderTitle(governingOrder)}</div>
+                              <div className="truncate text-xs text-muted-foreground">{governingOrder.client || "без клиента"}</div>
                             </OrderLink>
                             <StatusBadge status={governingOrder.status} onChange={changeStatus} />
                           </div>
 
                           <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-dashed border-border pt-2.5">
                             <div>
-                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Сумма</div>
-                              <div className="text-[13px] font-bold tabular-nums">{fmtMoney(pay.full)}</div>
+                              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Сумма</div>
+                              <div className="text-sm font-bold tabular-nums">{fmtMoney(pay.full)}</div>
                             </div>
                             <div>
-                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
-                              <div className={cn("text-[13px] font-bold tabular-nums", pay.remaining > 0 ? "text-destructive" : "text-muted-foreground")}>
+                              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
+                              <div className={cn("text-sm font-bold tabular-nums", pay.remaining > 0 ? "text-destructive" : "text-muted-foreground")}>
                                 {pay.remaining > 0 ? fmtMoney(pay.remaining) : "оплачено"}
                               </div>
                             </div>
                             <div>
-                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Часы</div>
-                              <div className="text-[13px] font-bold tabular-nums">{hours ? fmtHours(hours) : "—"}</div>
+                              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Часы</div>
+                              <div className="text-sm font-bold tabular-nums">{hours ? fmtHours(hours) : "—"}</div>
                             </div>
                           </div>
 
                           {governingOrder.lines.length > 0 && (
                             <div className="mt-2.5 flex flex-col gap-1 border-t border-dashed border-border pt-2.5">
                               {governingOrder.lines.map((l) => (
-                                <div key={l.id} className="flex items-center justify-between gap-2 text-[12px]">
+                                <div key={l.id} className="flex items-center justify-between gap-2 text-xs">
                                   <span className={cn("min-w-0 truncate", l.ready && "text-muted-foreground line-through")}>{l.label || l.type}</span>
                                   <span className="shrink-0 text-muted-foreground tabular-nums">
                                     {isHourlyUnit(l) ? `${l.pomoHours} ч` : `${l.qty} ${l.type}`} × {fmtMoney(l.rate)} = <b className="text-foreground">{fmtMoney(calculateLineTotal(l))}</b>
@@ -366,7 +366,7 @@ export function LessonSheet({
                             <button
                               type="button"
                               onClick={() => onEditOrder(governingOrder)}
-                              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold hover:bg-background"
+                              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-background"
                             >
                               <Pencil className="size-3" />
                               Изменить
@@ -384,7 +384,7 @@ export function LessonSheet({
                         type="button"
                         disabled={toOrder.length === 0}
                         onClick={pushToOrder}
-                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-bold hover:bg-muted/70 disabled:opacity-40"
+                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-xs font-bold hover:bg-muted/70 disabled:opacity-40"
                         title={toOrder.length ? `Добавит в заказ: ${toOrder.join(", ")}` : "В заказе уже есть всё из чек-листа"}
                       >
                         В заказ{toOrder.length > 0 && ` (${toOrder.length})`}
@@ -393,13 +393,13 @@ export function LessonSheet({
                         type="button"
                         disabled={toLesson.length === 0}
                         onClick={pullFromOrder}
-                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-bold hover:bg-muted/70 disabled:opacity-40"
+                        className="flex-1 rounded-lg bg-muted px-3 py-2 text-xs font-bold hover:bg-muted/70 disabled:opacity-40"
                         title={toLesson.length ? `Добавит в урок: ${toLesson.join(", ")}` : "В чек-листе уже есть все позиции заказа"}
                       >
                         В урок{toLesson.length > 0 && ` (${toLesson.length})`}
                       </button>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-2xs text-muted-foreground">
                       Цену и количество новых позиций заказа проставьте сами — их не угадать.
                     </div>
 
@@ -409,7 +409,7 @@ export function LessonSheet({
                     {toOrder.length > 0 && (
                       <div className="flex gap-2 rounded-xl bg-warning px-3 py-2.5 text-warning-foreground">
                         <TriangleAlert className="mt-px size-3.5 shrink-0" />
-                        <div className="text-[11.5px] leading-relaxed">
+                        <div className="text-xs leading-relaxed">
                           <b className="font-bold">Состав расходится с заказом.</b> В чек-листе{" "}
                           {toOrder.length} {pluralizeRu(toOrder.length, "пункт", "пункта", "пунктов")}, которых нет среди
                           позиций заказа: {toOrder.join(", ")}. Эта работа нигде не посчитана и не оплачена.
@@ -421,7 +421,7 @@ export function LessonSheet({
                       <button
                         type="button"
                         onClick={unlinkOrder}
-                        className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         title="Разорвать связь урока с этим заказом"
                       >
                         <Unlink className="size-3.5" />
@@ -431,18 +431,18 @@ export function LessonSheet({
                   </div>
                 ) : (
                   <div className="rounded-xl bg-muted px-3.5 py-3">
-                    <div className="text-[12.5px] text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                       К этому уроку не привязан ни один заказ.
                     </div>
                     <button
                       type="button"
                       onClick={createOrder}
-                      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-cta/90 px-3 py-2 text-[12.5px] font-extrabold text-cta-foreground hover:bg-cta"
+                      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-cta/90 px-3 py-2 text-sm font-extrabold text-cta-foreground hover:bg-cta"
                     >
                       <Plus className="size-3.5" strokeWidth={2.5} />
                       Создать заказ по этому уроку
                     </button>
-                    <div className="mt-2 text-[11.5px] text-muted-foreground">
+                    <div className="mt-2 text-xs text-muted-foreground">
                       Предмет, класс, четверть, номер и состав подставятся из урока, цены — по ставкам доски, привязка проставится сразу.
                     </div>
                   </div>
@@ -450,19 +450,19 @@ export function LessonSheet({
               </div>
 
               <div className="flex items-center justify-between rounded-full bg-muted px-3.5 py-2">
-                <span className="text-[12px] font-bold text-muted-foreground">Порядковый номер урока</span>
+                <span className="text-xs font-bold text-muted-foreground">Порядковый номер урока</span>
                 <input
                   type="number"
                   value={liveLesson.num}
                   onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 }, { debounce: true })}
                   className={cn(
-                    "w-16 rounded-full border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none",
+                    "w-16 rounded-full border bg-background px-2 py-1 text-center text-sm font-bold outline-none",
                     duplicateNum ? "border-destructive" : "border-border"
                   )}
                 />
               </div>
               {duplicateNum && (
-                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[11.5px] font-bold text-destructive">
+                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
                   Номер {liveLesson.num} уже есть у урока «{duplicateNum.title || `Урок ${duplicateNum.num}`}». Два урока с одним номером
                   путают привязку заказов, а при правке доски один из них будет удалён.
                 </div>
@@ -481,11 +481,11 @@ export function LessonSheet({
                       <button type="button" onClick={() => toggleItem(item.id)} className={cn("flex size-4.5 shrink-0 items-center justify-center rounded-md border", item.done ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
                         {item.done && <Check className="size-3" strokeWidth={3} />}
                       </button>
-                      <span className={cn("flex-1 text-[13px]", item.done && "text-muted-foreground line-through")}>{item.text}</span>
+                      <span className={cn("flex-1 text-sm", item.done && "text-muted-foreground line-through")}>{item.text}</span>
                       <button type="button" onClick={() => deleteItem(item.id)}><Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" /></button>
                     </div>
                   ))}
-                  {items.length === 0 && <div className="text-[12px] text-muted-foreground">Состав урока пуст</div>}
+                  {items.length === 0 && <div className="text-xs text-muted-foreground">Состав урока пуст</div>}
                 </div>
                 <Input
                   value={newItem}
@@ -497,7 +497,7 @@ export function LessonSheet({
               </div>
 
               <div>
-                <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
+                <div className="mb-1.5 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
                 <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value }, { debounce: true })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
                 {noteLinks.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">

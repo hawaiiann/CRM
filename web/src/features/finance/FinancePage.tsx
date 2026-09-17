@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import { OrderLink } from "@/components/ui/order-link"
 import { Plus, Trash2, Wallet, FileText } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
@@ -156,6 +156,9 @@ function filteredSortedFinanceList(
 }
 
 export function FinancePage() {
+  // Вкладка из адреса (/finance?tab=journal): на неё ведут ссылки с «Сегодня».
+  const location = useLocation()
+  const initialTab = new URLSearchParams(location.search).get("tab") || "overview"
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
   const setOrders = useAppStore((s) => s.setOrders)
@@ -353,7 +356,7 @@ export function FinancePage() {
         }
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={initialTab}>
         {/* На узком экране подписи сокращаются. С полными тремя вкладкам нужно
             409px при доступных 343 — строка превращалась в горизонтальную
             прокрутку, где видно одну вкладку из трёх, и переключатель выглядел
@@ -389,8 +392,8 @@ export function FinancePage() {
           <div className="glass-surface rounded-xl p-4.5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-[15px] font-bold">Финансовая статистика по заказам</h3>
-                <div className="text-[12px] text-muted-foreground">Кликните по названию для перехода к заказу. Кликните по статусу для смены оплаты.</div>
+                <h3 className="text-lg font-bold">Финансовая статистика по заказам</h3>
+                <div className="text-xs text-muted-foreground">Кликните по названию для перехода к заказу. Кликните по статусу для смены оплаты.</div>
               </div>
               <Button variant="outline" size="sm" className="shrink-0" onClick={exportFinanceCsv}>Экспорт в CSV</Button>
             </div>
@@ -439,7 +442,7 @@ export function FinancePage() {
 
             {/* Сколько видно и на какую сумму — без этого непонятно, что
                 именно отсекли фильтры. */}
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-muted-foreground">
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
               <span>
                 Показано <b className="text-foreground">{finList.length}</b> из {orders.length} · на сумму{" "}
                 <b className="text-foreground">{fmtMoney(finSubtotal.sum)}</b>
@@ -469,26 +472,26 @@ export function FinancePage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <OrderLink orderId={o.id} className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</OrderLink>
-                        {o.client && <Link to={`/clients/${encodeURIComponent(o.client)}`} className="block truncate text-[12.5px] text-muted-foreground hover:underline">{o.client}</Link>}
+                        {o.client && <Link to={`/clients/${encodeURIComponent(o.client)}`} className="block truncate text-sm text-muted-foreground hover:underline">{o.client}</Link>}
                       </div>
                       <PaymentBadge order={o} onClick={() => togglePayment(o)} />
                     </div>
                     <div className="mt-2.5 grid grid-cols-2 gap-2 border-t border-border pt-2.5">
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Выручка</div>
-                        <div className="font-heading text-[13px] font-bold tabular-nums">{fmtMoney(full)}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Выручка</div>
+                        <div className="font-heading text-sm font-bold tabular-nums">{fmtMoney(full)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Налог</div>
-                        <div className="text-[13px] tabular-nums text-muted-foreground">{fmtMoney(tax)}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Налог</div>
+                        <div className="text-sm tabular-nums text-muted-foreground">{fmtMoney(tax)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Из аванса</div>
-                        <div className="text-[13px] font-bold tabular-nums">{pay.advUsed > 0 ? fmtMoney(pay.advUsed) : "—"}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Из аванса</div>
+                        <div className="text-sm font-bold tabular-nums">{pay.advUsed > 0 ? fmtMoney(pay.advUsed) : "—"}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
-                        <div className="text-[13px] font-bold tabular-nums text-destructive">{pay.remaining > 0 ? fmtMoney(pay.remaining) : "0 ₽"}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
+                        <div className="text-sm font-bold tabular-nums text-destructive">{pay.remaining > 0 ? fmtMoney(pay.remaining) : "0 ₽"}</div>
                       </div>
                     </div>
                   </div>
@@ -555,8 +558,8 @@ export function FinancePage() {
 
         <TabsContent value="advances" className="mt-4">
           <div className="glass-surface rounded-xl p-4.5">
-            <h3 className="text-[15px] font-bold">Реестр полученных авансов и депозитов</h3>
-            <div className="mb-3 text-[12px] text-muted-foreground">История поступлений авансов от клиентов и их доступный остаток</div>
+            <h3 className="text-lg font-bold">Реестр полученных авансов и депозитов</h3>
+            <div className="mb-3 text-xs text-muted-foreground">История поступлений авансов от клиентов и их доступный остаток</div>
 
             <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <Input
@@ -582,13 +585,13 @@ export function FinancePage() {
               </Select>
             </div>
 
-            <div className="mb-3 text-[12px] text-muted-foreground">
+            <div className="mb-3 text-xs text-muted-foreground">
               Показано <b className="text-foreground">{advList.length}</b> из {advances.length} · на сумму{" "}
               <b className="text-foreground">{fmtMoney(advSum)}</b>
             </div>
 
             {unallocatedByClient.size > 0 && (
-              <div className="mb-3 rounded-lg bg-warning px-3 py-2.5 text-[12px] text-warning-foreground">
+              <div className="mb-3 rounded-lg bg-warning px-3 py-2.5 text-xs text-warning-foreground">
                 <b className="font-bold">Списания без привязки к авансу</b> (заказы из прежних версий):{" "}
                 {[...unallocatedByClient.entries()].map(([c, v]) => `${c} — ${fmtMoney(v)}`).join(", ")}.
                 {" "}В остатках по строкам они не учтены. Привязать можно в форме заказа, блок «Аванс клиента по заказу».
@@ -605,22 +608,22 @@ export function FinancePage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate font-bold">{a.client}</div>
-                        <div className="text-[12px] text-muted-foreground">{a.date}{a.note ? " · " + a.note : ""}</div>
+                        <div className="text-xs text-muted-foreground">{a.date}{a.note ? " · " + a.note : ""}</div>
                       </div>
                       <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => removeAdvance(a.id)}><Trash2 className="text-muted-foreground hover:text-destructive" /></Button>
                     </div>
                     <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border pt-2.5">
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Внесено</div>
-                        <div className="text-[13px] font-bold tabular-nums">{fmtMoney(a.amount)}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Внесено</div>
+                        <div className="text-sm font-bold tabular-nums">{fmtMoney(a.amount)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Списано</div>
-                        <div className="text-[13px] tabular-nums text-muted-foreground">{fmtMoney(stats.used)}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Списано</div>
+                        <div className="text-sm tabular-nums text-muted-foreground">{fmtMoney(stats.used)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Остаток</div>
-                        <div className="text-[13px] font-bold tabular-nums">{fmtMoney(stats.available)}</div>
+                        <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Остаток</div>
+                        <div className="text-sm font-bold tabular-nums">{fmtMoney(stats.available)}</div>
                       </div>
                     </div>
                   </div>
@@ -700,9 +703,9 @@ export function FinancePage() {
 function StatTile({ num, lbl, sub, accent }: { num: string; lbl: string; sub: string; tone?: "success" | "warning" | "destructive"; accent?: boolean }) {
   return (
     <div className={cn("glass-surface rounded-xl p-4", accent && "glass-surface-accent ring-1 ring-cta/25")}>
-      <div className="font-heading text-[26px] font-bold tabular-nums">{num}</div>
-      <div className="mt-1 text-[12px] font-bold text-muted-foreground">{lbl}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>
+      <div className="font-heading text-2xl font-bold tabular-nums">{num}</div>
+      <div className="mt-1 text-xs font-bold text-muted-foreground">{lbl}</div>
+      <div className="mt-0.5 text-2xs text-muted-foreground">{sub}</div>
     </div>
   )
 }
@@ -766,23 +769,23 @@ function TimeReportTab() {
     <div className="glass-surface rounded-xl p-4.5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-bold">Отчёт по времени</h3>
-          <div className="text-[12px] text-muted-foreground">Сколько часов реально отработано за период — по данным таймера.</div>
+          <h3 className="text-lg font-bold">Отчёт по времени</h3>
+          <div className="text-xs text-muted-foreground">Сколько часов реально отработано за период — по данным таймера.</div>
         </div>
         <Button variant="outline" size="sm" onClick={exportCsv}>Экспорт в CSV</Button>
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">С</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">С</label>
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">По</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">По</label>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Группировать</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Группировать</label>
           <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>

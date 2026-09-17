@@ -35,7 +35,7 @@ export function SidebarTimerCard() {
 
   return (
     <div className="rounded-2xl border border-sidebar-border bg-muted/60 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+      <div className="mb-2 flex items-center gap-1.5 text-2xs font-bold text-muted-foreground">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.2" /><path d="M8 4.6V8.2L10.6 9.9" /></svg>
         Таймер
       </div>
@@ -45,8 +45,8 @@ export function SidebarTimerCard() {
           className="pointer-events-none absolute top-2 right-2 size-4 rounded-full"
           style={{ background: `conic-gradient(rgba(255,255,255,0.85) ${progress * 360}deg, rgba(255,255,255,0.15) ${progress * 360}deg)` }}
         />
-        <div className="font-heading text-[26px] font-bold tabular-nums text-white">{fmtTime(elapsedSec)}</div>
-        <div className={cn("mt-0.5 max-w-[160px] truncate text-[11px] font-semibold", id === "standalone" ? "text-white/50" : "text-white/80")}>{title}</div>
+        <div className="font-heading text-2xl font-bold tabular-nums text-white">{fmtTime(elapsedSec)}</div>
+        <div className={cn("mt-0.5 max-w-[160px] truncate text-2xs font-semibold", id === "standalone" ? "text-white/50" : "text-white/80")}>{title}</div>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">

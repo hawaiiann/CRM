@@ -115,7 +115,7 @@ export function ComboInput({
         onClick={() => { setTyping(false); decideDirection(); setOpen(true) }}
         onFocus={() => { if (Date.now() - mountedAt.current < 500) return; setTyping(false); decideDirection(); setOpen(true) }}
         className={cn(
-          "h-9 w-full rounded-md border border-border bg-background px-3 pr-8 text-[13px] outline-none",
+          "h-9 w-full rounded-md border border-border bg-background px-3 pr-8 text-sm outline-none",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
           inputClassName
         )}
@@ -139,7 +139,7 @@ export function ComboInput({
           )}
         >
           {list.length === 0 ? (
-            <div className="px-2.5 py-2 text-[12.5px] text-muted-foreground">
+            <div className="px-2.5 py-2 text-sm text-muted-foreground">
               {options.length ? "Ничего не найдено" : "Справочник пуст"}
             </div>
           ) : (
@@ -151,7 +151,7 @@ export function ComboInput({
                 // варианту иногда не доходил.
                 onMouseDown={(e) => { e.preventDefault(); pick(o) }}
                 className={cn(
-                  "block w-full truncate rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-muted",
+                  "block w-full truncate rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-muted",
                   o === value && "font-bold"
                 )}
               >

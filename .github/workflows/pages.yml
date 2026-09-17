@@ -48,7 +48,6 @@ jobs:
       - name: Статика рядом с приложением
         run: |
           cp favicon.svg icons.svg _site/ 2>/dev/null || true
-          cp -r legacy _site/legacy
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

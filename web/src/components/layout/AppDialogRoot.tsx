@@ -52,7 +52,7 @@ export function AppDialogRoot() {
         </DialogHeader>
 
         {current.bullets && current.bullets.length > 0 && (
-          <ul className="flex flex-col gap-1.5 rounded-xl bg-muted px-3.5 py-3 text-[12.5px] leading-relaxed">
+          <ul className="flex flex-col gap-1.5 rounded-xl bg-muted px-3.5 py-3 text-sm leading-relaxed">
             {current.bullets.map((b, i) => (
               <li key={i} className="flex gap-2">
                 <span className="text-muted-foreground">•</span>
@@ -62,7 +62,7 @@ export function AppDialogRoot() {
           </ul>
         )}
 
-        {current.note && <div className="text-[12px] text-muted-foreground">{current.note}</div>}
+        {current.note && <div className="text-xs text-muted-foreground">{current.note}</div>}
 
         <DialogFooter>
           {isConfirm && (

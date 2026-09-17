@@ -21,7 +21,7 @@ export function Linkified({ text, className }: { text: string; className?: strin
             title={p.value}
             onClick={(e) => e.stopPropagation()}
             className={cn(
-              "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-overlay/10 px-1.5 py-px align-baseline text-[11.5px] font-bold text-foreground/85 no-underline hover:bg-overlay/20"
+              "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-overlay/10 px-1.5 py-px align-baseline text-xs font-bold text-foreground/85 no-underline hover:bg-overlay/20"
             )}
           >
             <ExternalLink className="size-3 shrink-0" />

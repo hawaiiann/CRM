@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronDown, Settings, Archive, ArchiveRestore, X, CalendarDays, FolderOpen } from "lucide-react"
+import { ChevronDown, Settings, Archive, ArchiveRestore, X, CalendarDays, FolderOpen, LayoutGrid, List } from "lucide-react"
+import { StatusBadge } from "@/features/orders/StatusBadge"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
@@ -26,6 +27,14 @@ function randId(prefix: string) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
+// Вид сетки: квадраты для обзора, строки для работы (тема, состав, заказ).
+// Общий на все классы, живёт в браузере.
+type BoardView = "grid" | "rows"
+const VIEW_KEY = "crm_board_view"
+function readView(): BoardView {
+  try { return localStorage.getItem(VIEW_KEY) === "rows" ? "rows" : "grid" } catch { return "grid" }
+}
+
 export function BoardCard({
   board,
   onEdit,
@@ -47,6 +56,11 @@ export function BoardCard({
   const collapsed = !!board.collapsed
   const [showCompleted, setShowCompleted] = useState(false)
   const [deleteArmedId, setDeleteArmedId] = useState<string | null>(null)
+  const [view, setView] = useState<BoardView>(readView)
+  function switchView(v: BoardView) {
+    setView(v)
+    try { localStorage.setItem(VIEW_KEY, v) } catch { /* приватный режим */ }
+  }
 
   useEffect(() => {
     if (!deleteArmedId) return
@@ -150,11 +164,44 @@ export function BoardCard({
         onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
         onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
         className={cn(
-          "flex size-11 items-center justify-center rounded-[13px] text-[14.5px] font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
+          "flex size-11 items-center justify-center rounded-[13px] text-base font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
           armed ? "bg-destructive text-white" : CELL_STYLE[colorClass]
         )}
       >
         {armed ? <X className="size-4.5" strokeWidth={2.5} /> : lesson.num}
+      </button>
+    )
+  }
+
+  // Строка урока: номер в цвете клетки, тема, состав, заказ, неделя.
+  function renderRow(lesson: PlanningLesson) {
+    const colorClass = colorOf(lesson)
+    const order = governing.get(lesson.id)
+    const items = lesson.items || []
+    const done = items.filter((i) => i.done).length
+    const week = plan?.weeks.find((w) => w.lessons.some((l) => l.id === lesson.id))
+    const topic = lesson.title && !/^урок\s*\d+$/i.test(lesson.title) ? lesson.title : ""
+    const armed = deleteArmedId === lesson.id
+    return (
+      <button
+        key={lesson.id}
+        type="button"
+        data-lesson-id={lesson.id}
+        onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
+        onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
+        className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-muted"
+      >
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold", armed ? "bg-destructive text-white" : CELL_STYLE[colorClass])}>
+          {armed ? <X className="size-4" strokeWidth={2.5} /> : lesson.num}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate text-sm", topic ? "font-bold" : "text-muted-foreground")}>{topic || "Без темы"}</span>
+          <span className="block truncate text-2xs text-muted-foreground">
+            {items.length ? `${done}/${items.length}: ${items.map((i) => (i.done ? "✓ " : "") + i.text).join(", ")}` : "состав пуст"}
+          </span>
+        </span>
+        {week && <span className="hidden shrink-0 text-2xs font-bold text-muted-foreground uppercase sm:block">{week.index + 1} нед</span>}
+        {order ? <StatusBadge status={order.status} /> : <span className="hidden shrink-0 text-2xs text-muted-foreground sm:block">без заказа</span>}
       </button>
     )
   }
@@ -167,8 +214,8 @@ export function BoardCard({
     if (w.planned === 0) {
       return (
         <div key={w.index} className={cn("flex flex-col justify-center rounded-[15px] border border-dashed px-2 py-1.5", current ? "border-emphasis/50" : "border-border")}>
-          <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">{w.index + 1} нед</div>
-          <div className="text-[10px] text-muted-foreground">каникулы</div>
+          <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">{w.index + 1} нед</div>
+          <div className="text-2xs text-muted-foreground">каникулы</div>
         </div>
       )
     }
@@ -184,7 +231,7 @@ export function BoardCard({
           lagging && !current && "border-destructive/30"
         )}
       >
-        <div className={cn("mb-1 flex items-center gap-1 px-0.5 text-[10px] font-bold tracking-wide uppercase", current ? "text-foreground" : lagging ? "text-destructive" : "text-muted-foreground")}>
+        <div className={cn("mb-1 flex items-center gap-1 px-0.5 text-2xs font-bold tracking-wide uppercase", current ? "text-foreground" : lagging ? "text-destructive" : "text-muted-foreground")}>
           <span>{w.index + 1} нед</span>
           <span className="font-semibold normal-case tracking-normal opacity-80">· {weekLabel(w)}</span>
         </div>
@@ -197,16 +244,16 @@ export function BoardCard({
     <div className="glass-surface rounded-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-muted px-3 py-1.5 text-[12.5px] font-bold">{board.subject || "Предмет"}</span>
-          <span className="rounded-full bg-muted px-3 py-1.5 text-[12.5px] font-bold">{board.title || "Класс"}</span>
-          {board.quarter && <span className="text-[12px] text-muted-foreground">{board.quarter}</span>}
+          <span className="rounded-full bg-muted px-3 py-1.5 text-sm font-bold">{board.subject || "Предмет"}</span>
+          <span className="rounded-full bg-muted px-3 py-1.5 text-sm font-bold">{board.title || "Класс"}</span>
+          {board.quarter && <span className="text-xs text-muted-foreground">{board.quarter}</span>}
           {board.deadline ? (
-            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold">
+            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-2xs font-bold">
               <CalendarDays className="size-3" />
               {fmtDeadline(board.deadline)}
             </button>
           ) : (
-            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
+            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-bold text-muted-foreground">
               <CalendarDays className="size-3" />+ Дедлайн
             </button>
           )}
@@ -216,7 +263,7 @@ export function BoardCard({
               target="_blank"
               rel="noopener noreferrer"
               title={materialsLink}
-              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold hover:bg-muted"
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-2xs font-bold hover:bg-muted"
             >
               <FolderOpen className="size-3" />
               Материалы
@@ -224,6 +271,14 @@ export function BoardCard({
           )}
         </div>
         <div className="flex items-center gap-1.5">
+          <div className="mr-1 flex rounded-md border border-border p-0.5">
+            <button type="button" title="Клетки" onClick={() => switchView("grid")} className={cn("flex size-7 items-center justify-center rounded", view === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              <LayoutGrid className="size-3.5" />
+            </button>
+            <button type="button" title="Строки: тема, состав, заказ" onClick={() => switchView("rows")} className={cn("flex size-7 items-center justify-center rounded", view === "rows" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              <List className="size-3.5" />
+            </button>
+          </div>
           <IconBtn title="Настройки класса" onClick={onEdit}><Settings className="size-3.5" /></IconBtn>
           <Button variant="outline" size="sm" onClick={addLesson}>Добавить урок</Button>
           <IconBtn title={board.archived ? "Вернуть из архива" : "В архив"} onClick={toggleArchived}>
@@ -240,24 +295,24 @@ export function BoardCard({
         <div className="px-4 pb-4">
           <div className="mb-3 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))" }}>
             <div className="rounded-xl border-[1.5px] border-overlay/25 bg-overlay/5 px-3 py-2.5">
-              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Пункты</div>
-              <div className="font-heading mt-0.5 text-[13px] font-bold">{doneItems}/{totalItems} · {mainPct}%</div>
+              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Пункты</div>
+              <div className="font-heading mt-0.5 text-sm font-bold">{doneItems}/{totalItems} · {mainPct}%</div>
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/80" style={{ width: `${mainPct}%` }} /></div>
             </div>
             <div className="rounded-xl bg-muted px-3 py-2.5">
-              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Уроки</div>
-              <div className="font-heading mt-0.5 text-[13px] font-bold">{greenLessons}/{lessons.length}</div>
+              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Уроки</div>
+              <div className="font-heading mt-0.5 text-sm font-bold">{greenLessons}/{lessons.length}</div>
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${lessonsPct}%` }} /></div>
             </div>
             {plan && (
               // График: где программа должна быть сегодня и сколько уроков
               // отстаёт. Считается по неделям от даты старта (lib/boardSchedule.ts).
               <div className={cn("rounded-xl px-3 py-2.5", plan.behind > 0 ? "bg-destructive/10" : "bg-muted")}>
-                <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">График</div>
-                <div className="font-heading mt-0.5 text-[13px] font-bold">
+                <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">График</div>
+                <div className="font-heading mt-0.5 text-sm font-bold">
                   {plan.currentWeek < 0 ? "до старта" : plan.currentWeek >= plan.weeks.length ? "завершён" : `${plan.currentWeek + 1} из ${plan.weeks.length} нед`}
                 </div>
-                <div className={cn("mt-1 text-[10.5px] font-bold", plan.behind > 0 ? "text-destructive" : "text-muted-foreground")}>
+                <div className={cn("mt-1 text-2xs font-bold", plan.behind > 0 ? "text-destructive" : "text-muted-foreground")}>
                   {plan.behind > 0 ? `отстаёт на ${plan.behind}` : "в графике"} · план {plan.plannedByNow}, готово {plan.done}
                 </div>
               </div>
@@ -266,15 +321,17 @@ export function BoardCard({
               const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0
               return (
                 <div key={name} className="rounded-xl bg-muted px-3 py-2.5">
-                  <div className="truncate text-[10px] font-bold tracking-wide text-muted-foreground uppercase">{name}</div>
-                  <div className="font-heading mt-0.5 text-[13px] font-bold">{stat.done}/{stat.total}</div>
+                  <div className="truncate text-2xs font-bold tracking-wide text-muted-foreground uppercase">{name}</div>
+                  <div className="font-heading mt-0.5 text-sm font-bold">{stat.done}/{stat.total}</div>
                   <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${pct}%` }} /></div>
                 </div>
               )
             })}
           </div>
 
-          {plan ? (
+          {view === "rows" ? (
+            <div className="flex flex-col gap-0.5">{lessons.slice().sort((a, b) => (a.num || 0) - (b.num || 0)).filter(isVisible).map(renderRow)}</div>
+          ) : plan ? (
             <div className="-m-1.5 flex flex-wrap gap-x-2 gap-y-1">{plan.weeks.map(renderWeek)}</div>
           ) : (
             <div className="flex flex-wrap gap-1.5">{lessons.filter(isVisible).map(renderCell)}</div>
@@ -283,7 +340,7 @@ export function BoardCard({
           {/* Жест удаления правой кнопкой раньше нигде не был подписан —
               о нём просто не знали. Основной путь — корзина в карточке урока. */}
           {lessons.length > 0 && (
-            <div className="mt-2 text-[10.5px] text-muted-foreground">
+            <div className="mt-2 text-2xs text-muted-foreground">
               Клик — открыть урок. Удалить: корзина в карточке урока или правая кнопка по клетке.
               {!plan && " Уроков в неделю и дата старта — в настройках класса: сетка разложится по неделям."}
             </div>
@@ -293,7 +350,7 @@ export function BoardCard({
             <button
               type="button"
               onClick={() => setShowCompleted((v) => !v)}
-              className="mx-auto mt-3 flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-[11px] font-bold text-muted-foreground"
+              className="mx-auto mt-3 flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-2xs font-bold text-muted-foreground"
             >
               {showCompleted ? "Скрыть выполненные" : "Показать выполненные"}
               {!showCompleted && hiddenCompletedCount > 0 && <span className="rounded-full bg-overlay/20 px-1.5 text-foreground">{hiddenCompletedCount}</span>}

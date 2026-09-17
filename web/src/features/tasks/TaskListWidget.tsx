@@ -145,12 +145,12 @@ function PeriodSection({
   return (
     <div className="glass-surface flex flex-col rounded-xl p-4.5" style={{ minHeight: 260 }}>
       <div className="mb-2.5 flex items-center justify-between">
-        <div className="text-[14px] font-bold">{PERIOD_LABELS[period]}</div>
-        <span className="text-[11px] font-bold text-muted-foreground">{active.length} активных</span>
+        <div className="text-base font-bold">{PERIOD_LABELS[period]}</div>
+        <span className="text-2xs font-bold text-muted-foreground">{active.length} активных</span>
       </div>
 
       <div className="flex flex-col gap-1">
-        {active.length === 0 && <div className="py-6 text-center text-[12.5px] text-muted-foreground">Нет активных задач</div>}
+        {active.length === 0 && <div className="py-6 text-center text-sm text-muted-foreground">Нет активных задач</div>}
         {active.map((t) => (
           <TaskRow
             key={t.id}
@@ -172,7 +172,7 @@ function PeriodSection({
 
       {done.length > 0 && (
         <div className="mt-2 border-t border-border pt-2">
-          <button type="button" onClick={() => setDoneOpen((v) => !v)} className="flex w-full items-center justify-between text-[11.5px] font-bold text-muted-foreground">
+          <button type="button" onClick={() => setDoneOpen((v) => !v)} className="flex w-full items-center justify-between text-xs font-bold text-muted-foreground">
             Выполнено — {done.length}
             <ChevronDown className={cn("size-3.5 transition-transform", doneOpen && "rotate-180")} />
           </button>
@@ -206,7 +206,7 @@ function PeriodSection({
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitAdd() } }}
           placeholder="+ Добавить задачу... (Enter)"
           rows={1}
-          className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-[12.5px] outline-none focus:border-ring"
+          className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm outline-none focus:border-ring"
         />
       </div>
     </div>
@@ -252,14 +252,14 @@ function TaskRow({
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSaveEdit() } if (e.key === "Escape") onCancelEdit() }}
           rows={1}
           autoFocus
-          className="flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-[13px] outline-none"
+          className="flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-sm outline-none"
         />
         <input
           value={editTime}
           onChange={(e) => onEditTime(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") onCancelEdit() }}
           placeholder="Время"
-          className="w-16 rounded-md border border-border bg-background px-1.5 py-1 text-[12px] outline-none"
+          className="w-16 rounded-md border border-border bg-background px-1.5 py-1 text-xs outline-none"
         />
         <button type="button" onClick={onSaveEdit} className="mt-0.5 text-emphasis"><Check className="size-4" /></button>
       </div>
@@ -270,10 +270,10 @@ function TaskRow({
       <button type="button" onClick={onToggle} className={cn("mt-0.5 flex size-4.5 shrink-0 items-center justify-center rounded-md border", task.done ? "border-emphasis bg-emphasis/90 text-emphasis-foreground" : "border-border")}>
         {task.done && <Check className="size-3" strokeWidth={3} />}
       </button>
-      <span onClick={onStartEdit} className={cn("min-w-0 flex-1 cursor-pointer text-[13px] leading-snug break-words", task.done && "text-muted-foreground line-through")}>
+      <span onClick={onStartEdit} className={cn("min-w-0 flex-1 cursor-pointer text-sm leading-snug break-words", task.done && "text-muted-foreground line-through")}>
         {overdue && "⏰ "}<Linkified text={task.text} />
       </span>
-      {task.time && <span className="text-[11px] font-semibold text-muted-foreground">{task.time}</span>}
+      {task.time && <span className="text-2xs font-semibold text-muted-foreground">{task.time}</span>}
       <button type="button" onClick={onStartEdit} className="opacity-0 group-hover:opacity-100"><Pencil className="size-3.5 text-muted-foreground" /></button>
       <button type="button" onClick={onDelete} className="opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" /></button>
     </div>

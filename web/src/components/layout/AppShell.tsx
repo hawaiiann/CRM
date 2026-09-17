@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Database,
   CloudOff,
+  HardDrive,
   Sun,
   Moon,
   Menu,
@@ -13,7 +14,8 @@ import { cn } from "@/lib/utils"
 import { useAppStore } from "@/store/useAppStore"
 import { useTimerStore } from "@/store/useTimerStore"
 import { useThemeStore } from "@/store/useThemeStore"
-import { restoreBackupDirectoryHandle, triggerDiskBackup } from "@/lib/diskBackup"
+import { restoreBackupDirectoryHandle, triggerDiskBackup, confirmBackupDirectoryAccess } from "@/lib/diskBackup"
+import { hotkeyFor, HOTKEY_HINT } from "./hotkeys"
 import { retryCloudSync } from "@/lib/cloudSync"
 import { SidebarTimerCard } from "./SidebarTimerCard"
 import { ToastRoot } from "./ToastRoot"
@@ -73,6 +75,24 @@ export function AppShell() {
     setMobileNavOpen(false)
   }, [location.pathname])
 
+  // Горячие клавиши (см. hotkeys.ts): пробел — таймер, N — новый заказ, / — поиск.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const action = hotkeyFor(e)
+      if (!action) return
+      e.preventDefault()
+      if (action === "timer") useTimerStore.getState().toggle()
+      else if (action === "newOrder") navigate("/orders", { state: { newOrder: Date.now() } })
+      else if (action === "search") {
+        if (window.location.hash.startsWith("#/orders")) window.dispatchEvent(new Event("crm:focus-search"))
+        else navigate("/orders", { state: { focusSearch: Date.now() } })
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     restoreBackupDirectoryHandle()
 
@@ -112,7 +132,7 @@ export function AppShell() {
 
         {NAV.map((group) => (
           <div key={group.label} className="flex flex-col gap-1">
-            <div className="px-3 pt-3 pb-1.5 text-[11px] font-extrabold tracking-wide text-muted-foreground uppercase">
+            <div className="px-3 pt-3 pb-1.5 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
               {group.label}
             </div>
             {group.items.map((item) => (
@@ -122,7 +142,7 @@ export function AppShell() {
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13.5px] font-bold transition-colors",
+                    "flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-base font-bold transition-colors",
                     isActive || (item.match || []).some((m) => location.pathname.startsWith(m))
                       ? "bg-emphasis/88 text-emphasis-foreground"
                       : "text-muted-foreground hover:bg-overlay/10 hover:text-foreground"
@@ -152,8 +172,8 @@ export function AppShell() {
           >
             <Menu className="size-5" />
           </button>
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-emphasis/90 font-heading text-[11px] font-extrabold text-emphasis-foreground">Д</div>
-          <div className="font-heading text-[14px] font-extrabold tracking-tight">Дизайн · CRM</div>
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-emphasis/90 font-heading text-2xs font-extrabold text-emphasis-foreground">Д</div>
+          <div className="font-heading text-base font-extrabold tracking-tight">Дизайн · CRM</div>
         </div>
 
         <main className={cn("relative min-w-0 w-full flex-1 px-4 py-5 pb-12 text-foreground md:px-8 md:py-7", isDark && "dark")}>
@@ -185,7 +205,7 @@ function ThemeToggle() {
         type="button"
         onClick={() => setMode("light")}
         className={cn(
-          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-bold transition-colors",
+          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold transition-colors",
           mode === "light" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
         )}
       >
@@ -196,7 +216,7 @@ function ThemeToggle() {
         type="button"
         onClick={() => setMode("dark")}
         className={cn(
-          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-bold transition-colors",
+          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold transition-colors",
           mode === "dark" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
         )}
       >
@@ -211,7 +231,38 @@ function SidebarFooter() {
   const syncStatus = useAppStore((s) => s.syncStatus)
   const syncError = useAppStore((s) => s.syncError)
   const schemaIssue = useAppStore((s) => s.schemaIssue)
+  const backupSettings = useAppStore((s) => s.backupSettings)
+  const backupDirAccess = useAppStore((s) => s.backupDirAccess)
+  const navigate = useNavigate()
   const [sqlCopied, setSqlCopied] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+
+  // Бэкап на диск не пишется: нет доступа к папке (браузер требует
+  // подтверждать его кликом) или последний файл старше двух дней. Раньше
+  // это было видно только в Справочниках, и бэкап молча стоял с 21 августа.
+  // «Сейчас» — состояние, а не Date.now() в рендере: обновляется раз в десять
+  // минут, чтобы счётчик дней не застывал в долгой сессии.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 600000)
+    return () => window.clearInterval(t)
+  }, [])
+  const daysSinceBackup = backupSettings.lastBackup ? Math.floor((now - backupSettings.lastBackup) / 86400000) : null
+  const backupStale = backupSettings.enabled && (!backupDirAccess || daysSinceBackup === null || daysSinceBackup >= 2)
+
+  async function fixBackup() {
+    setBackupBusy(true)
+    try {
+      if (!backupDirAccess) {
+        const ok = await confirmBackupDirectoryAccess()
+        if (!ok) navigate("/settings")
+      } else {
+        await triggerDiskBackup()
+      }
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   async function copySql() {
     try {
@@ -225,10 +276,24 @@ function SidebarFooter() {
 
   return (
     <div className="pt-3">
+      {backupStale && (
+        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-2xs text-warning-foreground">
+          <div className="flex items-center gap-1.5 font-bold">
+            <HardDrive className="size-3.5 shrink-0" />
+            Бэкап на диск не пишется
+          </div>
+          <div className="mt-0.5 pl-5 opacity-90">
+            {!backupDirAccess ? "Нужно подтвердить доступ к папке — браузер спрашивает после перезапуска." : daysSinceBackup === null ? "Ещё ни разу не записан." : `Последний файл ${daysSinceBackup} дн. назад.`}
+          </div>
+          <button type="button" disabled={backupBusy} onClick={fixBackup} className="mt-1.5 ml-5 rounded-md border border-warning-foreground/30 px-2 py-0.5 font-bold hover:bg-warning disabled:opacity-60">
+            {!backupDirAccess ? "Подтвердить доступ" : "Записать сейчас"}
+          </button>
+        </div>
+      )}
       {/* База не обновлена: жёлтое, не красное — данные сохраняются, но не
           всё. Раньше это выглядело как вечное «не сохранено в облако». */}
       {schemaIssue && (
-        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-[11px] text-warning-foreground">
+        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-2xs text-warning-foreground">
           <div className="flex items-center gap-1.5 font-bold">
             <Database className="size-3.5 shrink-0" />
             Нужно обновить базу
@@ -247,7 +312,7 @@ function SidebarFooter() {
       {/* Причина и кнопка повтора: раньше была только надпись, и оставалось
           гадать, что случилось и ждать ли автоматического повтора. */}
       {syncStatus === "failed" && (
-        <div className="mb-2 rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
+        <div className="mb-2 rounded-lg bg-destructive/10 px-2.5 py-2 text-2xs text-destructive">
           <div className="flex items-center gap-1.5 font-bold">
             <CloudOff className="size-3.5 shrink-0" />
             Не сохранено в облако
@@ -265,7 +330,8 @@ function SidebarFooter() {
       {/* Версия внизу сайдбара — как было в ванильной версии: по скриншоту
           сразу видно, какая сборка у пользователя. Без разделителя: линия
           отсекала подпись от таймера и выглядела лишней рамкой. */}
-      <div className="text-center text-[11px] font-semibold text-muted-foreground">v{APP_VERSION}</div>
+      <div className="text-center text-2xs font-semibold text-muted-foreground">v{APP_VERSION}</div>
+      <div className="mt-1 hidden text-center text-2xs text-muted-foreground/70 md:block" title="Работают, когда курсор не в поле ввода">{HOTKEY_HINT}</div>
     </div>
   )
 }
@@ -274,8 +340,8 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="font-heading text-[30px] font-bold tracking-tight">{title}</h1>
-        <p className="text-[13.5px] text-muted-foreground">{subtitle}</p>
+        <h1 className="font-heading text-3xl font-bold tracking-tight">{title}</h1>
+        <p className="text-base text-muted-foreground">{subtitle}</p>
       </div>
       {actions}
     </div>

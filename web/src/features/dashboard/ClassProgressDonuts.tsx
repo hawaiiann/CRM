@@ -34,7 +34,7 @@ function ClassDonut({ pct, title, color }: { pct: number; title: string; color: 
               content={({ viewBox }) => {
                 if (!viewBox || !("cx" in viewBox) || viewBox.cx == null || viewBox.cy == null) return null
                 return (
-                  <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle" className="fill-foreground font-heading text-[13px] font-bold">
+                  <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle" className="fill-foreground font-heading text-sm font-bold">
                     {pct}%
                   </text>
                 )
@@ -43,7 +43,7 @@ function ClassDonut({ pct, title, color }: { pct: number; title: string; color: 
           </Pie>
         </PieChart>
       </ChartContainer>
-      <div className="max-w-[76px] truncate text-[11px] font-semibold text-muted-foreground" title={title}>{title}</div>
+      <div className="max-w-[76px] truncate text-2xs font-semibold text-muted-foreground" title={title}>{title}</div>
     </div>
   )
 }
@@ -52,7 +52,7 @@ export function ClassProgressDonuts() {
   const boards = useAppStore((s) => s.planningBoards).filter((b) => !b.archived)
 
   if (boards.length === 0) {
-    return <div className="py-4 text-[12.5px] text-muted-foreground">Нет активных классов</div>
+    return <div className="py-4 text-sm text-muted-foreground">Нет активных классов</div>
   }
 
   // Считаем и складываем в один проход, но без записи во внешние переменные
@@ -76,7 +76,7 @@ export function ClassProgressDonuts() {
           <ClassDonut key={it.id} pct={it.pct} title={it.title} color="var(--foreground)" />
         ))}
       </div>
-      <div className="mt-4 flex items-center gap-3 text-[12px]">
+      <div className="mt-4 flex items-center gap-3 text-xs">
         <span className="text-muted-foreground">Итого по всем классам</span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-overlay/10">
           <div className="h-full rounded-full bg-emphasis/80 transition-[width] duration-500" style={{ width: `${overallPct}%` }} />

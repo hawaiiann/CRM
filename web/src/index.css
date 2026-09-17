@@ -7,6 +7,19 @@
 @theme inline {
     --font-sans: 'Manrope', system-ui, sans-serif;
     --font-heading: 'Space Grotesk', 'Manrope', system-ui, sans-serif;
+
+    /* Единая шкала шрифтов. Раньше размеры задавались точечно (text-[10.5px] и т.п.,
+       — двадцать разных значений), и соседние
+       блоки выглядели вразнобой. Восемь ступеней; произвольные размеры в
+       разметке больше не используются. */
+    --text-2xs: 11px;  --text-2xs--line-height: 1.5;
+    --text-xs: 12px;   --text-xs--line-height: 1.5;
+    --text-sm: 13px;   --text-sm--line-height: 1.5;
+    --text-base: 14px; --text-base--line-height: 1.5;
+    --text-lg: 16px;   --text-lg--line-height: 1.45;
+    --text-xl: 20px;   --text-xl--line-height: 1.25;
+    --text-2xl: 24px;  --text-2xl--line-height: 1.2;
+    --text-3xl: 30px;  --text-3xl--line-height: 1.15;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

@@ -102,7 +102,7 @@ function LoginScreen({ mandatory, onClose }: { mandatory?: boolean; onClose?: ()
           </button>
         )}
         <h1 className="font-heading text-xl font-bold">Вход в CRM</h1>
-        <p className="mt-1 mb-5 text-[13px] text-muted-foreground">
+        <p className="mt-1 mb-5 text-sm text-muted-foreground">
           Данные у каждого пользователя свои и не пересекаются.
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -114,11 +114,11 @@ function LoginScreen({ mandatory, onClose }: { mandatory?: boolean; onClose?: ()
             <Label htmlFor="auth_password">Пароль</Label>
             <Input id="auth_password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-muted-foreground">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
             <Checkbox checked={remember} onCheckedChange={(c) => setRemember(!!c)} />
             Запомнить меня на этом устройстве
           </label>
-          {error && <div className="text-[12.5px] font-bold text-destructive">{error}</div>}
+          {error && <div className="text-sm font-bold text-destructive">{error}</div>}
           <Button
             type="submit"
             disabled={submitting}

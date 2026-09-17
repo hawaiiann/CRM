@@ -90,7 +90,7 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
 
   return (
     <div className="glass-surface rounded-xl p-4.5">
-      <h3 className="mb-3 text-[15px] font-bold">{title}</h3>
+      <h3 className="mb-3 text-lg font-bold">{title}</h3>
       <div className="flex flex-col gap-1.5">
         {list.map((val, idx) => {
           const isHidden = hidden.includes(val)
@@ -123,7 +123,7 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
               <CatalogNameInput
                 value={val}
                 onCommit={(v) => commitRename(idx, v)}
-                className={cn("h-8 flex-1 text-[12.5px]", isHidden && "line-through")}
+                className={cn("h-8 flex-1 text-sm", isHidden && "line-through")}
               />
               <Button type="button" variant="ghost" size="icon-sm" title={isHidden ? "Показать в списках выбора" : "Скрыть из списков выбора"} onClick={() => toggleHidden(idx)}>
                 {isHidden ? <EyeOff className="text-muted-foreground" /> : <Eye className="text-muted-foreground" />}

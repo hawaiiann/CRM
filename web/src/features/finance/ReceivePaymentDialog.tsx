@@ -108,7 +108,7 @@ export function ReceivePaymentDialog({
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-1">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-3">
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Заказчик</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказчик</Label>
               <Select value={client} onValueChange={(c) => { setClient(c); setSelected(new Set(ordersOfClient(orders, c).filter((o) => orderPaymentState(o).remaining > 0 && o.status === "done").map((o) => o.id))) }}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Выберите заказчика" /></SelectTrigger>
                 <SelectContent>
@@ -120,15 +120,15 @@ export function ReceivePaymentDialog({
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <Label className="text-[11px] font-bold tracking-wide text-muted-foreground uppercase">За какие уроки</Label>
+              <Label className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">За какие уроки</Label>
               {unpaid.length > 0 && (
-                <button type="button" onClick={() => selectAll(selected.size !== unpaid.length)} className="text-[11.5px] font-bold hover:underline">
+                <button type="button" onClick={() => selectAll(selected.size !== unpaid.length)} className="text-xs font-bold hover:underline">
                   {selected.size === unpaid.length ? "Снять все" : "Выбрать все"}
                 </button>
               )}
             </div>
             {unpaid.length === 0 ? (
-              <div className="rounded-lg bg-muted px-3 py-3 text-[12.5px] text-muted-foreground">У этого заказчика нет заказов с остатком к оплате.</div>
+              <div className="rounded-lg bg-muted px-3 py-3 text-sm text-muted-foreground">У этого заказчика нет заказов с остатком к оплате.</div>
             ) : (
               <div className="flex flex-col gap-1">
                 {unpaid.map((o) => {
@@ -139,13 +139,13 @@ export function ReceivePaymentDialog({
                     <label key={o.id} className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2", on ? "bg-muted" : "hover:bg-muted/50")}>
                       <Checkbox checked={on} onCheckedChange={() => toggle(o.id)} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12.5px] font-bold">{orderDisplayTitle(o)}</div>
-                        <div className="text-[11px] text-muted-foreground">
+                        <div className="truncate text-sm font-bold">{orderDisplayTitle(o)}</div>
+                        <div className="text-2xs text-muted-foreground">
                           {o.status === "done" ? "сдан" : "в работе"} · {fmtDeadline(o.deadline).replace(" г.", "")} · к доплате {fmtMoney(pay.remaining)}
                         </div>
                       </div>
                       {on && (
-                        <div className={cn("shrink-0 text-[12.5px] font-bold tabular-nums", gets < pay.remaining - 0.01 && "text-warning-foreground")}>
+                        <div className={cn("shrink-0 text-sm font-bold tabular-nums", gets < pay.remaining - 0.01 && "text-warning-foreground")}>
                           {gets > 0 ? fmtMoney(gets) : "—"}
                         </div>
                       )}
@@ -158,7 +158,7 @@ export function ReceivePaymentDialog({
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_1.4fr]">
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Сумма, ₽</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Сумма, ₽</Label>
               <Input
                 inputMode="decimal"
                 value={amountTouched ? amount : chosenTotal ? String(chosenTotal) : ""}
@@ -167,16 +167,16 @@ export function ReceivePaymentDialog({
               />
             </div>
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Дата</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Дата</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Примечание</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Примечание</Label>
               <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: за август" />
             </div>
           </div>
 
-          <div className="rounded-lg bg-muted px-3 py-2.5 text-[12px]">
+          <div className="rounded-lg bg-muted px-3 py-2.5 text-xs">
             Выбрано <b>{chosen.length}</b> · остаток по ним <b>{fmtMoney(chosenTotal)}</b> · будет разложено <b>{fmtMoney(effectiveAmount - leftover)}</b>
             {leftover > 0 && <span className="ml-1 font-bold text-destructive">· {fmtMoney(leftover)} некуда положить — снимите лишнее или выберите ещё уроки</span>}
           </div>

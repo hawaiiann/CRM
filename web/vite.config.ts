@@ -28,7 +28,8 @@ function cleanRootAssets(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   // Приложение стало основным и живёт на https://hawaiiann.github.io/CRM/.
-  // Прежняя ванильная версия осталась рабочей на /CRM/legacy/ как запасной вариант.
+  // Прежняя ванильная версия (legacy/) удалена в v2.32.0: она входила в те же
+  // учётки и писала журнал часов по старым правилам, задваивая строки.
   base: '/CRM/',
   build: {
     outDir: '..',

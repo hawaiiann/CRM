@@ -52,7 +52,7 @@ export function StatusBadge({
 }) {
   const Icon = STATUS_ICON[status]
   const base = cn(
-    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold whitespace-nowrap",
+    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-2xs font-bold whitespace-nowrap",
     STATUS_STYLE[status]
   )
 

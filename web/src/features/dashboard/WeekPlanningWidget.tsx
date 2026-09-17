@@ -60,15 +60,15 @@ export function WeekPlanningWidget() {
           const isToday = dateKey(d) === todayKey
           return (
             <div key={i} className={cn("rounded-lg py-1.5 text-center", isToday && "bg-emphasis")}>
-              <div className={cn("text-[9.5px] font-bold tracking-wide", isToday ? "text-emphasis-foreground" : "text-muted-foreground")}>{WEEKDAY_LABELS[i]}</div>
-              <div className={cn("mt-0.5 font-heading text-[12px] font-bold", isToday ? "text-emphasis-foreground" : "text-muted-foreground")}>{d.getDate()}</div>
+              <div className={cn("text-2xs font-bold tracking-wide", isToday ? "text-emphasis-foreground" : "text-muted-foreground")}>{WEEKDAY_LABELS[i]}</div>
+              <div className={cn("mt-0.5 font-heading text-xs font-bold", isToday ? "text-emphasis-foreground" : "text-muted-foreground")}>{d.getDate()}</div>
             </div>
           )
         })}
       </div>
 
       <div className="flex max-h-[150px] flex-col gap-1.5 overflow-y-auto">
-        {weekOrders.length === 0 && <div className="py-2 text-[12.5px] text-muted-foreground">На этой неделе заказов нет</div>}
+        {weekOrders.length === 0 && <div className="py-2 text-sm text-muted-foreground">На этой неделе заказов нет</div>}
         {weekOrders.map((o) => {
           const startStr = o.start || o.deadline
           const endStr = o.deadline || o.start
@@ -81,7 +81,7 @@ export function WeekPlanningWidget() {
               <OrderLink
                 orderId={o.id}
                 title={orderWeekLabel(o)}
-                className={cn("truncate rounded-md px-2 py-1.5 text-[10.5px] font-bold hover:brightness-110", STATUS_BAR_STYLE[o.status])}
+                className={cn("truncate rounded-md px-2 py-1.5 text-2xs font-bold hover:brightness-110", STATUS_BAR_STYLE[o.status])}
                 style={{ gridColumn: `${startCol} / span ${span}` }}
               >
                 {orderWeekLabel(o)}
@@ -95,7 +95,7 @@ export function WeekPlanningWidget() {
         <button
           type="button"
           onClick={() => setShowDone((v) => !v)}
-          className="mx-auto mt-2 flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-[11px] font-bold text-muted-foreground"
+          className="mx-auto mt-2 flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-2xs font-bold text-muted-foreground"
         >
           {showDone ? "Скрыть завершённые" : "Показать завершённые"}
           {!showDone && <span className="rounded-full bg-overlay/20 px-1.5 text-foreground">{doneCount}</span>}

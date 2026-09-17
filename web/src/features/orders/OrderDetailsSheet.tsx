@@ -14,6 +14,7 @@ import { fmtMoney, calculateLineTotal, orderPaymentState, isHourlyUnit, pluraliz
 import { fmtDateRangeCompact, fmtDeadline } from "@/lib/dates"
 import { useAppStore } from "@/store/useAppStore"
 import { findLessonForOrder } from "@/lib/planningSync"
+import { orderTitleWithTopic } from "@/lib/orderTitle"
 import { lessonItemsMissingInOrder } from "@/lib/planningOrderSync"
 
 export function OrderDetailsSheet({
@@ -51,7 +52,7 @@ export function OrderDetailsSheet({
         {order && pay && (
           <>
             <SheetHeader className="pr-10">
-              <SheetTitle>{order.title || [order.subject, order.grade, order.lesson && `Урок ${order.lesson}`].filter(Boolean).join(", ")}</SheetTitle>
+              <SheetTitle>{orderTitleWithTopic(planningBoards, order)}</SheetTitle>
               <SheetDescription>
                 {order.client ? (
                   <Link to={`/clients/${encodeURIComponent(order.client)}`} onClick={() => onOpenChange(false)} className="hover:underline">
@@ -73,7 +74,7 @@ export function OrderDetailsSheet({
                     <span
                       key={f.label}
                       title={f.label}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1.5 text-[12px]"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1.5 text-xs"
                     >
                       <span className="text-muted-foreground">{f.label}</span>
                       <b className="font-bold">{f.value}</b>
@@ -83,7 +84,7 @@ export function OrderDetailsSheet({
               )}
 
               <div>
-                <div className="mb-2 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                <div className="mb-2 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                   Позиции в заказе
                 </div>
                 {order.lines.length === 0 ? (
@@ -91,7 +92,7 @@ export function OrderDetailsSheet({
                     <div className="mb-1 flex size-10 items-center justify-center rounded-full bg-background text-muted-foreground">
                       <PackageOpen className="size-[18px]" strokeWidth={1.6} />
                     </div>
-                    <div className="text-[13px] font-bold">Пока пусто</div>
+                    <div className="text-sm font-bold">Пока пусто</div>
                     <div className="max-w-[220px] text-xs text-muted-foreground">
                       Позиции ещё не добавлены — откройте редактирование заказа, чтобы внести первую.
                     </div>
@@ -104,15 +105,15 @@ export function OrderDetailsSheet({
                         className="flex items-center justify-between gap-2.5 rounded-xl bg-muted px-3.5 py-2.5"
                       >
                         <div>
-                          <div className="text-[13px] font-bold">
+                          <div className="text-sm font-bold">
                             {line.label}
                             {line.ignorePrice && " (без опл.)"}
                           </div>
-                          <div className="text-[11.5px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             {isHourlyUnit(line) ? `${line.pomoHours} ч × ${fmtMoney(line.rate)}` : `${line.qty} ${line.type} × ${fmtMoney(line.rate)}`}
                           </div>
                         </div>
-                        <div className="shrink-0 text-[13px] font-bold">{fmtMoney(calculateLineTotal(line))}</div>
+                        <div className="shrink-0 text-sm font-bold">{fmtMoney(calculateLineTotal(line))}</div>
                       </div>
                     ))}
                   </div>
@@ -124,7 +125,7 @@ export function OrderDetailsSheet({
                   работа, которая делается, но не посчитана. */}
               {linked && (
                 <div>
-                  <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                  <div className="mb-1.5 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                     Урок в планировании
                   </div>
                   <div className="flex flex-col gap-2">
@@ -134,10 +135,10 @@ export function OrderDetailsSheet({
                       className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-[13px] font-bold">
+                        <div className="truncate text-sm font-bold">
                           {linked.lesson.title || `Урок ${linked.lesson.num}`}
                         </div>
-                        <div className="truncate text-[11.5px] text-muted-foreground">
+                        <div className="truncate text-xs text-muted-foreground">
                           {[linked.board.subject, linked.board.title, linked.board.quarter].filter(Boolean).join(" · ")} ·{" "}
                           {linked.lesson.items.filter((i) => i.done).length}/{linked.lesson.items.length} выполнено
                         </div>
@@ -148,7 +149,7 @@ export function OrderDetailsSheet({
                     {missingInOrder.length > 0 && (
                       <div className="flex gap-2 rounded-xl bg-warning px-3 py-2.5 text-warning-foreground">
                         <TriangleAlert className="mt-px size-3.5 shrink-0" />
-                        <div className="text-[11.5px] leading-relaxed">
+                        <div className="text-xs leading-relaxed">
                           <b className="font-bold">Состав расходится с уроком.</b> В чек-листе урока{" "}
                           {missingInOrder.length}{" "}
                           {pluralizeRu(missingInOrder.length, "пункт", "пункта", "пунктов")}, которых нет в позициях
@@ -162,27 +163,27 @@ export function OrderDetailsSheet({
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl bg-muted px-3 py-2.5">
-                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                  <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                     Сроки
                   </div>
-                  <div className="mt-0.5 text-[12.5px] font-bold">{fmtDateRangeCompact(order.start, order.deadline)}</div>
+                  <div className="mt-0.5 text-sm font-bold">{fmtDateRangeCompact(order.start, order.deadline)}</div>
                 </div>
                 <div className="rounded-xl bg-muted px-3 py-2.5">
-                  <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                  <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                     Часы (план/факт)
                   </div>
-                  <div className="mt-0.5 text-[12.5px] font-bold">
+                  <div className="mt-0.5 text-sm font-bold">
                     {order.estimatedHours || "—"} / {order.actualHours || "—"}
                   </div>
                 </div>
               </div>
 
               <div className="rounded-2xl bg-muted px-4 py-3.5">
-                <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                   Сумма позиций
                 </div>
-                <div className="font-heading mt-1 text-[25px] font-bold">{fmtMoney(pay.full)}</div>
-                <div className="mt-2.5 flex justify-between border-t border-dashed border-border pt-2.5 text-[11.5px] text-muted-foreground">
+                <div className="font-heading mt-1 text-2xl font-bold">{fmtMoney(pay.full)}</div>
+                <div className="mt-2.5 flex justify-between border-t border-dashed border-border pt-2.5 text-xs text-muted-foreground">
                   <span>
                     Из аванса <b className="text-foreground">{fmtMoney(pay.advUsed)}</b>
                   </span>
@@ -201,7 +202,7 @@ export function OrderDetailsSheet({
                 {pay.overpaid > 0 && (
                   <div className="mt-2.5 flex gap-2 rounded-lg bg-warning px-3 py-2 text-warning-foreground">
                     <TriangleAlert className="mt-px size-3.5 shrink-0" />
-                    <div className="text-[11.5px] leading-relaxed">
+                    <div className="text-xs leading-relaxed">
                       <b className="font-bold">{fmtMoney(pay.overpaid)} не попадают в расчёт.</b> Аванс и платежи по заказу в сумме больше его стоимости — заказ подешевел уже после того, как деньги были учтены.
                     </div>
                   </div>
@@ -210,10 +211,10 @@ export function OrderDetailsSheet({
 
               {order.notes && (
                 <div>
-                  <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">
+                  <div className="mb-1.5 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
                     Заметка к заказу
                   </div>
-                  <div className="text-[12.5px] leading-relaxed text-muted-foreground">{order.notes}</div>
+                  <div className="text-sm leading-relaxed text-muted-foreground">{order.notes}</div>
                 </div>
               )}
             </div>

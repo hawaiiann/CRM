@@ -47,9 +47,14 @@ interface AppState {
   // База не обновлена до нужной схемы (см. lib/cloudSchema.ts) — жёлтое
   // предупреждение в сайдбаре с готовым SQL, а не вечное «не сохранено».
   schemaIssue: string | null
+  // Есть ли прямо сейчас доступ к папке бэкапа (File System Access требует
+  // подтверждать его кликом после перезапуска браузера). Для предупреждения
+  // в сайдбаре: раньше бэкап мог молча не писаться неделями.
+  backupDirAccess: boolean
 
   setAuth: (userId: string | null, email: string | null) => void
   setSchemaIssue: (v: string | null) => void
+  setBackupDirAccess: (v: boolean) => void
   setAuthLoading: (v: boolean) => void
   setAddAccountOverlayOpen: (v: boolean) => void
   setDataLoaded: (v: boolean) => void
@@ -82,9 +87,11 @@ export const useAppStore = create<AppState>((set) => ({
   syncStatus: "idle",
   syncError: null,
   schemaIssue: null,
+  backupDirAccess: false,
 
   setAuth: (userId, email) => set({ cloudUserId: userId, cloudUserEmail: email }),
   setSchemaIssue: (v) => set({ schemaIssue: v }),
+  setBackupDirAccess: (v) => set({ backupDirAccess: v }),
   setAuthLoading: (v) => set({ authLoading: v }),
   setAddAccountOverlayOpen: (v) => set({ addAccountOverlayOpen: v }),
   setDataLoaded: (v) => set({ dataLoaded: v }),

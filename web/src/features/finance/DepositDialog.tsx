@@ -87,27 +87,27 @@ export function DepositDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Заказчик / клиент</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказчик / клиент</Label>
             <ComboInput value={client} onChange={setClient} options={catalogWithCurrent(appSettings, "clients", client)} placeholder="Выберите или впишите клиента..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Сумма аванса (₽)</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Сумма аванса (₽)</Label>
               <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="50 000 ₽" />
             </div>
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Дата поступления</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Дата поступления</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
             </div>
           </div>
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Примечание / комментарий</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Примечание / комментарий</Label>
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: Предоплата за август" />
           </div>
 
           {unpaid.length > 0 && (
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Сразу списать на уроки (необязательно)</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Сразу списать на уроки (необязательно)</Label>
               <div className="flex max-h-[220px] flex-col gap-1 overflow-y-auto">
                 {unpaid.map((o) => {
                   const on = targets.has(o.id)
@@ -116,16 +116,16 @@ export function DepositDialog({
                     <label key={o.id} className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5", on ? "bg-muted" : "hover:bg-muted/50")}>
                       <Checkbox checked={on} onCheckedChange={() => setTargets((prev) => { const n = new Set(prev); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n })} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12.5px] font-bold">{orderDisplayTitle(o)}</div>
-                        <div className="text-[11px] text-muted-foreground">{fmtDeadline(o.deadline).replace(" г.", "")} · к доплате {fmtMoney(orderPaymentState(o).remaining)}</div>
+                        <div className="truncate text-sm font-bold">{orderDisplayTitle(o)}</div>
+                        <div className="text-2xs text-muted-foreground">{fmtDeadline(o.deadline).replace(" г.", "")} · к доплате {fmtMoney(orderPaymentState(o).remaining)}</div>
                       </div>
-                      {on && <div className="shrink-0 text-[12.5px] font-bold tabular-nums">{gets > 0 ? fmtMoney(gets) : "—"}</div>}
+                      {on && <div className="shrink-0 text-sm font-bold tabular-nums">{gets > 0 ? fmtMoney(gets) : "—"}</div>}
                     </label>
                   )
                 })}
               </div>
               {chosen.length > 0 && preview.leftover > 0 && (
-                <div className="mt-1.5 text-[11.5px] text-muted-foreground">
+                <div className="mt-1.5 text-xs text-muted-foreground">
                   {fmtMoney(preview.leftover)} останутся на балансе клиента — спишутся на следующие уроки.
                 </div>
               )}

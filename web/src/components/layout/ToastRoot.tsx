@@ -26,8 +26,8 @@ export function ToastRoot() {
             <Clock className="size-3.5" strokeWidth={1.8} />
           </div>
           <div className="min-w-0">
-            <div className="text-[12.5px] font-bold">{t.title}</div>
-            <div className="truncate text-[11.5px] text-muted-foreground">{t.sub}</div>
+            <div className="text-sm font-bold">{t.title}</div>
+            <div className="truncate text-xs text-muted-foreground">{t.sub}</div>
           </div>
         </button>
       ))}

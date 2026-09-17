@@ -109,7 +109,7 @@ export function TimelinePage() {
               type="button"
               onClick={() => setMode(m)}
               className={cn(
-                "rounded-lg px-3.5 py-1.5 text-[12.5px] font-bold transition-colors",
+                "rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors",
                 mode === m ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -119,7 +119,7 @@ export function TimelinePage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon-sm" onClick={() => navigate(-1)}><ChevronLeft /></Button>
-          <div className="min-w-[130px] text-center text-[12.5px] font-bold">
+          <div className="min-w-[130px] text-center text-sm font-bold">
             {rangeStart.getDate()} {MONTH_SHORT[rangeStart.getMonth()]} — {rangeEnd.getDate()} {MONTH_SHORT[rangeEnd.getMonth()]}
           </div>
           <Button variant="outline" size="icon-sm" onClick={() => navigate(1)}><ChevronRight /></Button>
@@ -138,14 +138,14 @@ export function TimelinePage() {
                 const isWknd = d.getDay() === 0 || d.getDay() === 6
                 const isToday = dateKey(d) === todayStr
                 return (
-                  <div key={i} className={cn("py-1.5 text-center text-[10.5px] font-semibold", isWknd && "text-muted-foreground", isToday && "rounded-md bg-emphasis text-emphasis-foreground")}>
-                    {WEEKDAY_SHORT[d.getDay()]}<br /><b className="font-heading text-[12px]">{d.getDate()}</b>
+                  <div key={i} className={cn("py-1.5 text-center text-2xs font-semibold", isWknd && "text-muted-foreground", isToday && "rounded-md bg-emphasis text-emphasis-foreground")}>
+                    {WEEKDAY_SHORT[d.getDay()]}<br /><b className="font-heading text-xs">{d.getDate()}</b>
                   </div>
                 )
               })}
             </div>
 
-            {rows.length === 0 && <div className="py-10 text-center text-[13px] text-muted-foreground">Нет заказов в этом периоде</div>}
+            {rows.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">Нет заказов в этом периоде</div>}
 
             <div className="flex flex-col gap-1.5">
               {rows.map((o) => {
@@ -169,7 +169,7 @@ export function TimelinePage() {
                       onClick={() => setActiveOrder(o)}
                       title={title}
                       className={cn(
-                        "absolute top-0.5 flex h-8 items-center gap-1.5 overflow-hidden rounded-md px-2.5 text-[11.5px] font-bold whitespace-nowrap",
+                        "absolute top-0.5 flex h-8 items-center gap-1.5 overflow-hidden rounded-md px-2.5 text-xs font-bold whitespace-nowrap",
                         STATUS_BG[o.status],
                         o.priority && "ring-2 ring-destructive"
                       )}

@@ -49,8 +49,8 @@ export function DashboardMetricsSettings() {
 
   return (
     <div className="glass-surface rounded-xl p-4.5">
-      <h3 className="text-[15px] font-bold">Показатели дашборда</h3>
-      <div className="mb-3 text-[12px] text-muted-foreground">Какие метрики показывать на графике «Активность» и цель на день по каждой.</div>
+      <h3 className="text-lg font-bold">Показатели дашборда</h3>
+      <div className="mb-3 text-xs text-muted-foreground">Какие метрики показывать на графике «Активность» и цель на день по каждой.</div>
 
       <div className="flex flex-col gap-2">
         {metrics.map((m, idx) => {

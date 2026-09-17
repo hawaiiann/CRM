@@ -236,7 +236,7 @@ export function BoardFormDialog({
             </Field>
           </div>
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">График (по КТП)</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">График (по КТП)</Label>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-[120px_1fr_130px]">
               <Field label="Уроков в неделю">
                 <NumberInput value={perWeek} onChange={setPerWeek} inputMode="numeric" placeholder="0" />
@@ -248,7 +248,7 @@ export function BoardFormDialog({
                 <NumberInput value={firstWeekLessons} onChange={setFirstWeekLessons} inputMode="numeric" placeholder={scheduleDraft ? `авто: ${autoFirstWeek}` : "авто"} title="Сколько уроков в первой, неполной неделе. 0 — посчитать по учебным дням." />
               </Field>
             </div>
-            <div className="mt-1.5 text-[11px] text-muted-foreground">
+            <div className="mt-1.5 text-2xs text-muted-foreground">
               {scheduleDraft ? (
                 <>
                   Недели считаются с понедельника. Старт — {weekdayLabel(scheduleDraft.start)}, первая неделя {weekLabel({ start: scheduleDraft.start, end: firstWeekEnd })}:{" "}
@@ -261,13 +261,13 @@ export function BoardFormDialog({
 
             {scheduleDraft && (
               <div className="mt-2.5">
-                <div className="mb-1 text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">Исключения по неделям</div>
+                <div className="mb-1 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Исключения по неделям</div>
                 <div className="flex flex-col gap-1.5">
                   {exceptions.map((x) => (
                     <div key={x.id} className="grid grid-cols-[90px_1fr_28px] items-center gap-1.5 sm:grid-cols-[110px_130px_1fr_28px]">
                       <NumberInput value={x.week} onChange={(n) => setExceptions((p) => p.map((y) => (y.id === x.id ? { ...y, week: n } : y)))} inputMode="numeric" placeholder="№ недели" title="Номер недели, с 1" />
                       <NumberInput value={x.lessons} onChange={(n) => setExceptions((p) => p.map((y) => (y.id === x.id ? { ...y, lessons: n } : y)))} inputMode="numeric" placeholder="уроков" title="Сколько уроков в этой неделе; 0 — каникулы" />
-                      <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{x.lessons === 0 ? "каникулы" : `${x.lessons} ${plural(x.lessons)} вместо ${scheduleDraft.perWeek}`}</span>
+                      <span className="hidden truncate text-2xs text-muted-foreground sm:block">{x.lessons === 0 ? "каникулы" : `${x.lessons} ${plural(x.lessons)} вместо ${scheduleDraft.perWeek}`}</span>
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => setExceptions((p) => p.filter((y) => y.id !== x.id))}>
                         <Trash2 className="text-muted-foreground" />
                       </Button>
@@ -285,14 +285,14 @@ export function BoardFormDialog({
           </Field>
 
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Уроки класса</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Уроки класса</Label>
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">От</span>
+                <span className="text-2xs text-muted-foreground">От</span>
                 <Input type="number" min={1} max={500} value={rangeFrom} onChange={(e) => setRangeFrom(parseInt(e.target.value) || 1)} className="w-20" />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">До</span>
+                <span className="text-2xs text-muted-foreground">До</span>
                 <Input type="number" min={1} max={500} value={rangeTo} onChange={(e) => setRangeTo(parseInt(e.target.value) || 1)} className="w-20" />
               </div>
               {removedNums.size > 0 && (
@@ -303,7 +303,7 @@ export function BoardFormDialog({
             {lessonNums.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {lessonNums.map((n) => (
-                  <span key={n} className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pr-1 pl-2.5 text-[12px] font-bold">
+                  <span key={n} className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pr-1 pl-2.5 text-xs font-bold">
                     {n}
                     <button type="button" onClick={() => removeLessonNum(n)} className="flex size-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                       <X className="size-3" />
@@ -312,13 +312,13 @@ export function BoardFormDialog({
                 ))}
               </div>
             )}
-            <div className="mt-1.5 text-[11px] text-muted-foreground">
+            <div className="mt-1.5 text-2xs text-muted-foreground">
               {lessonNums.length} {plural(lessonNums.length)} в классе: диапазон применяется сразу. Существующие уроки сохраняют прогресс; убрать урок (вместе с составом) можно только крестиком.
             </div>
           </div>
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Состав урока и ставки</Label>
-            <div className="mb-1.5 hidden grid-cols-[1.4fr_1fr_70px_90px_28px] gap-1.5 text-[10px] font-bold tracking-wide text-muted-foreground uppercase sm:grid">
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Состав урока и ставки</Label>
+            <div className="mb-1.5 hidden grid-cols-[1.4fr_1fr_70px_90px_28px] gap-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase sm:grid">
               <span>Материал</span><span>Ед. изм.</span><span>Кол-во</span><span>Ставка, ₽</span><span />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -340,13 +340,13 @@ export function BoardFormDialog({
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setTemplate((prev) => [...prev, row({})])}>
               <Plus />Добавить материал
             </Button>
-            <div className="mt-1.5 text-[11px] text-muted-foreground">
+            <div className="mt-1.5 text-2xs text-muted-foreground">
               По этим ставкам заказ из урока создаётся в один клик, уже с ценами. Ставки можно поправить в самом заказе.
             </div>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">{error}</div>
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">{error}</div>
           )}
 
           <DialogFooter>
@@ -369,7 +369,7 @@ function plural(n: number): string {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">{label}</Label>
+      <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">{label}</Label>
       {children}
     </div>
   )

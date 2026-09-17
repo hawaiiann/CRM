@@ -41,6 +41,7 @@ import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
 import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
 import { sameData } from "./stableJson"
 import { SCHEMA_ISSUE_ENTRY_ID } from "./cloudSchema"
+import { duplicateOrderGroups } from "./orderMerge"
 import { mergeUnsentLocal } from "./cloudMerge"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
@@ -496,6 +497,21 @@ export function compactJournal(): number {
   return change.removed.length
 }
 
+/**
+ * Перенести журнал часов с одного заказа на другой (объединение дублей).
+ * Локально меняется orderId, в облаке — UPDATE по order_id: обычная отправка
+ * сверяет только часы и дату записи, заказ она не трогает.
+ */
+export async function reassignJournalOrder(fromOrderId: string, toOrderId: string) {
+  const store = useAppStore.getState()
+  if (!store.activityLog.some((e) => e.orderId === fromOrderId)) return
+  store.setActivityLog((prev) => prev.map((e) => (e.orderId === fromOrderId ? { ...e, orderId: toOrderId } : e)))
+  const userId = store.cloudUserId
+  if (!userId) return
+  const { error } = await supabaseClient.from("activity_log").update({ order_id: toOrderId }).eq("order_id", fromOrderId).eq("user_id", userId)
+  if (error) { console.error("Не удалось перенести журнал часов:", error); markSyncFailed(errorText(error)) }
+}
+
 /** Удалить из облака все записи журнала по заказу — через очередь, как и всё остальное. */
 export function deleteActivityLogForOrder(orderId: string) {
   if (!orderId) return
@@ -935,6 +951,21 @@ export async function runSyncSelfCheck(): Promise<string[] | null> {
   if (cloudLogCount !== store.activityLog.length) {
     problems.push(`Журнал статистики: здесь ${store.activityLog.length}, в облаке ${cloudLogCount}`)
   }
+
+  // Схема базы: без entry_id журнал не умеет править и удалять свои строки.
+  const entryProbe = await supabaseClient.from("activity_log").select("entry_id").limit(1)
+  if (entryProbe.error && isMissingColumnError(entryProbe.error)) problems.push("База: нет колонки activity_log.entry_id — выполните SQL из сайдбара")
+
+  // Дубли журнала: одинаковые день, заказ и часы. Поминутные строки старых
+  // версий сюда тоже попадают — их убирает «Схлопнуть» в Журнале часов.
+  const logKeys = new Map<string, number>()
+  store.activityLog.forEach((e) => { const k = `${e.date}|${e.orderId}|${e.delta}`; logKeys.set(k, (logKeys.get(k) || 0) + 1) })
+  const dupLog = [...logKeys.values()].filter((n) => n > 1).reduce((s, n) => s + n - 1, 0)
+  if (dupLog) problems.push(`Журнал: ${dupLog} повторяющихся строк (день, заказ и часы совпадают) — см. «Схлопнуть» в Журнале часов`)
+
+  // Дубли заказов: два заказа на один урок.
+  const dupOrders = duplicateOrderGroups(store.orders)
+  if (dupOrders.length) problems.push(`Заказы: ${dupOrders.length} ${dupOrders.length === 1 ? "урок" : "уроков"} с несколькими заказами — объединить можно в списке заказов`)
 
   return problems.length ? problems : null
 }

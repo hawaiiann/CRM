@@ -28,7 +28,7 @@ export function PaginationBar({
 
   return (
     <div className="flex flex-wrap items-center justify-start gap-x-5.5 gap-y-2.5 sm:justify-end">
-      <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span>Строк на странице</span>
         <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
           <SelectTrigger size="sm" className="w-[68px]"><SelectValue /></SelectTrigger>
@@ -37,7 +37,7 @@ export function PaginationBar({
           </SelectContent>
         </Select>
       </div>
-      <div className="text-[12.5px] font-bold">Страница {currentPage + 1} из {totalPages}</div>
+      <div className="text-sm font-bold">Страница {currentPage + 1} из {totalPages}</div>
       <div className="flex gap-1.5">
         <Button variant="outline" size="icon-sm" disabled={currentPage === 0} onClick={() => onPageChange(0)}>
           <ChevronsLeft />

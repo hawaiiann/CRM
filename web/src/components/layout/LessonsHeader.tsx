@@ -17,8 +17,8 @@ export function LessonsHeader({ subtitle, actions }: { subtitle: string; actions
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="font-heading text-[30px] font-bold tracking-tight">Уроки</h1>
-        <p className="text-[13.5px] text-muted-foreground">{subtitle}</p>
+        <h1 className="font-heading text-3xl font-bold tracking-tight">Уроки</h1>
+        <p className="text-base text-muted-foreground">{subtitle}</p>
         <div className="mt-3 inline-flex gap-0.5 rounded-[10px] bg-muted p-[3px]">
           {VIEWS.map((v) => (
             <NavLink
@@ -26,7 +26,7 @@ export function LessonsHeader({ subtitle, actions }: { subtitle: string; actions
               to={v.to}
               className={({ isActive }) =>
                 cn(
-                  "rounded-lg px-3.5 py-1.5 text-[12.5px] font-bold transition-colors",
+                  "rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors",
                   isActive ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
                 )
               }

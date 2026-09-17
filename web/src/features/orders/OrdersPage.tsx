@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   Search,
@@ -11,6 +11,7 @@ import {
   Trash2,
   ChevronRight,
   ArrowUp,
+  Merge,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LessonsHeader } from "@/components/layout/LessonsHeader"
@@ -35,7 +36,9 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/store/useAppStore"
-import { saveData } from "@/lib/cloudSync"
+import { saveData, deleteFromCloud, reassignJournalOrder } from "@/lib/cloudSync"
+import { mergeOrders, duplicateOrderGroups } from "@/lib/orderMerge"
+import { orderTitleWithTopic, lessonTopicForOrder } from "@/lib/orderTitle"
 import type { Order } from "@/types/models"
 import { fmtMoney, orderPaymentState, isOrderOverdue, dateKey } from "@/lib/money"
 import { fmtDeadline } from "@/lib/dates"
@@ -169,8 +172,9 @@ function missingLessons(orders: Order[]): number[] {
 }
 
 /** Что показывать в строке вместо длинного «Литература, 9 класс, 1, Урок 10», когда класс уже в заголовке группы. */
-function rowTitleInGroup(o: Order): string {
+function rowTitleInGroup(o: Order, topic: string | null): string {
   if (o.title) return o.title
+  if (topic) return topic
   const composition = (o.lines || []).map((l) => l.label || l.type).filter(Boolean)
   return composition.length ? composition.join(" · ") : "Без состава"
 }
@@ -218,8 +222,13 @@ function SortHead({
 
 export function OrdersPage() {
   const orders = useAppStore((s) => s.orders)
+  const boards = useAppStore((s) => s.planningBoards)
   const setOrders = useAppStore((s) => s.setOrders)
   const [search, setSearch] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
+  // Архив: сделанные и оплаченные старше месяца прячутся, чтобы список не
+  // разрастался; «Показать старше месяца» раскрывает всё.
+  const [showOldArchive, setShowOldArchive] = useState(false)
   const [filter, setFilter] = useState<StatusFilter>("all")
   const [sort, setSort] = useState<OrderSort>({ field: "lesson", dir: "asc" })
   const [clientFilter, setClientFilter] = useState("all")
@@ -251,6 +260,22 @@ export function OrdersPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [duplicateFrom, setDuplicateFrom] = useState<Order | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null)
+
+  const handledHotkey = useRef<number>(0)
+  useEffect(() => {
+    const st = location.state as { newOrder?: number; focusSearch?: number } | null
+    const token = st?.newOrder || st?.focusSearch || 0
+    if (!token || token === handledHotkey.current) return
+    handledHotkey.current = token
+    if (st?.newOrder) openNewOrder()
+    if (st?.focusSearch) searchRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
+  useEffect(() => {
+    const onFocus = () => searchRef.current?.focus()
+    window.addEventListener("crm:focus-search", onFocus)
+    return () => window.removeEventListener("crm:focus-search", onFocus)
+  }, [])
 
   function openNewOrder() {
     setEditingOrder(null)
@@ -372,6 +397,41 @@ export function OrdersPage() {
   // говорит, что это за класс, а строки внутри — только номер и состав.
   const grouped = sort.field === "lesson" || sort.field === "grade"
 
+  // Тема урока из планирования — в заголовок строки (после импорта КТП
+  // «Урок 14» превращается в «Пушкин. Лирика»).
+  const topics = useMemo(() => new Map(orders.map((o) => [o.id, lessonTopicForOrder(boards, o)])), [orders, boards])
+  const fullTitle = (o: Order) => orderTitleWithTopic(boards, o)
+  const rowTitle = (o: Order) => (grouped ? rowTitleInGroup(o, topics.get(o.id) || null) : fullTitle(o))
+
+  // Дубли: два заказа на один урок. Объединение — из меню строки.
+  const dupByOrder = useMemo(() => {
+    const m = new Map<string, Order[]>()
+    duplicateOrderGroups(orders).forEach((g) => g.forEach((o) => m.set(o.id, g)))
+    return m
+  }, [orders])
+
+  async function mergeDuplicates(group: Order[]) {
+    const [primary, ...rest] = group
+    const ok = await confirmDialog({
+      title: `Объединить ${group.length} заказа на урок ${primary.lesson}?`,
+      bullets: [
+        `Останется заказ от ${fmtDeadline(primary.start || primary.deadline)}, остальные ${rest.length} удалятся.`,
+        "Позиции с одинаковым названием сложатся (часы суммируются), новые добавятся.",
+        "Оплаты, списания аванса и часы журнала перейдут в оставшийся заказ.",
+      ],
+      confirmLabel: "Объединить",
+    })
+    if (!ok) return
+    const merged = rest.reduce((acc, o) => mergeOrders(acc, o), primary)
+    const gone = new Set(rest.map((o) => o.id))
+    setOrders((prev) => prev.filter((o) => !gone.has(o.id)).map((o) => (o.id === merged.id ? merged : o)))
+    for (const o of rest) {
+      await reassignJournalOrder(o.id, merged.id)
+      deleteFromCloud("orders", o.id)
+    }
+    saveData()
+  }
+
   // Чипы классов и пропуски — по всем неотменённым заказам, а не по видимым:
   // «пропущен урок 11» верно только если его нет ни в работе, ни в архиве.
   const groups = useMemo(() => {
@@ -390,6 +450,16 @@ export function OrdersPage() {
     const missing = new Map(list.map((g) => [g.key, missingLessons(g.all)]))
     return { list, missing }
   }, [rows])
+
+  // Старые в архиве: сделанные и оплаченные (или отменённые) больше месяца назад.
+  const archiveCutoff = dateKey(new Date(Date.now() - 30 * 86400000))
+  const isOldArchived = (r: Row) => {
+    const when = r.order.paidAt || r.order.deadline || ""
+    if (r.order.status === "cancelled") return !!when && when < archiveCutoff
+    return r.pay.remaining <= 0 && !!when && when < archiveCutoff
+  }
+  const oldArchivedCount = visibleArchived.filter(isOldArchived).length
+  const archivedShown = showOldArchive ? visibleArchived : visibleArchived.filter((r) => !isOldArchived(r))
 
   const totalRows = active.length + archived.length
 
@@ -483,6 +553,7 @@ export function OrdersPage() {
           <div className="relative w-full sm:w-auto">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
+              ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск: класс, урок, клиент, предмет..."
@@ -503,7 +574,7 @@ export function OrdersPage() {
                 type="button"
                 onClick={() => setFilter(value)}
                 className={cn(
-                  "rounded-lg px-3.5 py-1.5 text-[12.5px] font-bold transition-colors",
+                  "rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors",
                   filter === value
                     ? "bg-background text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
@@ -579,7 +650,7 @@ export function OrdersPage() {
           <button
             type="button"
             onClick={() => setClassFilter(null)}
-            className={cn("rounded-full px-3 py-1 text-[12px] font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
+            className={cn("rounded-full px-3 py-1 text-xs font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
           >
             Все классы
           </button>
@@ -590,12 +661,12 @@ export function OrdersPage() {
               onClick={() => setClassFilter((v) => (v === g.key ? null : g.key))}
               title={`${g.all.length} заказов, ${g.activeCount} в работе${g.due > 0 ? `, к доплате ${fmtMoney(g.due)}` : ""}`}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold transition-colors",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-colors",
                 classFilter === g.key ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/70"
               )}
             >
               {g.label}
-              <span className={cn("rounded-full px-1.5 text-[10.5px] tabular-nums", classFilter === g.key ? "bg-background/20" : "bg-overlay/15 text-muted-foreground")}>{g.activeCount}</span>
+              <span className={cn("rounded-full px-1.5 text-2xs tabular-nums", classFilter === g.key ? "bg-background/20" : "bg-overlay/15 text-muted-foreground")}>{g.activeCount}</span>
               {g.overdue && <span className="size-1.5 rounded-full bg-destructive" title="Есть просроченные" />}
             </button>
           ))}
@@ -605,7 +676,7 @@ export function OrdersPage() {
       {/* mobile — one stacked card per order, no columns to squeeze or scroll */}
       <div className="flex flex-col gap-2.5 sm:hidden">
         {visibleActive.length === 0 && (
-          <div className="py-10 text-center text-[13px] text-muted-foreground">
+          <div className="py-10 text-center text-sm text-muted-foreground">
             {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
           </div>
         )}
@@ -615,6 +686,10 @@ export function OrdersPage() {
             <OrderCard
               key={order.id}
               order={order}
+              displayTitle={rowTitle(order)}
+              fullTitle={fullTitle(order)}
+              duplicates={dupByOrder.get(order.id) || null}
+              onMerge={() => { const g = dupByOrder.get(order.id); if (g) mergeDuplicates(g) }}
               sum={pay.full}
               due={pay.remaining}
               overdue={overdue}
@@ -637,17 +712,21 @@ export function OrdersPage() {
             <button
               type="button"
               onClick={() => setArchiveOpen((v) => !v)}
-              className="mt-1 flex w-full items-center gap-2 px-1 py-2 text-[12px] font-extrabold tracking-wide text-muted-foreground uppercase"
+              className="mt-1 flex w-full items-center gap-2 px-1 py-2 text-xs font-extrabold tracking-wide text-muted-foreground uppercase"
             >
               <ChevronRight className={cn("size-3 transition-transform", archiveOpen && "rotate-90")} />
               Архив · завершённые и отменённые ({archived.length})
             </button>
             {archiveOpen && withGroupHeaders(
-              visibleArchived,
+              archivedShown,
               ({ order, pay, overdue }) => (
                 <OrderCard
                   key={order.id}
                   order={order}
+              displayTitle={rowTitle(order)}
+              fullTitle={fullTitle(order)}
+              duplicates={dupByOrder.get(order.id) || null}
+              onMerge={() => { const g = dupByOrder.get(order.id); if (g) mergeDuplicates(g) }}
                   sum={pay.full}
                   due={pay.remaining}
                   overdue={overdue}
@@ -664,6 +743,11 @@ export function OrdersPage() {
                 />
               ),
               (g) => <GroupHeading key={"ga_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} />
+            )}
+            {archiveOpen && oldArchivedCount > 0 && !showOldArchive && (
+              <button type="button" onClick={() => setShowOldArchive(true)} className="mt-1 px-1 py-2 text-left text-xs font-bold text-muted-foreground hover:text-foreground">
+                Показать старше месяца ({oldArchivedCount})
+              </button>
             )}
           </>
         )}
@@ -729,7 +813,7 @@ export function OrdersPage() {
           <TableBody>
             {visibleActive.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={colCount} className="py-10 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={colCount} className="py-10 text-center text-sm text-muted-foreground">
                   {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
                 </TableCell>
               </TableRow>
@@ -740,6 +824,10 @@ export function OrdersPage() {
                 <OrderRow
                   key={order.id}
                   order={order}
+              displayTitle={rowTitle(order)}
+              fullTitle={fullTitle(order)}
+              duplicates={dupByOrder.get(order.id) || null}
+              onMerge={() => { const g = dupByOrder.get(order.id); if (g) mergeDuplicates(g) }}
                   sum={pay.full}
                   due={pay.remaining}
                   overdue={overdue}
@@ -763,7 +851,7 @@ export function OrdersPage() {
         <button
           type="button"
           onClick={() => setArchiveOpen((v) => !v)}
-          className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2.5 text-[12px] font-extrabold tracking-wide text-muted-foreground uppercase"
+          className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2.5 text-xs font-extrabold tracking-wide text-muted-foreground uppercase"
         >
           <ChevronRight className={cn("size-3 transition-transform", archiveOpen && "rotate-90")} />
           Архив · завершённые и отменённые ({archived.length})
@@ -786,11 +874,15 @@ export function OrdersPage() {
             </colgroup>
             <TableBody>
               {withGroupHeaders(
-                visibleArchived,
+                archivedShown,
                 ({ order, pay, overdue }) => (
                   <OrderRow
                     key={order.id}
                     order={order}
+              displayTitle={rowTitle(order)}
+              fullTitle={fullTitle(order)}
+              duplicates={dupByOrder.get(order.id) || null}
+              onMerge={() => { const g = dupByOrder.get(order.id); if (g) mergeDuplicates(g) }}
                     sum={pay.full}
                     due={pay.remaining}
                     overdue={overdue}
@@ -812,11 +904,16 @@ export function OrdersPage() {
           </table>
           </div>
         )}
+        {archiveOpen && oldArchivedCount > 0 && (
+          <button type="button" onClick={() => setShowOldArchive((v) => !v)} className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2.5 text-left text-xs font-bold text-muted-foreground hover:text-foreground">
+            {showOldArchive ? "Скрыть старше месяца" : `Показать старше месяца (${oldArchivedCount}) — сделанные и оплаченные`}
+          </button>
+        )}
       </div>
 
       {/* footer */}
       <div className="mt-3.5 flex flex-wrap items-center justify-between gap-4 px-1">
-        <div className="text-[12.5px] text-muted-foreground">
+        <div className="text-sm text-muted-foreground">
           {active.length} активных · {archived.length} в архиве · всего {totalRows}
         </div>
         {/* Раньше эта панель была здесь переписана вручную — при том, что
@@ -860,14 +957,14 @@ export function OrdersPage() {
 function GroupHeadingInner({ label, count, missing, due }: { label: string; count: number; missing: number[]; due: number }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="text-[12.5px] font-extrabold text-foreground">{label}</span>
-      <span className="text-[11.5px] font-bold text-muted-foreground">{count} {count === 1 ? "заказ" : count < 5 ? "заказа" : "заказов"}</span>
+      <span className="text-sm font-extrabold text-foreground">{label}</span>
+      <span className="text-xs font-bold text-muted-foreground">{count} {count === 1 ? "заказ" : count < 5 ? "заказа" : "заказов"}</span>
       {missing.length > 0 && (
-        <span className="rounded-full bg-warning px-2 py-px text-[10.5px] font-bold text-warning-foreground" title="Между первым и последним заказом класса нет заказов с этими номерами">
+        <span className="rounded-full bg-warning px-2 py-px text-2xs font-bold text-warning-foreground" title="Между первым и последним заказом класса нет заказов с этими номерами">
           нет уроков: {missing.slice(0, 8).join(", ")}{missing.length > 8 ? "…" : ""}
         </span>
       )}
-      {due > 0 && <span className="text-[11.5px] font-bold text-destructive">к доплате {fmtMoney(due)}</span>}
+      {due > 0 && <span className="text-xs font-bold text-destructive">к доплате {fmtMoney(due)}</span>}
     </div>
   )
 }
@@ -893,9 +990,9 @@ function GroupHeading(props: { label: string; count: number; missing: number[]; 
 function Kpi({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "destructive" }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">{label}</div>
-      <div className={cn("font-heading mt-0.5 text-[24px] font-bold tabular-nums", tone === "destructive" && "text-destructive")}>{value}</div>
-      <div className="truncate text-[11.5px] text-muted-foreground" title={hint}>{hint}</div>
+      <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">{label}</div>
+      <div className={cn("font-heading mt-0.5 text-2xl font-bold tabular-nums", tone === "destructive" && "text-destructive")}>{value}</div>
+      <div className="truncate text-xs text-muted-foreground" title={hint}>{hint}</div>
     </div>
   )
 }
@@ -915,6 +1012,10 @@ function OrderRow({
   onStatusChange,
   grouped,
   muted,
+  displayTitle,
+  fullTitle,
+  duplicates,
+  onMerge,
 }: {
   order: Order
   sum: number
@@ -930,6 +1031,10 @@ function OrderRow({
   onStatusChange: (next: Order["status"]) => void
   grouped?: boolean
   muted?: boolean
+  displayTitle: string
+  fullTitle: string
+  duplicates: Order[] | null
+  onMerge: () => void
 }) {
   const n = grouped ? lessonNum(order) : Number.MAX_SAFE_INTEGER
   return (
@@ -940,27 +1045,28 @@ function OrderRow({
           {/* В группе класс уже в заголовке: строка — это номер урока и
               состав, а не «Литература, 9 класс, 1, Урок 10» сорок раз подряд. */}
           {grouped && (
-            <span className={cn("font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[12px] font-bold tabular-nums", muted && "text-muted-foreground")} title="Номер урока">
+            <span className={cn("font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold tabular-nums", muted && "text-muted-foreground")} title="Номер урока">
               {n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}
             </span>
           )}
           <button
             type="button"
             onClick={onOpen}
-            title={orderDisplayTitle(order)}
+            title={fullTitle}
             className={cn(
-              "min-w-0 truncate text-[13.5px] text-foreground underline decoration-transparent decoration-1 underline-offset-3 hover:decoration-muted-foreground",
+              "min-w-0 truncate text-base text-foreground underline decoration-transparent decoration-1 underline-offset-3 hover:decoration-muted-foreground",
               grouped && !order.title ? "font-medium" : "font-bold"
             )}
           >
-            {grouped ? rowTitleInGroup(order) : orderDisplayTitle(order)}
+            {displayTitle}
           </button>
+          {duplicates && <span className="shrink-0 rounded-full bg-warning px-1.5 text-2xs font-bold text-warning-foreground" title="На этот урок несколько заказов — объединить можно из меню строки">дубль</span>}
           {order.priority && <span className="shrink-0">🔥</span>}
-          {overdue && <span className="shrink-0 text-[10.5px] font-bold text-destructive">просрочен</span>}
+          {overdue && <span className="shrink-0 text-2xs font-bold text-destructive">просрочен</span>}
         </div>
       </TableCell>
       {showClass && (
-        <TableCell className="min-w-0 px-4 text-[12.5px] text-muted-foreground">
+        <TableCell className="min-w-0 px-4 text-sm text-muted-foreground">
           {(order.subject || order.grade) ? (
             <span className="block truncate">{[order.grade, order.subject].filter(Boolean).join(" · ")}</span>
           ) : "—"}
@@ -971,28 +1077,28 @@ function OrderRow({
           {order.client ? (
             <span className="flex min-w-0 items-center gap-1.5">
               <Avatar className="size-4.5 shrink-0">
-                <AvatarFallback className="text-[8.5px] font-extrabold">
+                <AvatarFallback className="text-2xs font-extrabold">
                   {clientInitials(order.client)}
                 </AvatarFallback>
               </Avatar>
-              <span className="truncate text-[12.5px]">{order.client}</span>
+              <span className="truncate text-sm">{order.client}</span>
             </span>
-          ) : <span className="text-[12.5px] text-muted-foreground">—</span>}
+          ) : <span className="text-sm text-muted-foreground">—</span>}
         </TableCell>
       )}
-      <TableCell className={cn("px-4 text-[12.5px]", overdue ? "font-bold text-destructive" : "text-muted-foreground")}>
+      <TableCell className={cn("px-4 text-sm", overdue ? "font-bold text-destructive" : "text-muted-foreground")}>
         {fmtDeadline(order.deadline)}
       </TableCell>
       <TableCell className="px-4">
         <StatusBadge status={order.status} onChange={onStatusChange} />
       </TableCell>
-      <TableCell className={cn("px-4 text-right font-heading text-[13px] font-bold tabular-nums", muted && "text-muted-foreground")}>
+      <TableCell className={cn("px-4 text-right font-heading text-sm font-bold tabular-nums", muted && "text-muted-foreground")}>
         {fmtMoney(sum)}
       </TableCell>
       {showDue && (
         <TableCell
           className={cn(
-            "px-4 text-right font-heading text-[13px] font-bold tabular-nums",
+            "px-4 text-right font-heading text-sm font-bold tabular-nums",
             due === 0 && "text-muted-foreground font-semibold"
           )}
         >
@@ -1020,6 +1126,12 @@ function OrderRow({
               <Copy />
               Дублировать
             </DropdownMenuItem>
+            {duplicates && (
+              <DropdownMenuItem onClick={onMerge}>
+                <Merge />
+                Объединить дубли ({duplicates.length})
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
               <Trash2 />
@@ -1047,6 +1159,9 @@ function OrderCard({
   onStatusChange,
   grouped,
   muted,
+  displayTitle,
+  duplicates,
+  onMerge,
 }: {
   order: Order
   sum: number
@@ -1062,6 +1177,10 @@ function OrderCard({
   onStatusChange: (next: Order["status"]) => void
   grouped?: boolean
   muted?: boolean
+  displayTitle: string
+  fullTitle?: string
+  duplicates: Order[] | null
+  onMerge: () => void
 }) {
   const metaParts = [
     showClass && [order.grade, order.subject].filter(Boolean).join(" · "),
@@ -1075,13 +1194,14 @@ function OrderCard({
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 items-center gap-1.5">
             {grouped && (
-              <span className="font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[12px] font-bold tabular-nums">{n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}</span>
+              <span className="font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold tabular-nums">{n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}</span>
             )}
-            <span className={cn("min-w-0 truncate text-[14px] font-bold", muted && "text-muted-foreground")}>{grouped ? rowTitleInGroup(order) : orderDisplayTitle(order)}</span>
+            <span className={cn("min-w-0 truncate text-base font-bold", muted && "text-muted-foreground")}>{displayTitle}</span>
+            {duplicates && <span className="shrink-0 rounded-full bg-warning px-1.5 text-2xs font-bold text-warning-foreground">дубль</span>}
             {order.priority && <span className="shrink-0">🔥</span>}
           </div>
           {metaParts.length > 0 && (
-            <div className="mt-0.5 truncate text-[12px] text-muted-foreground">{metaParts.join(" · ")}</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">{metaParts.join(" · ")}</div>
           )}
         </button>
         <DropdownMenu>
@@ -1091,6 +1211,7 @@ function OrderCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}><Pencil />Редактировать</DropdownMenuItem>
             <DropdownMenuItem onClick={onDuplicate}><Copy />Дублировать</DropdownMenuItem>
+            {duplicates && <DropdownMenuItem onClick={onMerge}><Merge />Объединить дубли ({duplicates.length})</DropdownMenuItem>}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}><Trash2 />Удалить</DropdownMenuItem>
           </DropdownMenuContent>
@@ -1099,20 +1220,20 @@ function OrderCard({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <StatusBadge status={order.status} onChange={onStatusChange} />
-        <span className={cn("text-[11.5px] font-bold", overdue ? "text-destructive" : "text-muted-foreground")}>
+        <span className={cn("text-xs font-bold", overdue ? "text-destructive" : "text-muted-foreground")}>
           {overdue && "просрочен · "}{fmtDeadline(order.deadline)}
         </span>
       </div>
 
       <div className="mt-2.5 flex items-center justify-between border-t border-border pt-2.5">
         <div>
-          <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Сумма</div>
-          <div className={cn("font-heading text-[14px] font-bold tabular-nums", muted && "text-muted-foreground")}>{fmtMoney(sum)}</div>
+          <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Сумма</div>
+          <div className={cn("font-heading text-base font-bold tabular-nums", muted && "text-muted-foreground")}>{fmtMoney(sum)}</div>
         </div>
         {showDue && (
           <div className="text-right">
-            <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
-            <div className={cn("font-heading text-[14px] font-bold tabular-nums", due === 0 && "text-muted-foreground")}>{fmtMoney(due)}</div>
+            <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
+            <div className={cn("font-heading text-base font-bold tabular-nums", due === 0 && "text-muted-foreground")}>{fmtMoney(due)}</div>
           </div>
         )}
       </div>

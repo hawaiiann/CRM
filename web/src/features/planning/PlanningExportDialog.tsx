@@ -91,7 +91,7 @@ export function PlanningExportDialog({
         </DialogHeader>
 
         <div>
-          <div className="mb-1.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Период</div>
+          <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Период</div>
           <Select value={quarter} onValueChange={setQuarter}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -99,7 +99,7 @@ export function PlanningExportDialog({
               {quarters.map((q) => <SelectItem key={q} value={q}>{q}</SelectItem>)}
             </SelectContent>
           </Select>
-          <div className="mt-2 text-[11.5px] text-muted-foreground">
+          <div className="mt-2 text-xs text-muted-foreground">
             {matched.length > 0
               ? `Попадёт в файл: ${matched.length} ${pluralizeRu(matched.length, "класс", "класса", "классов")}.`
               : "На этот период классов не найдено."}

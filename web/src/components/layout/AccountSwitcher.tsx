@@ -50,10 +50,10 @@ export function AccountSwitcher() {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button type="button" className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-overlay/10">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-emphasis/90 font-heading text-[13px] font-extrabold text-emphasis-foreground">Д</div>
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-emphasis/90 font-heading text-sm font-extrabold text-emphasis-foreground">Д</div>
           <div className="min-w-0 flex-1">
-            <div className="font-heading text-[15px] font-extrabold tracking-tight">Дизайн · CRM</div>
-            <div className="truncate text-[11px] font-semibold text-muted-foreground">{email || "—"}</div>
+            <div className="font-heading text-lg font-extrabold tracking-tight">Дизайн · CRM</div>
+            <div className="truncate text-2xs font-semibold text-muted-foreground">{email || "—"}</div>
           </div>
           <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>

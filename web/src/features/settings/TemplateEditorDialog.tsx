@@ -79,12 +79,12 @@ export function TemplateEditorDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Название шаблона</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Название шаблона</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Стандартный урок" required />
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Позиции</Label>
+            <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Позиции</Label>
             <div className="flex flex-col gap-1.5">
               {lines.map((l) => (
                 <div key={l.id} className="rounded-lg border border-border p-2 sm:border-0 sm:p-0">
@@ -122,7 +122,7 @@ export function TemplateEditorDialog({
           </div>
 
           {error && (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-bold text-destructive">{error}</div>
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">{error}</div>
           )}
 
           <DialogFooter>

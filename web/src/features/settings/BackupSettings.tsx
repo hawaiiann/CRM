@@ -201,12 +201,12 @@ export function BackupSettings() {
 
   return (
     <div className="glass-surface rounded-xl p-4.5">
-      <h3 className="text-[15px] font-bold">Резервное копирование</h3>
-      <div className="mb-3 text-[12px] text-muted-foreground">Скачайте бэкап целиком или проверьте, что всё в приложении совпадает с тем, что реально лежит в облаке.</div>
+      <h3 className="text-lg font-bold">Резервное копирование</h3>
+      <div className="mb-3 text-xs text-muted-foreground">Скачайте бэкап целиком или проверьте, что всё в приложении совпадает с тем, что реально лежит в облаке.</div>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Автобэкап при сохранении</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Автобэкап при сохранении</label>
           <Select value={String(backupSettings.enabled)} onValueChange={(v) => updateSetting({ enabled: v === "true" })}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -216,7 +216,7 @@ export function BackupSettings() {
           </Select>
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Периодичность</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Периодичность</label>
           <Select value={backupSettings.interval} onValueChange={(v) => updateSetting({ interval: v as BackupSettingsType["interval"] })}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -232,36 +232,36 @@ export function BackupSettings() {
 
       {backupPathSupported() && (
         <div className="mb-4">
-          <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Папка на диске для автобэкапа</label>
+          <label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Папка на диске для автобэкапа</label>
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={backupSettings.path}
               onChange={(e) => updateSetting({ path: e.target.value })}
               placeholder={DEFAULT_BACKUP_PATH}
-              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-[12.5px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
             <Button type="button" variant="outline" size="sm" onClick={pickDirectory}>
               <FolderOpen />{hasDirectoryAccess() ? "Сменить папку" : "Подтвердить доступ"}
             </Button>
           </div>
-          <div className="mt-1.5 text-[11.5px] text-muted-foreground">
+          <div className="mt-1.5 text-xs text-muted-foreground">
             Путь можно править вручную, но доступ к папке даёт только браузер — один раз нажмите кнопку и выберите её. Дальше доступ запомнится.
           </div>
           {dirWarning && (
-            <div className="mt-1.5 text-[11.5px] font-bold text-destructive">
+            <div className="mt-1.5 text-xs font-bold text-destructive">
               Доступ к папке не подтверждён — автобэкап на диск не пишется. Нажмите кнопку рядом.
             </div>
           )}
 
           {otherAccounts.length > 0 && (
             <div className="mt-3.5 rounded-lg border border-border bg-muted/30 p-3">
-              <div className="mb-2 text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Какие аккаунты бэкапить</div>
+              <div className="mb-2 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Какие аккаунты бэкапить</div>
               <div className="flex flex-col gap-2">
                 {otherAccounts.map(([id, acc]) => {
                   const isCurrent = id === currentUserId
                   const on = isCurrent || !(backupSettings.excludedAccounts || []).includes(id)
                   return (
-                    <label key={id} className={cn("flex items-center gap-2.5 text-[12.5px]", isCurrent ? "cursor-default" : "cursor-pointer")}>
+                    <label key={id} className={cn("flex items-center gap-2.5 text-sm", isCurrent ? "cursor-default" : "cursor-pointer")}>
                       <Checkbox
                         checked={on}
                         disabled={isCurrent}
@@ -272,12 +272,12 @@ export function BackupSettings() {
                         }}
                       />
                       <span className={on ? "" : "text-muted-foreground line-through"}>{acc.email || id.slice(0, 8)}</span>
-                      {isCurrent && <span className="text-[11px] text-muted-foreground">— текущий, бэкапится всегда</span>}
+                      {isCurrent && <span className="text-2xs text-muted-foreground">— текущий, бэкапится всегда</span>}
                     </label>
                   )
                 })}
               </div>
-              <div className="mt-2 text-[11.5px] text-muted-foreground">
+              <div className="mt-2 text-xs text-muted-foreground">
                 Снятые галочки пропускаются. Данные неактивных аккаунтов читаются напрямую по сохранённому токену — переключаться между ними не нужно.
               </div>
             </div>
@@ -286,10 +286,10 @@ export function BackupSettings() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-border pt-3.5">
-        <div className="text-[12.5px]">
+        <div className="text-sm">
           <span className="font-bold">Последний бэкап: </span>
           <span className="text-muted-foreground">{backupSettings.lastBackup ? new Date(backupSettings.lastBackup).toLocaleString("ru") : "Ещё не производился"}</span>
-          {exportNote && <div className="mt-1 text-[11.5px] font-bold text-foreground/80">{exportNote}</div>}
+          {exportNote && <div className="mt-1 text-xs font-bold text-foreground/80">{exportNote}</div>}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={selfCheck} disabled={checking}>

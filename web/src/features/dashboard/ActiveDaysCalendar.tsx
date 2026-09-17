@@ -103,7 +103,7 @@ export function ActiveDaysCalendar() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-[16px] font-bold">Активные дни</h3>
+        <h3 className="text-lg font-bold">Активные дни</h3>
         <Select value={monthValue} onValueChange={(v) => { setMonthValue(v); selectDay(null) }}>
           <SelectTrigger size="sm" className="w-auto"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -112,7 +112,7 @@ export function ActiveDaysCalendar() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1 text-center text-2xs font-bold text-muted-foreground">
         {WEEKDAY_LABELS.map((w) => <span key={w}>{w}</span>)}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1">
@@ -123,7 +123,7 @@ export function ActiveDaysCalendar() {
             disabled={c.outside || !c.isActive}
             onClick={() => c.dateStr && selectDay(openDay === c.dateStr ? null : c.dateStr)}
             className={cn(
-              "flex aspect-square items-center justify-center rounded-md text-[11px] font-semibold",
+              "flex aspect-square items-center justify-center rounded-md text-2xs font-semibold",
               c.outside && "text-muted-foreground/40",
               !c.outside && !c.isActive && "text-muted-foreground",
               !c.outside && c.isActive && !c.isToday && "cursor-pointer bg-overlay/14 text-foreground/90",
@@ -138,24 +138,24 @@ export function ActiveDaysCalendar() {
 
       <div className="mt-4 flex gap-6 border-t border-border pt-3.5">
         <div>
-          <div className="font-heading text-[23px] font-bold">{activeDaysInMonth}</div>
-          <div className="text-[11px] text-muted-foreground">активных дней</div>
+          <div className="font-heading text-2xl font-bold">{activeDaysInMonth}</div>
+          <div className="text-2xs text-muted-foreground">активных дней</div>
         </div>
         <div>
-          <div className="font-heading text-[23px] font-bold">{fmtHours(hoursInMonth)}</div>
-          <div className="text-[11px] text-muted-foreground">за месяц</div>
+          <div className="font-heading text-2xl font-bold">{fmtHours(hoursInMonth)}</div>
+          <div className="text-2xs text-muted-foreground">за месяц</div>
         </div>
       </div>
 
       {openDay && (
         <div className="mt-3 rounded-xl bg-muted px-3.5 py-3">
           <div className="mb-1 flex items-center justify-between">
-            <b className="text-[12.5px]">{formatDayLabel(openDay)}</b>
-            <button type="button" onClick={() => selectDay(null)} className="text-[11px] text-muted-foreground">Закрыть ✕</button>
+            <b className="text-sm">{formatDayLabel(openDay)}</b>
+            <button type="button" onClick={() => selectDay(null)} className="text-2xs text-muted-foreground">Закрыть ✕</button>
           </div>
           {dayEntries.length ? (
             <>
-              <div className="flex justify-between py-1 text-[12.5px]">
+              <div className="flex justify-between py-1 text-sm">
                 <span className="text-muted-foreground">Часы</span>
                 <b>{fmtHours(hoursForDay)}</b>
               </div>
@@ -167,7 +167,7 @@ export function ActiveDaysCalendar() {
                   const order = orders.find((o) => o.id === e.orderId)
                   const isEditing = editing?.entry === e
                   return (
-                    <div key={i} className="flex items-center justify-between gap-2 text-[11.5px]">
+                    <div key={i} className="flex items-center justify-between gap-2 text-xs">
                       <span className="min-w-0 truncate text-muted-foreground">
                         {order ? orderTitle(order) : "Заказ удалён"}
                       </span>
@@ -183,7 +183,7 @@ export function ActiveDaysCalendar() {
                               if (ev.key === "Enter") saveEdit()
                               if (ev.key === "Escape") setEditing(null)
                             }}
-                            className="w-14 rounded border border-border bg-background px-1.5 py-0.5 text-right text-[11.5px] outline-none"
+                            className="w-14 rounded border border-border bg-background px-1.5 py-0.5 text-right text-xs outline-none"
                           />
                           <button
                             type="button"
@@ -224,7 +224,7 @@ export function ActiveDaysCalendar() {
               </div>
             </>
           ) : (
-            <div className="text-[12px] text-muted-foreground">Нет записей</div>
+            <div className="text-xs text-muted-foreground">Нет записей</div>
           )}
         </div>
       )}

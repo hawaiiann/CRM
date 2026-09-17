@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Plus, Download } from "lucide-react"
+import { Plus, Download, FileInput } from "lucide-react"
 import { OrderFormDialog } from "@/features/orders/OrderFormDialog"
 import type { Order } from "@/types/models"
 import { LessonsHeader } from "@/components/layout/LessonsHeader"
@@ -18,6 +18,7 @@ import { BoardCard } from "./BoardCard"
 import { BoardFormDialog } from "./BoardFormDialog"
 import { LessonSheet } from "./LessonSheet"
 import { PlanningExportDialog } from "./PlanningExportDialog"
+import { KtpImportDialog } from "./KtpImportDialog"
 import type { PlanningBoard, PlanningLesson } from "@/types/models"
 
 type SortMode = "class" | "subject" | "deadline"
@@ -42,6 +43,7 @@ export function PlanningPage() {
   const setActiveLesson = (next: { board: PlanningBoard; lesson: PlanningLesson } | null) =>
     navigate(next ? `/planning/${next.board.id}/${next.lesson.id}` : "/planning", { replace: !!lessonId })
   const [exportOpen, setExportOpen] = useState(false)
+  const [ktpOpen, setKtpOpen] = useState(false)
   // Заказ из урока: форма заказа с предзаполненными предметом, классом,
   // четвертью, номером, составом и привязкой к уроку.
   const [orderPrefill, setOrderPrefill] = useState<Partial<Order> | null>(null)
@@ -74,6 +76,10 @@ export function PlanningPage() {
                 <SelectItem value="deadline">Сортировка: по дедлайну</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => setKtpOpen(true)} title="Вставить таблицу КТП: темы, даты, график">
+              <FileInput />
+              Импорт КТП
+            </Button>
             <Button variant="outline" onClick={() => setExportOpen(true)}>
               <Download />
               Экспорт
@@ -90,22 +96,22 @@ export function PlanningPage() {
 
       {boards.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card/50 py-16 text-center">
-          <div className="text-[14px] font-bold">Список планирования пуст</div>
-          <p className="mt-1.5 text-[12.5px] text-muted-foreground">Создайте первый класс для ведения уроков.</p>
+          <div className="text-base font-bold">Список планирования пуст</div>
+          <p className="mt-1.5 text-sm text-muted-foreground">Создайте первый класс для ведения уроков.</p>
           <Button onClick={() => setBoardFormOpen(true)} className="mt-4 bg-cta/90 font-extrabold text-cta-foreground">
             Добавить класс
           </Button>
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
-          {active.length === 0 && <div className="py-6 text-[13px] text-muted-foreground">{search ? "По вашему запросу ничего не найдено" : "Нет активных классов в планировании"}</div>}
+          {active.length === 0 && <div className="py-6 text-sm text-muted-foreground">{search ? "По вашему запросу ничего не найдено" : "Нет активных классов в планировании"}</div>}
           {active.map((b) => (
             <BoardCard key={b.id} board={b} onEdit={() => { setEditingBoard(b); setBoardFormOpen(true) }} onOpenLesson={(lesson) => setActiveLesson({ board: b, lesson })} />
           ))}
 
           {archived.length > 0 && (
             <div className="mt-2 border-t-2 border-dashed border-border pt-5">
-              <button type="button" onClick={() => setArchiveOpen((v) => !v)} className="mb-3 text-[13px] font-bold text-muted-foreground">
+              <button type="button" onClick={() => setArchiveOpen((v) => !v)} className="mb-3 text-sm font-bold text-muted-foreground">
                 Архив классов ({archived.length}) {archiveOpen ? "▲" : "▼"}
               </button>
               {archiveOpen && (
@@ -126,6 +132,7 @@ export function PlanningPage() {
           охватывать все классы этого периода, включая те, что сейчас
           отфильтрованы поиском. */}
       <PlanningExportDialog open={exportOpen} boards={boards} onOpenChange={setExportOpen} />
+      <KtpImportDialog open={ktpOpen} onOpenChange={setKtpOpen} />
       <LessonSheet
         board={activeLesson?.board ?? null}
         lesson={activeLesson?.lesson ?? null}

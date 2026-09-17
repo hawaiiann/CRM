@@ -94,25 +94,25 @@ export function ActDialog({ open, onOpenChange, initialClient }: { open: boolean
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Заказчик</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Заказчик</Label>
               <Select value={client} onValueChange={setClient}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Выберите" /></SelectTrigger>
                 <SelectContent>{clients.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Месяц</Label>
+              <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">Месяц</Label>
               <Select value={month} onValueChange={setMonth}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>{months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox checked={onlyDone} onCheckedChange={(c) => setOnlyDone(!!c)} />
             Только сданные (статус «Завершён»)
           </label>
-          <div className="rounded-lg bg-muted px-3.5 py-3 text-[12.5px]">
+          <div className="rounded-lg bg-muted px-3.5 py-3 text-sm">
             {included.length === 0 ? (
               <span className="text-muted-foreground">За этот месяц у заказчика нет {onlyDone ? "сданных " : ""}уроков — акт будет пустым.</span>
             ) : (
