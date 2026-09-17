@@ -757,19 +757,29 @@ async function syncActivityLog() {
     const rows = unsent.map((e) => ({ user_id: userId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }))
     // id строки нужен для realtime-DELETE: в событии удаления приходит только
     // серверный id, а не наш entry_id.
-    const { data, error } = await supabaseClient.from("activity_log").insert(rows).select("id, entry_id")
+    // upsert с ignoreDuplicates: если прошлая вставка прошла, а ответ не
+    // дошёл, строки уже есть — повторная вставка не должна ни падать, ни
+    // дублировать. Раньше ошибка «duplicate key … entry_id» принималась за
+    // отсутствие колонки и переключала журнал на позиционную отправку,
+    // которая дописывала весь хвост ещё раз.
+    const { data, error } = await supabaseClient.from("activity_log").upsert(rows, { onConflict: "entry_id", ignoreDuplicates: true }).select("id, entry_id")
     if (!error) {
       unsent.forEach(rememberSyncedEntry)
       ;(data || []).forEach((r: Row) => rememberServerId(r))
       cloudSnapshot.activityLogSyncedCount = activityLog.length
       return
     }
-    if (String(error.message || "").includes("entry_id")) {
+    if (isMissingColumnError(error) && /entry_id/.test(String(error.message || ""))) {
       noteEntryIdMissing()
     } else {
       throw error
     }
   }
+
+  // Позиционная отправка — только пока в базе нет entry_id. Это последняя
+  // защита: хвост «после счётчика» легко съезжает, и его нельзя запускать,
+  // когда идентификаторы уже есть.
+  if (activityLogSupportsEntryId) return
 
   if (cloudSnapshot.activityLogSyncedCount > activityLog.length) cloudSnapshot.activityLogSyncedCount = activityLog.length
   if (activityLog.length > cloudSnapshot.activityLogSyncedCount) {
@@ -1176,8 +1186,9 @@ async function reconcileWithCloud() {
     const local = localBoards.find((x) => x.id === b.id)
     return local ? { ...b, lessons: keepMissing(local.lessons || [], b.lessons || []) } : b
   })
+  // Без entryId запись не отличить от уже лежащей в облаке — не переносим.
   const cloudEntryIds = new Set(state.activityLog.map((e) => e.entryId).filter(Boolean))
-  const activityLog = [...state.activityLog, ...localLog.filter((e) => !e.entryId || !cloudEntryIds.has(e.entryId))]
+  const activityLog = [...state.activityLog, ...localLog.filter((e) => !!e.entryId && !cloudEntryIds.has(e.entryId) && !cloudSnapshot.activityLogSyncedIds.has(e.entryId))]
 
   const dropped = countChanged(localOrders, state.orders) + countChanged(localTasks, state.tasks) + countChanged(localAdv, state.advances)
 
@@ -1243,19 +1254,23 @@ interface LocalBeforeLoad {
   boards: PlanningBoard[]
   log: ActivityLogEntry[]
   snapshot: Pick<CloudSnapshot, "orders" | "tasks" | "advances" | "planningBoards" | "planningLessons"> | null
+  /** entryId записей журнала, которые облако подтверждало в прошлый раз. */
+  snapshotLog: Set<string>
 }
 
 function readLocalBeforeLoad(): LocalBeforeLoad {
   const parse = <T>(key: string): T[] => { try { const raw = readCached(key); return raw ? (JSON.parse(raw) as T[]) : [] } catch { return [] } }
   let snapshot: LocalBeforeLoad["snapshot"] = null
+  let snapshotLog = new Set<string>()
   try {
     const raw = localStorage.getItem(lsKey(CLOUD_SNAPSHOT_KEY))
     const s = raw ? JSON.parse(raw) : null
     // Снимки прежних версий хранили заказы «сырыми» (см. cloudLoadData) — по
     // ним каждая запись выглядела бы правленной с обеих сторон.
     if (s && s.updatedAt && s.version >= SNAPSHOT_VERSION) snapshot = { orders: s.orders || {}, tasks: s.tasks || {}, advances: s.advances || {}, planningBoards: s.planningBoards || {}, planningLessons: s.planningLessons || {} }
+    if (s && s.activityLogSynced) snapshotLog = new Set(Object.keys(s.activityLogSynced))
   } catch { /* снимка нет — сливать нечего */ }
-  return { orders: parse<Order>(STORAGE_KEY), tasks: parse<Task>(TASKS_KEY), advances: parse<Advance>(ADVANCES_KEY), boards: parse<PlanningBoard>(PLANNING_KEY), log: parse<ActivityLogEntry>(ACTIVITY_LOG_KEY), snapshot }
+  return { orders: parse<Order>(STORAGE_KEY), tasks: parse<Task>(TASKS_KEY), advances: parse<Advance>(ADVANCES_KEY), boards: parse<PlanningBoard>(PLANNING_KEY), log: parse<ActivityLogEntry>(ACTIVITY_LOG_KEY), snapshot, snapshotLog }
 }
 
 /**
@@ -1277,9 +1292,14 @@ function mergeLocalIntoState(state: CloudState, local: LocalBeforeLoad): { kept:
   const lessonsByBoard: Record<string, PlanningLesson[]> = {}
   l.merged.forEach(({ boardId, ...lesson }) => { (lessonsByBoard[boardId] ||= []).push(lesson) })
   const boards = b.merged.map((bd) => ({ ...bd, lessons: (lessonsByBoard[bd.id] || []).sort((x, y) => (x.num || 0) - (y.num || 0)) }))
-  // Журнал: записи без entryId или неизвестные облаку — не отправлены.
+  // Журнал: не отправлена только запись со СВОИМ entryId, которого нет ни в
+  // облаке, ни в прошлом снимке (снимок знает её → она была в облаке и
+  // удалена там). Записи без entryId сюда не берём: их не отличить от строк,
+  // которые уже лежат в облаке, — именно так v2.29.0 при каждой загрузке
+  // добавляла весь журнал ещё раз (6600 лишних строк за день).
   const cloudEntryIds = new Set(state.activityLog.map((e) => e.entryId).filter(Boolean))
-  const unsentLog = local.log.filter((e) => !e.entryId || !cloudEntryIds.has(e.entryId))
+  const knownBefore = local.snapshotLog
+  const unsentLog = local.log.filter((e) => !!e.entryId && !cloudEntryIds.has(e.entryId) && !knownBefore.has(e.entryId))
 
   state.orders = o.merged
   state.tasks = t.merged
