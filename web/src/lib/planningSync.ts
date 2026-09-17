@@ -1,4 +1,5 @@
 import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
+import { lessonDisplayColor } from "./planningStats"
 
 /**
  * Нечёткое совпадение заказа с уроком: класс, предмет, четверть и номер урока.
@@ -89,28 +90,12 @@ export function syncPlanningWithOrders(orders: Order[], boardsIn: PlanningBoard[
       })
     }
 
-    if (!lesson.colorLocked) {
-      if (o.status === "done") {
-        const totalInL = lesson.items.length
-        const doneInL = lesson.items.filter((i) => i.done).length
-        if (totalInL === 0 || doneInL === 0) {
-          lesson.color = "gray"
-        } else {
-          const ratio = doneInL / totalInL
-          lesson.color = ratio >= 0.99 ? "green-3" : ratio >= 0.5 ? "green-2" : "green-1"
-        }
-        lessonsSyncedByOrder.add(lesson)
-        lesson.orderLinked = true
-      } else if (["progress", "review"].includes(o.status)) {
-        lesson.color = "yellow"
-        lessonsSyncedByOrder.add(lesson)
-        lesson.orderLinked = true
-      } else if (o.status === "queue") {
-        lesson.color = "gray"
-        lessonsSyncedByOrder.add(lesson)
-        lesson.orderLinked = true
-      }
-    }
+    // Цвет — по чек-листу (lessonDisplayColor), статус заказа лишь добавляет
+    // жёлтый «в работе», пока ничего не закрыто. Раньше «в очереди» красил
+    // клетку серой поверх любых галочек.
+    lesson.orderLinked = true
+    lessonsSyncedByOrder.add(lesson)
+    if (!lesson.colorLocked) lesson.color = lessonDisplayColor(lesson, o)
   }
 
   orders.forEach((o) => {
@@ -140,21 +125,30 @@ export function syncPlanningWithOrders(orders: Order[], boardsIn: PlanningBoard[
     board.lessons.forEach((lesson) => {
       if (lesson.colorLocked) return
       if (lessonsSyncedByOrder.has(lesson)) return
-
-      const items = lesson.items || []
-      const totalInL = items.length
-      const doneInL = items.filter((i) => i.done).length
-
-      if (totalInL === 0 || doneInL === 0) {
-        lesson.color = "gray"
-      } else {
-        const ratio = doneInL / totalInL
-        lesson.color = ratio >= 0.99 ? "green-3" : ratio >= 0.5 ? "green-2" : "green-1"
-      }
+      lesson.color = lessonDisplayColor(lesson, null)
     })
   })
 
   return boards
+}
+
+/**
+ * Готовность позиций заказа по чек-листу урока: галочка в уроке ставит
+ * позицию «готова» и наоборот. Без этого пункт, пришедший из заказа,
+ * откатывался автосинхронизацией при следующем же сохранении, а таймер
+ * продолжал считать позицию открытой.
+ */
+export function applyLessonItemsToOrderLines(order: Order, lesson: PlanningLesson): Order {
+  const doneByText = new Map((lesson.items || []).map((i) => [i.text.trim().toLowerCase(), !!i.done]))
+  let changed = false
+  const lines = (order.lines || []).map((line) => {
+    const key = (line.label || line.type || "Работа").trim().toLowerCase()
+    const done = doneByText.get(key)
+    if (done === undefined || !!line.ready === done) return line
+    changed = true
+    return { ...line, ready: done }
+  })
+  return changed ? { ...order, lines } : order
 }
 
 // Тот же поиск, что делает syncPlanningWithOrders — возвращает заказ, который

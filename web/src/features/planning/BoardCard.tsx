@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react"
-import { ChevronDown, Settings, Archive, ArchiveRestore, X, CalendarDays } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ChevronDown, Settings, Archive, ArchiveRestore, X, CalendarDays, FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { fmtDeadline } from "@/lib/dates"
+import { dateKey } from "@/lib/money"
 import { cn } from "@/lib/utils"
-import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
-import { computeBoardProgress, lessonDisplayColor } from "@/lib/planningStats"
+import { computeBoardProgress, lessonDisplayColor, isLessonDone } from "@/lib/planningStats"
+import { findGoverningOrder } from "@/lib/planningSync"
 import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
+import { scheduleValid, scheduleStatus, weekLabel, type ScheduleWeek } from "@/lib/boardSchedule"
 
 const CELL_STYLE: Record<string, string> = {
   gray: "bg-neutral-tone text-neutral-tone-foreground",
@@ -32,6 +35,9 @@ export function BoardCard({
   onEdit: () => void
   onOpenLesson: (lesson: PlanningLesson) => void
 }) {
+  const orders = useAppStore((s) => s.orders)
+  const schedule = useAppStore((s) => s.appSettings.boardSchedules?.[board.id])
+  const materialsLink = useAppStore((s) => s.appSettings.boardLinks?.[board.id])
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
   const setOrders = useAppStore((s) => s.setOrders)
   const setAppSettings = useAppStore((s) => s.setAppSettings)
@@ -60,6 +66,16 @@ export function BoardCard({
   }, [deleteArmedId])
 
   const lessons = board.lessons || []
+  // Цвет клетки считается на лету по чек-листу и заказу урока — а не берётся
+  // из сохранённого lesson.color, который мог посчитать другой, отставший
+  // клиент (см. lessonDisplayColor).
+  const governing = useMemo(() => {
+    const map = new Map<string, Order | null>()
+    ;(board.lessons || []).forEach((l) => map.set(l.id, findGoverningOrder(orders, board, l)))
+    return map
+  }, [orders, board])
+  const colorOf = (l: PlanningLesson) => lessonDisplayColor(l, governing.get(l.id))
+
   // Расчёт вынесен в lib/planningStats.ts — тот же самый использует экспорт
   // в CSV, и он обязан сходиться с тем, что нарисовано на этой карточке.
   const progress = computeBoardProgress(board)
@@ -69,6 +85,9 @@ export function BoardCard({
 
   const mainPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
   const lessonsPct = lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
+
+  const today = dateKey(new Date())
+  const plan = scheduleValid(schedule) ? scheduleStatus(lessons, schedule, today, isLessonDone) : null
 
   function updateBoard(patch: Partial<PlanningBoard>) {
     setPlanningBoards((prev) => prev.map((b) => (b.id === board.id ? { ...b, ...patch } : b)))
@@ -94,10 +113,9 @@ export function BoardCard({
     deleteFromCloud("planning_boards", board.id)
     setOrders((prev) => unlinkOrdersFromLessons(prev, lessons.map((l) => l.id)))
     setAppSettings((s) => {
-      if (!s.boardTemplates?.[board.id]) return s
-      const next = { ...s.boardTemplates }
-      delete next[board.id]
-      return { ...s, boardTemplates: next }
+      if (!s.boardTemplates?.[board.id] && !s.boardSchedules?.[board.id] && !s.boardLinks?.[board.id]) return s
+      const drop = <T,>(m: Record<string, T> | undefined) => { const n = { ...(m || {}) }; delete n[board.id]; return n }
+      return { ...s, boardTemplates: drop(s.boardTemplates), boardSchedules: drop(s.boardSchedules), boardLinks: drop(s.boardLinks) }
     })
     saveData()
   }
@@ -117,7 +135,53 @@ export function BoardCard({
     setDeleteArmedId(null)
   }
 
-  let hiddenCompletedCount = 0
+  const hiddenCompletedCount = showCompleted ? 0 : lessons.filter((l) => colorOf(l) === "green-3").length
+  const isVisible = (l: PlanningLesson) => showCompleted || colorOf(l) !== "green-3"
+
+  function renderCell(lesson: PlanningLesson) {
+    const colorClass = colorOf(lesson)
+    const armed = deleteArmedId === lesson.id
+    return (
+      <button
+        key={lesson.id}
+        type="button"
+        data-lesson-id={lesson.id}
+        title={armed ? "Удалить урок" : lesson.title || `Урок ${lesson.num}`}
+        onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
+        onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
+        className={cn(
+          "flex size-11 items-center justify-center rounded-[13px] text-[14.5px] font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
+          armed ? "bg-destructive text-white" : CELL_STYLE[colorClass]
+        )}
+      >
+        {armed ? <X className="size-4.5" strokeWidth={2.5} /> : lesson.num}
+      </button>
+    )
+  }
+
+  function renderWeek(w: ScheduleWeek) {
+    const visible = w.lessons.filter(isVisible)
+    if (!visible.length) return null
+    const current = plan && w.index === plan.currentWeek
+    const past = w.end < today
+    const lagging = past && w.lessons.some((l) => !isLessonDone(l))
+    return (
+      <div
+        key={w.index}
+        className={cn(
+          "rounded-[15px] border p-1.5",
+          current ? "border-emphasis/50 bg-emphasis/8" : "border-transparent",
+          lagging && !current && "border-destructive/30"
+        )}
+      >
+        <div className={cn("mb-1 flex items-center gap-1 px-0.5 text-[10px] font-bold tracking-wide uppercase", current ? "text-foreground" : lagging ? "text-destructive" : "text-muted-foreground")}>
+          <span>{w.index + 1} нед</span>
+          <span className="font-semibold normal-case tracking-normal opacity-80">· {weekLabel(w)}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">{visible.map(renderCell)}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="glass-surface rounded-xl">
@@ -135,6 +199,18 @@ export function BoardCard({
             <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
               <CalendarDays className="size-3" />+ Дедлайн
             </button>
+          )}
+          {materialsLink && (
+            <a
+              href={materialsLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={materialsLink}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold hover:bg-muted"
+            >
+              <FolderOpen className="size-3" />
+              Материалы
+            </a>
           )}
         </div>
         <div className="flex items-center gap-1.5">
@@ -163,6 +239,19 @@ export function BoardCard({
               <div className="font-heading mt-0.5 text-[13px] font-bold">{greenLessons}/{lessons.length}</div>
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${lessonsPct}%` }} /></div>
             </div>
+            {plan && (
+              // График: где программа должна быть сегодня и сколько уроков
+              // отстаёт. Считается по неделям от даты старта (lib/boardSchedule.ts).
+              <div className={cn("rounded-xl px-3 py-2.5", plan.behind > 0 ? "bg-destructive/10" : "bg-muted")}>
+                <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">График</div>
+                <div className="font-heading mt-0.5 text-[13px] font-bold">
+                  {plan.currentWeek < 0 ? "до старта" : plan.currentWeek >= plan.weeks.length ? "завершён" : `${plan.currentWeek + 1} из ${plan.weeks.length} нед`}
+                </div>
+                <div className={cn("mt-1 text-[10.5px] font-bold", plan.behind > 0 ? "text-destructive" : "text-muted-foreground")}>
+                  {plan.behind > 0 ? `отстаёт на ${plan.behind}` : "в графике"} · план {plan.plannedByNow}, готово {plan.done}
+                </div>
+              </div>
+            )}
             {Object.entries(typeBreakdown).map(([name, stat]) => {
               const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0
               return (
@@ -175,35 +264,18 @@ export function BoardCard({
             })}
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {lessons.map((lesson) => {
-              const colorClass = lessonDisplayColor(lesson)
-              if (colorClass === "green-3" && !showCompleted) { hiddenCompletedCount++; return null }
-              const armed = deleteArmedId === lesson.id
-              return (
-                <button
-                  key={lesson.id}
-                  type="button"
-                  data-lesson-id={lesson.id}
-                  title={armed ? "Удалить урок" : lesson.title || `Урок ${lesson.num}`}
-                  onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
-                  onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
-                  className={cn(
-                    "flex size-11 items-center justify-center rounded-[13px] text-[14.5px] font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
-                    armed ? "bg-destructive text-white" : CELL_STYLE[colorClass]
-                  )}
-                >
-                  {armed ? <X className="size-4.5" strokeWidth={2.5} /> : lesson.num}
-                </button>
-              )
-            })}
-          </div>
+          {plan ? (
+            <div className="-m-1.5 flex flex-wrap gap-x-2 gap-y-1">{plan.weeks.map(renderWeek)}</div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">{lessons.filter(isVisible).map(renderCell)}</div>
+          )}
 
           {/* Жест удаления правой кнопкой раньше нигде не был подписан —
               о нём просто не знали. Основной путь — корзина в карточке урока. */}
           {lessons.length > 0 && (
             <div className="mt-2 text-[10.5px] text-muted-foreground">
               Клик — открыть урок. Удалить: корзина в карточке урока или правая кнопка по клетке.
+              {!plan && " Уроков в неделю и дата старта — в настройках класса: сетка разложится по неделям."}
             </div>
           )}
 

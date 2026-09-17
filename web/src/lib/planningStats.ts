@@ -1,4 +1,4 @@
-import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
 
 export interface BoardProgress {
   lessonsTotal: number
@@ -11,52 +11,51 @@ export interface BoardProgress {
 
 export type LessonColor = "gray" | "yellow" | "green-1" | "green-2" | "green-3" | "red"
 
-/**
- * Цвет клетки урока — то же самое, что решает раскраску сетки в BoardCard.
- *
- * Раньше это была локальная функция внутри компонента (lessonColorClass) и
- * годилась только для отрисовки на экране. Вынесена сюда, чтобы экспорт мог
- * закрасить строку «По урокам» ТЕМ ЖЕ цветом, что виден в самом планировании,
- * а не считать его заново своими правилами и рано или поздно разойтись.
- *
- * Закреплённый вручную или пришедший от заказа цвет побеждает — тогда состав
- * чек-листа на цвет клетки не влияет. Иначе цвет считается по доле готовых
- * пунктов: 0 — серый, до половины — green-1, до почти всех — green-2, иначе
- * green-3.
- */
-export function lessonDisplayColor(l: PlanningLesson): LessonColor {
-  if (l.colorLocked || l.orderLinked) return (l.color as LessonColor) || "gray"
+/** Доля закрытых пунктов чек-листа: 0…1; без пунктов — 0. */
+export function lessonRatio(l: PlanningLesson): number {
   const items = l.items || []
-  const total = items.length
-  const done = items.filter((i) => i.done).length
-  if (total === 0 || done === 0) return "gray"
-  const ratio = done / total
-  return ratio >= 0.99 ? "green-3" : ratio >= 0.5 ? "green-2" : "green-1"
+  if (!items.length) return 0
+  return items.filter((i) => i.done).length / items.length
 }
 
 /**
- * Урок готов, если у него нет незакрытых пунктов — либо если цвет клетки
- * зелёный (его можно закрепить вручную или он приходит от статуса связанного
- * заказа, и тогда состав чек-листа не главное). Условие один в один повторяет
- * то, что решает цвет клетки в BoardCard (lessonColorClass) — тайл «Уроков» на
- * карточке доски и строка в экспорте обязаны сходиться, иначе один и тот же
- * прогресс на экране и в файле будет выглядеть по-разному.
+ * Цвет клетки урока — одна функция для сетки, тайлов прогресса, экспорта и
+ * автосинхронизации (syncPlanningWithOrders пишет её результат в lesson.color).
+ *
+ * Правило: цвет считается по чек-листу, всегда. Закрыто всё — green-3, больше
+ * половины — green-2, что-то — green-1. Ничего не закрыто: жёлтый, если заказ
+ * в работе или на согласовании, иначе серый. Закреплённый вручную цвет
+ * побеждает.
+ *
+ * Раньше статус заказа перекрывал чек-лист целиком: заказ «в очереди» держал
+ * клетку серой, даже когда все пункты уже отмечены, — и в сетке не было видно,
+ * что урок по факту готов.
  */
-function isLessonDone(l: PlanningLesson): boolean {
+export function lessonDisplayColor(l: PlanningLesson, order?: Order | null): LessonColor {
+  if (l.colorLocked) return (l.color as LessonColor) || "gray"
+  const ratio = lessonRatio(l)
+  if (ratio >= 0.99) return "green-3"
+  if (ratio >= 0.5) return "green-2"
+  if (ratio > 0) return "green-1"
+  if (order && (order.status === "progress" || order.status === "review")) return "yellow"
+  return "gray"
+}
+
+/**
+ * Урок готов: все пункты закрыты, либо цвет закреплён вручную как «Готово».
+ * Раньше готовым считался любой зелёный оттенок — урок с одним пунктом из
+ * трёх попадал в «сделанные» на тайле доски.
+ */
+export function isLessonDone(l: PlanningLesson): boolean {
+  if (l.colorLocked) return l.color === "green-3"
   const items = l.items || []
-  const total = items.length
-  const done = items.filter((i) => i.done).length
-  return !!(l.color && l.color.startsWith("green")) || (total > 0 && done === total)
+  return items.length > 0 && items.every((i) => i.done)
 }
 
 /**
  * Прогресс одной доски (класса): сколько уроков закрыто, сколько пунктов
  * чек-листа выполнено — целиком и по каждому названию пункта отдельно.
- *
- * Раньше это считалось прямо внутри BoardCard, только для отрисовки плиток
- * на карточке. Вынесено сюда, чтобы тот же расчёт использовал экспорт в CSV
- * (PlanningExportDialog) — без этого получилась бы вторая копия формулы,
- * которая рано или поздно разошлась бы с той, что видна на экране.
+ * Тот же расчёт использует экспорт в CSV (PlanningExportDialog).
  */
 export function computeBoardProgress(board: PlanningBoard): BoardProgress {
   const lessons = board.lessons || []

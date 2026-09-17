@@ -119,6 +119,8 @@ export function defaultAppSettings(): AppSettings {
     hiddenEntries: { clients: [], types: [], units: [], subjects: [], classes: [] },
     orderTemplates: [],
     boardTemplates: {},
+    boardSchedules: {},
+    boardLinks: {},
     dashboardMetrics: [
       { id: "dm1", type: "hours", goal: 4 },
       { id: "dm2", type: "presentations", goal: 0 },
@@ -144,6 +146,8 @@ export function applySettingsMigrations(parsed: Partial<AppSettings> | null | un
   if (!merged.dashboardMetrics) merged.dashboardMetrics = base.dashboardMetrics
   if (!merged.orderTemplates) merged.orderTemplates = base.orderTemplates
   if (!merged.boardTemplates || typeof merged.boardTemplates !== "object") merged.boardTemplates = {}
+  if (!merged.boardSchedules || typeof merged.boardSchedules !== "object") merged.boardSchedules = {}
+  if (!merged.boardLinks || typeof merged.boardLinks !== "object") merged.boardLinks = {}
   if (!merged.hiddenEntries) merged.hiddenEntries = base.hiddenEntries
   ;(["clients", "types", "units", "subjects", "classes"] as const).forEach((k) => {
     if (!merged.hiddenEntries[k]) merged.hiddenEntries[k] = []

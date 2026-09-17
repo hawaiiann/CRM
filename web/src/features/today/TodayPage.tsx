@@ -66,8 +66,11 @@ export function TodayPage() {
     let hoursToday = 0, hoursWeek = 0
     activityLog.forEach((e) => {
       if (e.field !== "hours") return
-      if (e.date === today) hoursToday += e.delta
-      if (e.date >= weekStart && e.date <= today) hoursWeek += e.delta
+      // Отрицательная запись — правка часов задним числом, а не работа:
+      // в «часах сегодня» её не считаем, иначе выходит «−1 ч 58 мин».
+      const h = Math.max(0, e.delta)
+      if (e.date === today) hoursToday += h
+      if (e.date >= weekStart && e.date <= today) hoursWeek += h
     })
     return { debt: ordersDebt(orders), advance: adv.available, hoursToday, hoursWeek }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,7 +128,9 @@ export function TodayPage() {
         </div>
 
         <div className="flex flex-col gap-3.5">
-          <section className="glass-surface rounded-xl p-4.5">
+          {/* shrink-0: колонка растянута по высоте соседней, и без этого блок
+              сжимался под виджет задач — низ с кнопками обрезался. */}
+          <section className="glass-surface shrink-0 rounded-xl p-4.5">
             <h3 className="mb-3 text-[16px] font-bold">Деньги и время</h3>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Stat label="К получению" value={fmtMoney(money.debt)} tone={money.debt > 0 ? "destructive" : undefined} />

@@ -43,6 +43,11 @@ export function BoardFormDialog({
   const [title, setTitle] = useState("")
   const [quarter, setQuarter] = useState("")
   const [deadline, setDeadline] = useState("")
+  // График: уроков в неделю и дата старта — по ним сетка раскладывается по
+  // неделям и видно отставание. Ссылка на материалы — папка класса на диске.
+  const [perWeek, setPerWeek] = useState(0)
+  const [startDate, setStartDate] = useState("")
+  const [materialsLink, setMaterialsLink] = useState("")
   const [lessonNums, setLessonNums] = useState<number[]>([])
   const [rangeFrom, setRangeFrom] = useState(1)
   const [rangeTo, setRangeTo] = useState(24)
@@ -61,6 +66,10 @@ export function BoardFormDialog({
       setTitle(board.title || "")
       setQuarter(board.quarter || "")
       setDeadline(board.deadline || "")
+      const sched = appSettings.boardSchedules?.[board.id]
+      setPerWeek(sched?.perWeek || 0)
+      setStartDate(sched?.start || "")
+      setMaterialsLink(appSettings.boardLinks?.[board.id] || "")
       setLessonNums(nums)
       setRangeFrom((nums[nums.length - 1] || 0) + 1)
       setRangeTo((nums[nums.length - 1] || 0) + 8)
@@ -71,6 +80,9 @@ export function BoardFormDialog({
       setTitle(getVisibleCatalog(appSettings, "classes")[0] || "5 класс")
       setQuarter("1 четверть")
       setDeadline("")
+      setPerWeek(0)
+      setStartDate("")
+      setMaterialsLink("")
       setLessonNums(Array.from({ length: 24 }, (_, i) => i + 1))
       setRangeFrom(25)
       setRangeTo(32)
@@ -108,8 +120,19 @@ export function BoardFormDialog({
     const templateItems = templateLines.map((t) => t.label)
     const boardId = board ? board.id : randId("pb")
 
-    const nextSettings = { ...appSettings, boardTemplates: { ...appSettings.boardTemplates, [boardId]: templateLines } }
+    const nextSettings = {
+      ...appSettings,
+      boardTemplates: { ...appSettings.boardTemplates, [boardId]: templateLines },
+      boardSchedules: { ...(appSettings.boardSchedules || {}) },
+      boardLinks: { ...(appSettings.boardLinks || {}) },
+    }
+    if (perWeek > 0 && startDate) nextSettings.boardSchedules[boardId] = { start: startDate, perWeek: Math.floor(perWeek) }
+    else delete nextSettings.boardSchedules[boardId]
+    if (materialsLink.trim()) nextSettings.boardLinks[boardId] = materialsLink.trim()
+    else delete nextSettings.boardLinks[boardId]
     let changed = JSON.stringify(appSettings.boardTemplates?.[boardId] || []) !== JSON.stringify(templateLines)
+      || JSON.stringify(appSettings.boardSchedules?.[boardId] || null) !== JSON.stringify(nextSettings.boardSchedules[boardId] || null)
+      || (appSettings.boardLinks?.[boardId] || "") !== (nextSettings.boardLinks[boardId] || "")
     if (subject && !nextSettings.subjects.includes(subject)) { nextSettings.subjects = [...nextSettings.subjects, subject]; changed = true }
     if (title && !nextSettings.classes.includes(title)) { nextSettings.classes = [...nextSettings.classes, title]; changed = true }
     if (changed) setAppSettings(nextSettings)
@@ -184,6 +207,20 @@ export function BoardFormDialog({
             <Field label="Дедлайн класса">
               <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[110px_1fr_1.4fr]">
+            <Field label="Уроков в неделю">
+              <NumberInput value={perWeek} onChange={setPerWeek} inputMode="numeric" placeholder="0" />
+            </Field>
+            <Field label="Старт программы">
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </Field>
+            <Field label="Материалы (ссылка)">
+              <Input value={materialsLink} onChange={(e) => setMaterialsLink(e.target.value)} placeholder="https://drive.google.com/…" className="col-span-2 sm:col-span-1" />
+            </Field>
+          </div>
+          <div className="-mt-2 text-[11px] text-muted-foreground">
+            С графиком сетка уроков раскладывается по неделям от даты старта, и на карточке видно, отстаёт ли класс. Ссылка на материалы открывается с карточки класса и из урока.
           </div>
 
           <div>

@@ -1,5 +1,6 @@
 import { test, expect } from "vitest"
-import { syncPlanningWithOrders, orderMatchesLessonFuzzy } from "../planningSync"
+import { syncPlanningWithOrders, orderMatchesLessonFuzzy, applyLessonItemsToOrderLines } from "../planningSync"
+import { lessonDisplayColor, isLessonDone } from "../planningStats"
 import { unlinkOrdersFromLessons, planUnlink } from "../planningOrderSync"
 import type { Order, PlanningBoard } from "@/types/models"
 
@@ -29,6 +30,35 @@ test("готовая позиция закрывает ручной пункт",
 test("пункт из заказа следует за позицией в обе стороны", () => {
   const r = syncPlanningWithOrders([order({})], [board([{ id: "i1", text: "Презентация", done: true, fromOrder: true }])])
   expect(r[0].lessons[0].items[0].done).toBe(false)
+})
+
+test("галочка в уроке делает позицию заказа готовой и наоборот", () => {
+  const o = order({})
+  const l = board([{ id: "i1", text: "презентация", done: true }]).lessons[0]
+  const next = applyLessonItemsToOrderLines(o, l)
+  expect(next).not.toBe(o)
+  expect(next.lines[0].ready).toBe(true)
+  // Уже совпадает — тот же объект, без лишнего сохранения.
+  expect(applyLessonItemsToOrderLines(next, l)).toBe(next)
+  // Пункт, которого нет среди позиций, ничего не меняет.
+  expect(applyLessonItemsToOrderLines(o, board([{ id: "i2", text: "Карточка", done: true }]).lessons[0])).toBe(o)
+})
+
+test("цвет клетки — по чек-листу, заказ «в очереди» его не перекрывает", () => {
+  const items = [{ id: "i1", text: "Презентация", done: true }, { id: "i2", text: "Рабочий лист", done: true }]
+  const queued = order({ status: "queue", lines: [{ id: "l1", label: "Презентация", type: "Слайд", qty: 1, pomoHours: 0, rate: 0, ignorePrice: false, ready: true }] })
+  const r = syncPlanningWithOrders([queued], [board(items)])
+  expect(r[0].lessons[0].color).toBe("green-3")
+  expect(r[0].lessons[0].orderLinked).toBe(true)
+  expect(lessonDisplayColor(r[0].lessons[0], queued)).toBe("green-3")
+  expect(isLessonDone(r[0].lessons[0])).toBe(true)
+
+  const empty = board([{ id: "i1", text: "Презентация", done: false }]).lessons[0]
+  expect(lessonDisplayColor(empty, order({ status: "progress" }))).toBe("yellow")
+  expect(lessonDisplayColor(empty, order({ status: "queue" }))).toBe("gray")
+  expect(lessonDisplayColor({ ...empty, colorLocked: true, color: "red" }, null)).toBe("red")
+  expect(isLessonDone({ ...empty, colorLocked: true, color: "green-1" })).toBe(false)
+  expect(isLessonDone({ ...empty, colorLocked: true, color: "green-3" })).toBe(true)
 })
 
 test("нечёткая привязка и её разрыв", () => {

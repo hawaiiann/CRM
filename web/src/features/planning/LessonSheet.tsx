@@ -18,7 +18,10 @@ import { StatusBadge } from "@/features/orders/StatusBadge"
 import { OrderTimerButton } from "@/features/orders/OrderTimerButton"
 import { Pencil } from "lucide-react"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
-import { findGoverningOrder } from "@/lib/planningSync"
+import { findGoverningOrder, applyLessonItemsToOrderLines } from "@/lib/planningSync"
+import { extractLinks } from "@/lib/links"
+import { Linkified } from "@/components/ui/linkified"
+import { FolderOpen } from "lucide-react"
 import {
   lessonItemsMissingInOrder,
   orderLinesMissingInLesson,
@@ -114,6 +117,12 @@ export function LessonSheet({
   function toggleItem(id: string) {
     if (!liveLesson) return
     const items = (liveLesson.items || []).map((i) => (i.id === id ? { ...i, done: !i.done } : i))
+    // Галочка в уроке = готовность позиции заказа, в обе стороны. Иначе пункт,
+    // пришедший из заказа, откатывался автосинхронизацией при сохранении.
+    if (governingOrder) {
+      const next = applyLessonItemsToOrderLines(governingOrder, { ...liveLesson, items })
+      if (next !== governingOrder) setOrders((prev) => prev.map((o) => (o.id === next.id ? next : o)))
+    }
     updateLesson({ items })
   }
   function deleteItem(id: string) {
@@ -147,6 +156,8 @@ export function LessonSheet({
     : null
 
   const governingOrder = liveBoard && liveLesson ? findGoverningOrder(orders, liveBoard, liveLesson) : null
+  const materialsLink = liveBoard ? appSettings.boardLinks?.[liveBoard.id] : undefined
+  const noteLinks = liveLesson ? extractLinks(liveLesson.notes || "") : []
 
   const toOrder = governingOrder && liveLesson ? lessonItemsMissingInOrder(liveLesson, governingOrder) : []
   const toLesson = governingOrder && liveLesson ? orderLinesMissingInLesson(governingOrder, liveLesson) : []
@@ -240,7 +251,15 @@ export function LessonSheet({
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
-              <SheetDescription>{doneCount}/{items.length} пунктов выполнено</SheetDescription>
+              <SheetDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>{doneCount}/{items.length} пунктов выполнено</span>
+                {materialsLink && (
+                  <a href={materialsLink} target="_blank" rel="noopener noreferrer" title={materialsLink} className="inline-flex items-center gap-1 font-bold text-foreground hover:underline">
+                    <FolderOpen className="size-3" />
+                    Материалы класса
+                  </a>
+                )}
+              </SheetDescription>
             </SheetHeader>
 
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
@@ -273,7 +292,7 @@ export function LessonSheet({
                     {liveLesson.colorLocked
                       ? "Цвет закреплён вручную — не пересчитывается автоматически."
                       : governingOrder
-                        ? `По статусу заказа «${governingOrder.title || "заказ"}» — ${STATUS_LABEL[governingOrder.status] || governingOrder.status}.`
+                        ? `По чек-листу: ${doneCount} из ${items.length}. Заказ — ${(STATUS_LABEL[governingOrder.status] || governingOrder.status).toLowerCase()}.`
                         : `По чек-листу: ${doneCount} из ${items.length}.`}
                   </div>
                   {governingOrder && (
@@ -480,6 +499,11 @@ export function LessonSheet({
               <div>
                 <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
                 <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value }, { debounce: true })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
+                {noteLinks.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {noteLinks.map((u) => <Linkified key={u} text={u} />)}
+                  </div>
+                )}
               </div>
 
             </div>

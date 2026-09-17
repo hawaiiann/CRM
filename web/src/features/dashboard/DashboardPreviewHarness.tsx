@@ -61,6 +61,7 @@ function fakeTasks(): Task[] {
   return [
     { id: "t1", text: "Проверить домашние задания у 9А", time: "10:00", done: false, period: "today", createdAt: dateKey(new Date()) },
     { id: "t2", text: "Подготовить материалы к уроку", time: "14:30", done: false, period: "today", createdAt: dateKey(new Date()) },
+    { id: "t5", text: "6кл лит https://drive.google.com/drive/folders/1UiJAYbhAE339uQFBnvffhAwiDjyFRBri", time: "", done: false, period: "today", createdAt: dateKey(new Date(Date.now() - 3 * 86400000)) },
     { id: "t3", text: "Позвонить клиенту по оплате", time: "", done: true, period: "today", createdAt: dateKey(new Date()) },
     { id: "t4", text: "Задача на неделю", time: "", done: false, period: "week", createdAt: dateKey(new Date()) },
   ]
@@ -119,12 +120,20 @@ export function DashboardPreviewHarness() {
     const orders = Array.from({ length: 16 }, (_, i) =>
       fakeOrder(i - 5, 15000 + i * 1500, i % 6 === 0 ? "done" : "progress", "Клиент " + (i + 1))
     )
+    // График доски: 2 урока в неделю, старт три недели назад — чтобы в превью
+    // было видно и текущую неделю, и отставание.
+    const start = dateKey(new Date(Date.now() - 21 * 86400000))
     useAppStore.setState({
       orders,
       activityLog: fakeActivityLog(orders),
       tasks: fakeTasks(),
       advances: fakeAdvances(),
       planningBoards: [fakeBoard()],
+      appSettings: {
+        ...useAppStore.getState().appSettings,
+        boardSchedules: { pb1: { start, perWeek: 2 } },
+        boardLinks: { pb1: "https://drive.google.com/drive/folders/preview" },
+      },
       dataLoaded: true,
       cloudUserEmail: "preview@example.com",
     })

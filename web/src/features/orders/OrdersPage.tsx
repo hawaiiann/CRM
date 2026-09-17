@@ -65,13 +65,14 @@ type StatusFilter = "all" | "progress" | "unpaid" | "overdue"
 // "deadline_asc": по заголовку таблицы жмут, чтобы ПЕРЕВЕРНУТЬ порядок, и с
 // плоским перечислением каждый столбец пришлось бы описывать парой значений
 // и вручную сводить их между собой.
-type SortField = "deadline" | "debt" | "total" | "client" | "subject" | "grade" | "created"
+type SortField = "lesson" | "deadline" | "debt" | "total" | "client" | "subject" | "grade" | "created"
 type OrderSort = { field: SortField; dir: "asc" | "desc" }
 
 // Направление по умолчанию при первом клике по столбцу: у текста — с начала
 // алфавита, у денег и дат добавления — с большего, потому что спрашивают
 // «где самые крупные» и «что появилось недавно», а не наоборот.
 const DEFAULT_DIR: Record<SortField, OrderSort["dir"]> = {
+  lesson: "asc",
   deadline: "asc",
   debt: "desc",
   total: "desc",
@@ -84,6 +85,11 @@ const DEFAULT_DIR: Record<SortField, OrderSort["dir"]> = {
 // Готовые варианты для выпадающего списка. Он остаётся ради телефона: там
 // вместо таблицы карточки, и заголовков, по которым можно кликнуть, нет.
 const ORDER_SORT_PRESETS: { key: string; label: string; sort: OrderSort }[] = [
+  // По умолчанию — как в программе: класс за классом, внутри по номеру
+  // урока. В таком порядке видно, какой урок пропущен; по сроку сдачи
+  // заказы одного класса разлетались по всему списку.
+  { key: "lesson_asc", label: "По классу и номеру урока", sort: { field: "lesson", dir: "asc" } },
+  { key: "lesson_desc", label: "По классу, уроки с конца", sort: { field: "lesson", dir: "desc" } },
   { key: "deadline_asc", label: "Ближайший срок сверху", sort: { field: "deadline", dir: "asc" } },
   { key: "deadline_desc", label: "Дальний срок сверху", sort: { field: "deadline", dir: "desc" } },
   { key: "grade_asc", label: "По классу (от младших)", sort: { field: "grade", dir: "asc" } },
@@ -100,6 +106,7 @@ const ORDER_SORT_PRESETS: { key: string; label: string; sort: OrderSort }[] = [
 // в обратном порядке) — без этого выпадающий список в такой момент просто
 // оказывался пустым.
 const SORT_FIELD_LABELS: Record<SortField, string> = {
+  lesson: "классу и уроку",
   deadline: "сроку сдачи",
   debt: "долгу",
   total: "сумме",
@@ -127,6 +134,45 @@ function gradeSortKey(grade: string): [number, string] {
   const text = (grade || "").trim().toLowerCase()
   const num = text.match(/\d+/)
   return [num ? parseInt(num[0], 10) : Number.MAX_SAFE_INTEGER, text]
+}
+
+/** Номер урока из поля «Урок» («10», «Урок 10», «10-11» → 10); без числа — в конец. */
+function lessonNum(o: Order): number {
+  const m = String(o.lesson || "").match(/\d+/)
+  return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER
+}
+
+/**
+ * Группа списка — класс: предмет + класс + четверть. Внутри группы заказы
+ * идут по номеру урока, между группами — по классу (см. gradeSortKey).
+ */
+function groupKey(o: Order): string {
+  return [o.subject, o.grade, o.quarter].map((s) => (s || "").trim().toLowerCase()).join("|")
+}
+function groupLabel(o: Order): string {
+  return [o.subject, o.grade, o.quarter].map((s) => (s || "").trim()).filter(Boolean).join(" · ") || "Без класса"
+}
+function compareGroups(a: Order, b: Order): number {
+  const [an, at] = gradeSortKey(a.grade)
+  const [bn, bt] = gradeSortKey(b.grade)
+  return (a.subject || "").localeCompare(b.subject || "", "ru") || an - bn || at.localeCompare(bt, "ru") || (a.quarter || "").localeCompare(b.quarter || "", "ru")
+}
+
+/** Пропущенные номера уроков внутри класса: между первым и последним заказом. */
+function missingLessons(orders: Order[]): number[] {
+  const nums = [...new Set(orders.map(lessonNum).filter((n) => n !== Number.MAX_SAFE_INTEGER))].sort((a, b) => a - b)
+  if (nums.length < 2) return []
+  const have = new Set(nums)
+  const out: number[] = []
+  for (let n = nums[0]; n <= nums[nums.length - 1]; n++) if (!have.has(n)) out.push(n)
+  return out
+}
+
+/** Что показывать в строке вместо длинного «Литература, 9 класс, 1, Урок 10», когда класс уже в заголовке группы. */
+function rowTitleInGroup(o: Order): string {
+  if (o.title) return o.title
+  const composition = (o.lines || []).map((l) => l.label || l.type).filter(Boolean)
+  return composition.length ? composition.join(" · ") : "Без состава"
 }
 
 /**
@@ -175,8 +221,11 @@ export function OrdersPage() {
   const setOrders = useAppStore((s) => s.setOrders)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<StatusFilter>("all")
-  const [sort, setSort] = useState<OrderSort>({ field: "deadline", dir: "asc" })
+  const [sort, setSort] = useState<OrderSort>({ field: "lesson", dir: "asc" })
   const [clientFilter, setClientFilter] = useState("all")
+  // Быстрый переход к классу: чипы над таблицей. Один клик — только этот
+  // класс, повторный — снова все.
+  const [classFilter, setClassFilter] = useState<string | null>(null)
   const [showClass, setShowClass] = useState(true)
   const [showClient, setShowClient] = useState(true)
   const [showDue, setShowDue] = useState(true)
@@ -241,7 +290,7 @@ export function OrdersPage() {
     const dl = (r: Row) => r.order.deadline || r.order.start || ""
 
     const matchesSearch = (r: Row) => orderMatchesQuery(r.order, search)
-    const matchesClient = (r: Row) => clientFilter === "all" || (r.order.client || "") === clientFilter
+    const matchesClient = (r: Row) => (clientFilter === "all" || (r.order.client || "") === clientFilter) && (!classFilter || groupKey(r.order) === classFilter)
     const matchesFilter = (r: Row) => {
       if (filter === "all") return true
       if (filter === "progress") return r.order.status === "progress"
@@ -265,6 +314,13 @@ export function OrdersPage() {
 
     const compare = (a: Row, b: Row): number => {
       switch (sort.field) {
+        case "lesson": {
+          // Группы (классы) всегда в одном порядке; направление
+          // переворачивает только номера уроков внутри группы.
+          const g = compareGroups(a.order, b.order)
+          if (g !== 0) return sort.dir === "asc" ? g : -g
+          return lessonNum(a.order) - lessonNum(b.order)
+        }
         case "deadline": return dl(a).localeCompare(dl(b))
         case "debt": return a.pay.remaining - b.pay.remaining
         case "total": return a.pay.full - b.pay.full
@@ -296,20 +352,61 @@ export function OrdersPage() {
       visibleActive: applySort(active.filter((r) => matchesFilter(r) && matchesSearch(r) && matchesClient(r))),
       visibleArchived: applySort(archived.filter((r) => matchesSearch(r) && matchesClient(r))),
     }
-  }, [active, archived, filter, search, sort, clientFilter])
+  }, [active, archived, filter, search, sort, clientFilter, classFilter])
 
   const clientOptions = useMemo(
     () => [...new Set(orders.map((o) => o.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
     [orders]
   )
 
+  // Группировка включена, когда список идёт по классам: заголовок группы
+  // говорит, что это за класс, а строки внутри — только номер и состав.
+  const grouped = sort.field === "lesson" || sort.field === "grade"
+
+  // Чипы классов и пропуски — по всем неотменённым заказам, а не по видимым:
+  // «пропущен урок 11» верно только если его нет ни в работе, ни в архиве.
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; sample: Order; all: Order[]; activeCount: number; overdue: boolean; due: number }>()
+    rows.forEach((r) => {
+      if (r.order.status === "cancelled") return
+      const key = groupKey(r.order)
+      let g = map.get(key)
+      if (!g) { g = { key, label: groupLabel(r.order), sample: r.order, all: [], activeCount: 0, overdue: false, due: 0 }; map.set(key, g) }
+      g.all.push(r.order)
+      if (r.order.status !== "done") g.activeCount++
+      if (r.overdue) g.overdue = true
+      g.due += r.pay.remaining
+    })
+    const list = [...map.values()].sort((a, b) => compareGroups(a.sample, b.sample))
+    const missing = new Map(list.map((g) => [g.key, missingLessons(g.all)]))
+    return { list, missing }
+  }, [rows])
+
   const totalRows = active.length + archived.length
 
   const {
     page: currentPage, pageSize, pageItems: pagedActive, setPage, setPageSize,
   } = usePagination(visibleActive, {
-    resetKey: [filter, search, sort.field, sort.dir, clientFilter].join("|"),
+    resetKey: [filter, search, sort.field, sort.dir, clientFilter, classFilter || ""].join("|"),
   })
+
+  /** Строки с заголовками групп между классами (только когда список по классам). */
+  function withGroupHeaders<T>(list: Row[], renderRow: (r: Row) => T, renderHeader: (g: { key: string; label: string; count: number; missing: number[]; due: number }) => T): T[] {
+    if (!grouped) return list.map(renderRow)
+    const out: T[] = []
+    let prev: string | null = null
+    list.forEach((r) => {
+      const key = groupKey(r.order)
+      if (key !== prev) {
+        prev = key
+        const count = list.filter((x) => groupKey(x.order) === key).length
+        out.push(renderHeader({ key, label: groupLabel(r.order), count, missing: groups.missing.get(key) || [], due: groups.list.find((g) => g.key === key)?.due || 0 }))
+      }
+      out.push(renderRow(r))
+    })
+    return out
+  }
+  const classCol = showClass && !grouped
 
   // Быстрая смена статуса прямо из списка — как было в ванильной версии.
   // Завершение заказа не должно требовать открытия формы: это самое частое
@@ -462,6 +559,37 @@ export function OrdersPage() {
         </div>
       </div>
 
+      {/* Классы одной строкой: сколько в работе, где просрочка, клик —
+          только этот класс. С тремя-четырьмя классами и полусотней заказов
+          это быстрее любого поиска. */}
+      {groups.list.length > 1 && (
+        <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setClassFilter(null)}
+            className={cn("rounded-full px-3 py-1 text-[12px] font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
+          >
+            Все классы
+          </button>
+          {groups.list.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setClassFilter((v) => (v === g.key ? null : g.key))}
+              title={`${g.all.length} заказов, ${g.activeCount} в работе${g.due > 0 ? `, к доплате ${fmtMoney(g.due)}` : ""}`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold transition-colors",
+                classFilter === g.key ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/70"
+              )}
+            >
+              {g.label}
+              <span className={cn("rounded-full px-1.5 text-[10.5px] tabular-nums", classFilter === g.key ? "bg-background/20" : "bg-overlay/15 text-muted-foreground")}>{g.activeCount}</span>
+              {g.overdue && <span className="size-1.5 rounded-full bg-destructive" title="Есть просроченные" />}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* mobile — one stacked card per order, no columns to squeeze or scroll */}
       <div className="flex flex-col gap-2.5 sm:hidden">
         {visibleActive.length === 0 && (
@@ -469,23 +597,28 @@ export function OrdersPage() {
             {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
           </div>
         )}
-        {pagedActive.map(({ order, pay, overdue }) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            sum={pay.full}
-            due={pay.remaining}
-            overdue={overdue}
-            showClass={showClass}
-            showClient={showClient}
-            showDue={showDue}
-            onOpen={() => setActiveOrder(order)}
-            onEdit={() => openEditOrder(order)}
-                onStatusChange={(next) => changeStatus(order.id, next)}
-            onDuplicate={() => openDuplicateOrder(order)}
-            onDelete={() => openDeleteOrder(order)}
-          />
-        ))}
+        {withGroupHeaders(
+          pagedActive,
+          ({ order, pay, overdue }) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              sum={pay.full}
+              due={pay.remaining}
+              overdue={overdue}
+              showClass={classCol}
+              showClient={showClient}
+              showDue={showDue}
+              grouped={grouped}
+              onOpen={() => setActiveOrder(order)}
+              onEdit={() => openEditOrder(order)}
+              onStatusChange={(next) => changeStatus(order.id, next)}
+              onDuplicate={() => openDuplicateOrder(order)}
+              onDelete={() => openDeleteOrder(order)}
+            />
+          ),
+          (g) => <GroupHeading key={"g_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} />
+        )}
 
         {archived.length > 0 && (
           <>
@@ -497,24 +630,29 @@ export function OrdersPage() {
               <ChevronRight className={cn("size-3 transition-transform", archiveOpen && "rotate-90")} />
               Архив · завершённые и отменённые ({archived.length})
             </button>
-            {archiveOpen && visibleArchived.map(({ order, pay, overdue }) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                sum={pay.full}
-                due={pay.remaining}
-                overdue={overdue}
-                showClass={showClass}
-                showClient={showClient}
-                showDue={showDue}
-                onOpen={() => setActiveOrder(order)}
-                onEdit={() => openEditOrder(order)}
-                onStatusChange={(next) => changeStatus(order.id, next)}
-                onDuplicate={() => openDuplicateOrder(order)}
-                onDelete={() => openDeleteOrder(order)}
-                muted
-              />
-            ))}
+            {archiveOpen && withGroupHeaders(
+              visibleArchived,
+              ({ order, pay, overdue }) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  sum={pay.full}
+                  due={pay.remaining}
+                  overdue={overdue}
+                  showClass={classCol}
+                  showClient={showClient}
+                  showDue={showDue}
+                  grouped={grouped}
+                  onOpen={() => setActiveOrder(order)}
+                  onEdit={() => openEditOrder(order)}
+                  onStatusChange={(next) => changeStatus(order.id, next)}
+                  onDuplicate={() => openDuplicateOrder(order)}
+                  onDelete={() => openDeleteOrder(order)}
+                  muted
+                />
+              ),
+              (g) => <GroupHeading key={"ga_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} />
+            )}
           </>
         )}
       </div>
@@ -525,21 +663,25 @@ export function OrdersPage() {
         <table className="w-full min-w-[1120px] table-fixed border-collapse">
           <colgroup>
             <col />
-            <col style={{ width: showClass ? 192 : 0 }} />
-            <col style={{ width: showClient ? 124 : 0 }} />
+            {/* Скрытый столбец — без <col>: с нулевой шириной заголовки соседних
+                столбцов съезжали на его место и налезали друг на друга. */}
+            {classCol && <col style={{ width: 192 }} />}
+            {showClient && <col style={{ width: 124 }} />}
             <col style={{ width: 148 }} />
             <col style={{ width: 148 }} />
             <col style={{ width: 120 }} />
-            <col style={{ width: showDue ? 128 : 0 }} />
+            {showDue && <col style={{ width: 128 }} />}
             <col style={{ width: 36 }} />
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="px-3">Заказ</TableHead>
+              <TableHead className="px-3">
+                {grouped ? <SortHead field="lesson" label="Урок" sort={sort} onSort={setSort} /> : "Заказ"}
+              </TableHead>
               {/* Столбец один, а полей в нём два, и сортировать просили по
                   каждому. Поэтому кликабельны обе подписи по отдельности, а
                   не заголовок целиком. */}
-              {showClass && (
+              {classCol && (
                 <TableHead className="px-4">
                   <span className="inline-flex items-center gap-1.5">
                     <SortHead field="grade" label="Класс" sort={sort} onSort={setSort} />
@@ -580,23 +722,28 @@ export function OrdersPage() {
                 </TableCell>
               </TableRow>
             )}
-            {pagedActive.map(({ order, pay, overdue }) => (
-              <OrderRow
-                key={order.id}
-                order={order}
-                sum={pay.full}
-                due={pay.remaining}
-                overdue={overdue}
-                showClass={showClass}
-                showClient={showClient}
-                showDue={showDue}
-                onOpen={() => setActiveOrder(order)}
-                onEdit={() => openEditOrder(order)}
-                onStatusChange={(next) => changeStatus(order.id, next)}
-                onDuplicate={() => openDuplicateOrder(order)}
-                onDelete={() => openDeleteOrder(order)}
-              />
-            ))}
+            {withGroupHeaders(
+              pagedActive,
+              ({ order, pay, overdue }) => (
+                <OrderRow
+                  key={order.id}
+                  order={order}
+                  sum={pay.full}
+                  due={pay.remaining}
+                  overdue={overdue}
+                  showClass={classCol}
+                  showClient={showClient}
+                  showDue={showDue}
+                  grouped={grouped}
+                  onOpen={() => setActiveOrder(order)}
+                  onEdit={() => openEditOrder(order)}
+                  onStatusChange={(next) => changeStatus(order.id, next)}
+                  onDuplicate={() => openDuplicateOrder(order)}
+                  onDelete={() => openDeleteOrder(order)}
+                />
+              ),
+              (g) => <GroupRow key={"g_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={8} />
+            )}
           </TableBody>
         </table>
         </div>
@@ -615,33 +762,40 @@ export function OrdersPage() {
           <table className="w-full min-w-[1120px] table-fixed border-collapse">
             <colgroup>
               <col />
-              <col style={{ width: showClass ? 192 : 0 }} />
-              <col style={{ width: showClient ? 124 : 0 }} />
+              {/* Скрытый столбец — без <col>: с нулевой шириной заголовки соседних
+                  столбцов съезжали на его место и налезали друг на друга. */}
+              {classCol && <col style={{ width: 192 }} />}
+              {showClient && <col style={{ width: 124 }} />}
               <col style={{ width: 148 }} />
               <col style={{ width: 148 }} />
               <col style={{ width: 120 }} />
-              <col style={{ width: showDue ? 128 : 0 }} />
+              {showDue && <col style={{ width: 128 }} />}
               <col style={{ width: 36 }} />
             </colgroup>
             <TableBody>
-              {visibleArchived.map(({ order, pay, overdue }) => (
-                <OrderRow
-                  key={order.id}
-                  order={order}
-                  sum={pay.full}
-                  due={pay.remaining}
-                  overdue={overdue}
-                  showClass={showClass}
-                  showClient={showClient}
-                  showDue={showDue}
-                  onOpen={() => setActiveOrder(order)}
-                  onEdit={() => openEditOrder(order)}
-                onStatusChange={(next) => changeStatus(order.id, next)}
-                  onDuplicate={() => openDuplicateOrder(order)}
-                  onDelete={() => openDeleteOrder(order)}
-                  muted
-                />
-              ))}
+              {withGroupHeaders(
+                visibleArchived,
+                ({ order, pay, overdue }) => (
+                  <OrderRow
+                    key={order.id}
+                    order={order}
+                    sum={pay.full}
+                    due={pay.remaining}
+                    overdue={overdue}
+                    showClass={classCol}
+                    showClient={showClient}
+                    showDue={showDue}
+                    grouped={grouped}
+                    onOpen={() => setActiveOrder(order)}
+                    onEdit={() => openEditOrder(order)}
+                    onStatusChange={(next) => changeStatus(order.id, next)}
+                    onDuplicate={() => openDuplicateOrder(order)}
+                    onDelete={() => openDeleteOrder(order)}
+                    muted
+                  />
+                ),
+                (g) => <GroupRow key={"ga_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={8} muted />
+              )}
             </TableBody>
           </table>
           </div>
@@ -690,6 +844,40 @@ export function OrdersPage() {
   )
 }
 
+/** Содержимое заголовка группы: класс, сколько заказов, пропущенные уроки, к доплате. */
+function GroupHeadingInner({ label, count, missing, due }: { label: string; count: number; missing: number[]; due: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="text-[12.5px] font-extrabold text-foreground">{label}</span>
+      <span className="text-[11.5px] font-bold text-muted-foreground">{count} {count === 1 ? "заказ" : count < 5 ? "заказа" : "заказов"}</span>
+      {missing.length > 0 && (
+        <span className="rounded-full bg-warning px-2 py-px text-[10.5px] font-bold text-warning-foreground" title="Между первым и последним заказом класса нет заказов с этими номерами">
+          нет уроков: {missing.slice(0, 8).join(", ")}{missing.length > 8 ? "…" : ""}
+        </span>
+      )}
+      {due > 0 && <span className="text-[11.5px] font-bold text-destructive">к доплате {fmtMoney(due)}</span>}
+    </div>
+  )
+}
+
+function GroupRow({ colSpan, muted, ...rest }: { label: string; count: number; missing: number[]; due: number; colSpan: number; muted?: boolean }) {
+  return (
+    <TableRow className={cn("hover:bg-transparent", muted ? "bg-muted/30" : "bg-muted/60")}>
+      <TableCell colSpan={colSpan} className="px-3 py-2 whitespace-normal">
+        <GroupHeadingInner {...rest} />
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function GroupHeading(props: { label: string; count: number; missing: number[]; due: number }) {
+  return (
+    <div className="mt-1.5 px-1">
+      <GroupHeadingInner {...props} />
+    </div>
+  )
+}
+
 function Kpi({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "destructive" }) {
   return (
     <div className="min-w-0">
@@ -713,6 +901,7 @@ function OrderRow({
   onDuplicate,
   onDelete,
   onStatusChange,
+  grouped,
   muted,
 }: {
   order: Order
@@ -727,19 +916,32 @@ function OrderRow({
   onDuplicate: () => void
   onDelete: () => void
   onStatusChange: (next: Order["status"]) => void
+  grouped?: boolean
   muted?: boolean
 }) {
+  const n = grouped ? lessonNum(order) : Number.MAX_SAFE_INTEGER
   return (
     <TableRow>
       <TableCell className="min-w-0 whitespace-normal px-3">
         <div className="flex min-w-0 max-w-[340px] items-center gap-1.5">
           <OrderTimerButton order={order} />
+          {/* В группе класс уже в заголовке: строка — это номер урока и
+              состав, а не «Литература, 9 класс, 1, Урок 10» сорок раз подряд. */}
+          {grouped && (
+            <span className={cn("font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[12px] font-bold tabular-nums", muted && "text-muted-foreground")} title="Номер урока">
+              {n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}
+            </span>
+          )}
           <button
             type="button"
             onClick={onOpen}
-            className="min-w-0 truncate text-[13.5px] font-bold text-foreground underline decoration-transparent decoration-1 underline-offset-3 hover:decoration-muted-foreground"
+            title={orderDisplayTitle(order)}
+            className={cn(
+              "min-w-0 truncate text-[13.5px] text-foreground underline decoration-transparent decoration-1 underline-offset-3 hover:decoration-muted-foreground",
+              grouped && !order.title ? "font-medium" : "font-bold"
+            )}
           >
-            {orderDisplayTitle(order)}
+            {grouped ? rowTitleInGroup(order) : orderDisplayTitle(order)}
           </button>
           {order.priority && <span className="shrink-0">🔥</span>}
           {overdue && <span className="shrink-0 text-[10.5px] font-bold text-destructive">просрочен</span>}
@@ -831,6 +1033,7 @@ function OrderCard({
   onDuplicate,
   onDelete,
   onStatusChange,
+  grouped,
   muted,
 }: {
   order: Order
@@ -845,19 +1048,24 @@ function OrderCard({
   onDuplicate: () => void
   onDelete: () => void
   onStatusChange: (next: Order["status"]) => void
+  grouped?: boolean
   muted?: boolean
 }) {
   const metaParts = [
     showClass && [order.grade, order.subject].filter(Boolean).join(" · "),
     showClient && order.client,
   ].filter(Boolean) as string[]
+  const n = grouped ? lessonNum(order) : Number.MAX_SAFE_INTEGER
 
   return (
     <div className="glass-surface rounded-xl p-3.5">
       <div className="flex items-start gap-2.5">
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className={cn("min-w-0 truncate text-[14px] font-bold", muted && "text-muted-foreground")}>{orderDisplayTitle(order)}</span>
+            {grouped && (
+              <span className="font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[12px] font-bold tabular-nums">{n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}</span>
+            )}
+            <span className={cn("min-w-0 truncate text-[14px] font-bold", muted && "text-muted-foreground")}>{grouped ? rowTitleInGroup(order) : orderDisplayTitle(order)}</span>
             {order.priority && <span className="shrink-0">🔥</span>}
           </div>
           {metaParts.length > 0 && (

@@ -151,6 +151,10 @@ export interface AppSettings {
    * доске, чтобы не менять схему таблицы planning_boards.
    */
   boardTemplates: Record<string, OrderTemplateLine[]>
+  /** График класса: уроков в неделю и дата старта (lib/boardSchedule.ts). Ключ — id доски. */
+  boardSchedules: Record<string, { start: string; perWeek: number }>
+  /** Ссылка на материалы класса (папка на диске). Ключ — id доски. */
+  boardLinks: Record<string, string>
 }
 
 export interface ActivityLogEntry {

@@ -6,6 +6,7 @@ import { dateKey } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { Task, TaskPeriod } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
+import { Linkified } from "@/components/ui/linkified"
 
 const PERIODS: TaskPeriod[] = ["today", "week", "month", "year"]
 const PERIOD_LABELS: Record<TaskPeriod, string> = { today: "Сегодня", week: "На этой неделе", month: "В этом месяце", year: "В этом году" }
@@ -265,12 +266,12 @@ function TaskRow({
     )
   }
   return (
-    <div className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted">
-      <button type="button" onClick={onToggle} className={cn("flex size-4.5 shrink-0 items-center justify-center rounded-md border", task.done ? "border-emphasis bg-emphasis/90 text-emphasis-foreground" : "border-border")}>
+    <div className="group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-muted">
+      <button type="button" onClick={onToggle} className={cn("mt-0.5 flex size-4.5 shrink-0 items-center justify-center rounded-md border", task.done ? "border-emphasis bg-emphasis/90 text-emphasis-foreground" : "border-border")}>
         {task.done && <Check className="size-3" strokeWidth={3} />}
       </button>
-      <span onClick={onStartEdit} className={cn("flex-1 cursor-pointer text-[13px]", task.done && "text-muted-foreground line-through")}>
-        {overdue && "⏰ "}{task.text}
+      <span onClick={onStartEdit} className={cn("min-w-0 flex-1 cursor-pointer text-[13px] leading-snug break-words", task.done && "text-muted-foreground line-through")}>
+        {overdue && "⏰ "}<Linkified text={task.text} />
       </span>
       {task.time && <span className="text-[11px] font-semibold text-muted-foreground">{task.time}</span>}
       <button type="button" onClick={onStartEdit} className="opacity-0 group-hover:opacity-100"><Pencil className="size-3.5 text-muted-foreground" /></button>
