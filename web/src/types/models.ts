@@ -144,6 +144,13 @@ export interface AppSettings {
   hiddenEntries: HiddenEntries
   dashboardMetrics: DashboardMetric[]
   orderTemplates: OrderTemplate[]
+  /**
+   * Шаблон заказа доски планирования: те же пункты, что в baseTemplate доски,
+   * но с единицей, количеством и ставкой. По нему заказ из урока создаётся с
+   * ценами в один клик. Ключ — id доски. Лежит в настройках, а не в самой
+   * доске, чтобы не менять схему таблицы planning_boards.
+   */
+  boardTemplates: Record<string, OrderTemplateLine[]>
 }
 
 export interface ActivityLogEntry {

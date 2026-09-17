@@ -9,13 +9,15 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NumberInput } from "@/components/ui/number-input"
 import { ComboInput } from "@/components/ui/combo-input"
 import { Label } from "@/components/ui/label"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
-import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import { boardTemplateLines } from "@/lib/boardTemplate"
+import type { PlanningBoard, PlanningLesson, OrderTemplateLine } from "@/types/models"
 
 function randId(prefix: string) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -34,6 +36,8 @@ export function BoardFormDialog({
   const setAppSettings = useAppStore((s) => s.setAppSettings)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
   const setOrders = useAppStore((s) => s.setOrders)
+  const orders = useAppStore((s) => s.orders)
+  const defaultUnit = getVisibleCatalog(appSettings, "units")[0] || "Слайд"
 
   const [subject, setSubject] = useState("")
   const [title, setTitle] = useState("")
@@ -42,7 +46,11 @@ export function BoardFormDialog({
   const [lessonNums, setLessonNums] = useState<number[]>([])
   const [rangeFrom, setRangeFrom] = useState(1)
   const [rangeTo, setRangeTo] = useState(24)
-  const [template, setTemplate] = useState<string[]>([])
+  // Состав урока со ставками: то же, что раньше было списком названий, но с
+  // единицей, количеством и ставкой — по нему заказ из урока получает цены.
+  type TplRow = OrderTemplateLine & { id: string }
+  const [template, setTemplate] = useState<TplRow[]>([])
+  const row = (l: Partial<OrderTemplateLine>): TplRow => ({ id: randId("tr"), label: l.label || "", type: l.type || defaultUnit, qty: l.qty ?? 1, rate: l.rate ?? 0 })
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -56,7 +64,8 @@ export function BoardFormDialog({
       setLessonNums(nums)
       setRangeFrom((nums[nums.length - 1] || 0) + 1)
       setRangeTo((nums[nums.length - 1] || 0) + 8)
-      setTemplate(board.baseTemplate?.length ? [...board.baseTemplate] : ["Презентация", "Рабочий лист"])
+      const lines = boardTemplateLines(appSettings, board, orders, defaultUnit)
+      setTemplate(lines.length ? lines.map(row) : [row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     } else {
       setSubject(getVisibleCatalog(appSettings, "subjects")[0] || "Математика")
       setTitle(getVisibleCatalog(appSettings, "classes")[0] || "5 класс")
@@ -65,7 +74,7 @@ export function BoardFormDialog({
       setLessonNums(Array.from({ length: 24 }, (_, i) => i + 1))
       setRangeFrom(25)
       setRangeTo(32)
-      setTemplate(["Презентация", "Рабочий лист"])
+      setTemplate([row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     }
     // Зависим от конкретных справочников, а не от appSettings целиком, и это
     // намеренно: эффект заполняет форму значениями по умолчанию, и перезапуск
@@ -93,10 +102,14 @@ export function BoardFormDialog({
       return
     }
     setError("")
-    const templateItems = template.map((s) => s.trim()).filter(Boolean)
+    const templateLines: OrderTemplateLine[] = template
+      .filter((t) => t.label.trim())
+      .map((t) => ({ label: t.label.trim(), type: (t.type || defaultUnit).trim(), qty: t.qty || 1, rate: t.rate || 0 }))
+    const templateItems = templateLines.map((t) => t.label)
+    const boardId = board ? board.id : randId("pb")
 
-    const nextSettings = { ...appSettings }
-    let changed = false
+    const nextSettings = { ...appSettings, boardTemplates: { ...appSettings.boardTemplates, [boardId]: templateLines } }
+    let changed = JSON.stringify(appSettings.boardTemplates?.[boardId] || []) !== JSON.stringify(templateLines)
     if (subject && !nextSettings.subjects.includes(subject)) { nextSettings.subjects = [...nextSettings.subjects, subject]; changed = true }
     if (title && !nextSettings.classes.includes(title)) { nextSettings.classes = [...nextSettings.classes, title]; changed = true }
     if (changed) setAppSettings(nextSettings)
@@ -141,7 +154,7 @@ export function BoardFormDialog({
         id: randId("l"), num: n, title: `Урок ${n}`, color: "gray",
         items: templateItems.map((t) => ({ id: randId("i"), text: t, done: false })), colorLocked: false, orderLinked: false, notes: "",
       }))
-      const newBoard: PlanningBoard = { id: randId("pb"), subject, title, quarter, deadline, baseTemplate: templateItems, collapsed: false, archived: false, lessons }
+      const newBoard: PlanningBoard = { id: boardId, subject, title, quarter, deadline, baseTemplate: templateItems, collapsed: false, archived: false, lessons }
       setPlanningBoards((prev) => [...prev, newBoard])
     }
 
@@ -206,26 +219,32 @@ export function BoardFormDialog({
             </div>
           </div>
           <div>
-            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Базовое наполнение уроков</Label>
-            <div className="flex flex-col gap-1.5">
-              {template.map((val, idx) => (
-                <div key={idx} className="flex gap-1.5">
-                  <ComboInput
-                    className="flex-1"
-                    value={val}
-                    onChange={(v) => setTemplate((prev) => prev.map((x, i) => (i === idx ? v : x)))}
-                    options={catalogWithCurrent(appSettings, "types", val)}
-                    placeholder="Выберите тип работы или введите..."
-                  />
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTemplate((prev) => prev.filter((_, i) => i !== idx))}>
-                    <Trash2 className="text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
+            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Состав урока и ставки</Label>
+            <div className="mb-1.5 hidden grid-cols-[1.4fr_1fr_70px_90px_28px] gap-1.5 text-[10px] font-bold tracking-wide text-muted-foreground uppercase sm:grid">
+              <span>Материал</span><span>Ед. изм.</span><span>Кол-во</span><span>Ставка, ₽</span><span />
             </div>
-            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setTemplate((prev) => [...prev, ""])}>
+            <div className="flex flex-col gap-1.5">
+              {template.map((t) => {
+                const patch = (p: Partial<OrderTemplateLine>) => setTemplate((prev) => prev.map((x) => (x.id === t.id ? { ...x, ...p } : x)))
+                return (
+                  <div key={t.id} className="grid grid-cols-2 gap-1.5 sm:grid-cols-[1.4fr_1fr_70px_90px_28px]">
+                    <ComboInput className="col-span-2 sm:col-span-1" value={t.label} onChange={(v) => patch({ label: v })} options={catalogWithCurrent(appSettings, "types", t.label)} placeholder="Тип работы..." />
+                    <ComboInput value={t.type} onChange={(v) => patch({ type: v })} options={catalogWithCurrent(appSettings, "units", t.type)} placeholder="Ед. изм." />
+                    <NumberInput value={t.qty} onChange={(n) => patch({ qty: n })} placeholder="1" />
+                    <NumberInput value={t.rate} onChange={(n) => patch({ rate: n })} placeholder="0" />
+                    <Button type="button" variant="ghost" size="icon-sm" className="col-span-2 justify-self-end sm:col-span-1" onClick={() => setTemplate((prev) => prev.filter((x) => x.id !== t.id))}>
+                      <Trash2 className="text-muted-foreground" />
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setTemplate((prev) => [...prev, row({})])}>
               <Plus />Добавить материал
             </Button>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              По этим ставкам заказ из урока создаётся в один клик, уже с ценами. Ставки можно поправить в самом заказе.
+            </div>
           </div>
 
           {error && (

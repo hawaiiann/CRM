@@ -43,6 +43,9 @@ export function ComboInput({
   // раскрываем вверх и заодно ограничиваем высоту доступным местом.
   const [drop, setDrop] = useState<{ up: boolean; maxH: number }>({ up: false, maxH: 224 })
   const wrapRef = useRef<HTMLDivElement>(null)
+  // Момент появления поля: фокус в первые полсекунды — это автофокус
+  // модального окна, а не действие человека.
+  const mountedAt = useRef(Date.now())
 
   // Ближайший предок, который реально обрезает содержимое. Именно он, а не
   // окно, задаёт границы: у модального окна своя прокрутка внутри.
@@ -104,7 +107,12 @@ export function ComboInput({
         placeholder={placeholder}
         autoComplete="off"
         onChange={(e) => { onChange(e.target.value); setTyping(true); decideDirection(); setOpen(true) }}
-        onFocus={() => { setTyping(false); decideDirection(); setOpen(true) }}
+        // Список раскрывается по клику и по переходу Tab'ом, но не при
+        // автофокусе: модальное окно ставит фокус в первое поле само, и
+        // список «Предмет» раньше вываливался поверх формы при каждом
+        // открытии, закрывая соседние поля.
+        onClick={() => { setTyping(false); decideDirection(); setOpen(true) }}
+        onFocus={() => { if (Date.now() - mountedAt.current < 500) return; setTyping(false); decideDirection(); setOpen(true) }}
         className={cn(
           "h-9 w-full rounded-md border border-border bg-background px-3 pr-8 text-[13px] outline-none",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",

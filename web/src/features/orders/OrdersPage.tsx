@@ -13,8 +13,6 @@ import {
   ArrowUp,
   TrendingUp,
   AlertTriangle,
-  Play,
-  Pause,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,7 +44,6 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/store/useAppStore"
-import { useTimerStore } from "@/store/useTimerStore"
 import { saveData } from "@/lib/cloudSync"
 import type { Order } from "@/types/models"
 import { fmtMoney, orderPaymentState, isOrderOverdue, dateKey } from "@/lib/money"
@@ -54,6 +51,7 @@ import { fmtDeadline } from "@/lib/dates"
 import { StatusBadge } from "./StatusBadge"
 import { OrderDetailsSheet } from "./OrderDetailsSheet"
 import { OrderFormDialog } from "./OrderFormDialog"
+import { OrderTimerButton, orderDisplayTitle } from "./OrderTimerButton"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import { confirmDialog } from "@/store/useDialogStore"
 import { usePagination } from "@/lib/usePagination"
@@ -63,10 +61,6 @@ function clientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return "?"
   return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase()
-}
-
-function orderDisplayTitle(o: Order): string {
-  return o.title || [o.subject, o.grade, o.quarter, o.lesson && `Урок ${o.lesson}`].filter(Boolean).join(", ") || "Без названия"
 }
 
 type StatusFilter = "all" | "progress" | "unpaid" | "overdue"
@@ -778,25 +772,6 @@ export function OrdersPage() {
         }}
       />
     </div>
-  )
-}
-
-function OrderTimerButton({ order }: { order: Order }) {
-  const activeId = useTimerStore((s) => s.id)
-  const running = useTimerStore((s) => s.running)
-  const startFor = useTimerStore((s) => s.startFor)
-  const isActive = activeId === order.id && running
-
-  return (
-    <button
-      type="button"
-      title={isActive ? "Пауза" : "Старт таймера по этому заказу"}
-      onClick={(e) => { e.stopPropagation(); startFor(order.id, orderDisplayTitle(order)) }}
-      className="flex shrink-0 items-center gap-1 rounded-full bg-emphasis/85 px-2 py-1 text-[10.5px] font-extrabold text-emphasis-foreground"
-    >
-      {isActive ? <Pause className="size-2.5" fill="currentColor" /> : <Play className="size-2.5" fill="currentColor" />}
-      {isActive ? "Пауза" : "Старт"}
-    </button>
   )
 }
 

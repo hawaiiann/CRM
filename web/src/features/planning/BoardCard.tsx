@@ -34,6 +34,7 @@ export function BoardCard({
 }) {
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
   const setOrders = useAppStore((s) => s.setOrders)
+  const setAppSettings = useAppStore((s) => s.setAppSettings)
   // Свёрнутость хранится в самой доске (и в облаке): раньше поле board.collapsed
   // сохранялось, но карточка держала своё локальное состояние и после
   // перезагрузки всё открывалось развёрнутым.
@@ -92,6 +93,12 @@ export function BoardCard({
     lessons.forEach((l) => deleteFromCloud("planning_lessons", l.id))
     deleteFromCloud("planning_boards", board.id)
     setOrders((prev) => unlinkOrdersFromLessons(prev, lessons.map((l) => l.id)))
+    setAppSettings((s) => {
+      if (!s.boardTemplates?.[board.id]) return s
+      const next = { ...s.boardTemplates }
+      delete next[board.id]
+      return { ...s, boardTemplates: next }
+    })
     saveData()
   }
   function addLesson() {

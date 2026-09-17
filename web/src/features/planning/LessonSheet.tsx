@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink, Unlink, TriangleAlert, Plus } from "lucide-react"
+import { Check, Trash2, RotateCcw, ArrowRight, Unlink, TriangleAlert, Plus } from "lucide-react"
 import { Link } from "react-router-dom"
 import {
   Sheet,
@@ -11,7 +11,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, orderTotal, pluralizeRu } from "@/lib/money"
+import { fmtMoney, fmtHours, orderPaymentState, calculateLineTotal, isHourlyUnit, pluralizeRu } from "@/lib/money"
+import { actualHours } from "@/lib/activity"
+import { buildOrderPrefillFromLesson, boardTemplateLines } from "@/lib/boardTemplate"
+import { StatusBadge } from "@/features/orders/StatusBadge"
+import { OrderTimerButton } from "@/features/orders/OrderTimerButton"
+import { Pencil } from "lucide-react"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { findGoverningOrder } from "@/lib/planningSync"
 import {
@@ -49,11 +54,13 @@ export function LessonSheet({
   lesson,
   onOpenChange,
   onCreateOrder,
+  onEditOrder,
 }: {
   board: PlanningBoard | null
   lesson: PlanningLesson | null
   onOpenChange: (open: boolean) => void
   onCreateOrder: (prefill: Partial<Order>) => void
+  onEditOrder: (order: Order) => void
 }) {
   const orders = useAppStore((s) => s.orders)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
@@ -160,27 +167,23 @@ export function LessonSheet({
   /**
    * Заказ из урока. Раньше здесь был только текст «заказ создаётся отдельно»,
    * и предмет, класс, четверть, номер и состав приходилось перебивать руками.
-   * Позиции — по чек-листу урока, без цен: их не угадать.
+   * Позиции — по чек-листу урока, цены — из шаблона доски (lib/boardTemplate.ts).
    */
   function createOrder() {
     if (!liveBoard || !liveLesson) return
     const unit = getVisibleCatalog(appSettings, "units")[0] || "Слайд"
-    const lines = (liveLesson.items || [])
-      .filter((i) => i.text.trim())
-      .map((i) => ({ id: randId("l"), label: i.text.trim(), type: unit, qty: 1, pomoHours: 0, rate: 0, ignorePrice: false, ready: !!i.done }))
-    // Ключи со значением undefined в prefill не кладём: spread затёр бы ими
-    // умолчания формы (срок сдачи, первую позицию).
-    const prefill: Partial<Order> = {
-      subject: liveBoard.subject || "",
-      grade: liveBoard.title || "",
-      quarter: liveBoard.quarter || "",
-      lesson: String(liveLesson.num),
-      linkedLessonId: liveLesson.id,
-    }
-    if (liveBoard.deadline) prefill.deadline = liveBoard.deadline
-    if (lines.length) prefill.lines = lines
-    onCreateOrder(prefill)
+    const template = boardTemplateLines(appSettings, liveBoard, orders, unit)
+    onCreateOrder(buildOrderPrefillFromLesson(liveBoard, liveLesson, template, orders, appSettings, { unit, makeId: () => randId("l") }))
   }
+
+  // Статус заказа прямо из урока: завершить или взять в работу — самое частое
+  // действие, и ходить за ним в список заказов не нужно.
+  function changeStatus(next: Order["status"]) {
+    if (!governingOrder) return
+    setOrders((prev) => prev.map((o) => (o.id === governingOrder.id ? { ...o, status: next } : o)))
+    saveData()
+  }
+
 
   // Что именно изменится при отвязке — считаем заранее, чтобы написать это в
   // подтверждении. Связь держится на двух разных вещах (явная привязка и
@@ -285,58 +288,6 @@ export function LessonSheet({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-full bg-muted px-3.5 py-2">
-                <span className="text-[12px] font-bold text-muted-foreground">Порядковый номер урока</span>
-                <input
-                  type="number"
-                  value={liveLesson.num}
-                  onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 }, { debounce: true })}
-                  className={cn(
-                    "w-16 rounded-full border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none",
-                    duplicateNum ? "border-destructive" : "border-border"
-                  )}
-                />
-              </div>
-              {duplicateNum && (
-                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[11.5px] font-bold text-destructive">
-                  Номер {liveLesson.num} уже есть у урока «{duplicateNum.title || `Урок ${duplicateNum.num}`}». Два урока с одним номером
-                  путают привязку заказов, а при правке доски один из них будет удалён.
-                </div>
-              )}
-
-              <div>
-                <Input
-                  value={liveLesson.title}
-                  onChange={(e) => updateLesson({ title: e.target.value }, { debounce: true })}
-                  placeholder="Название урока..."
-                  className="mb-2.5 font-bold"
-                />
-                <div className="flex flex-col gap-1.5">
-                  {items.map((item) => (
-                    <div key={item.id} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-1.5", item.done ? "bg-success/15" : "bg-muted")}>
-                      <button type="button" onClick={() => toggleItem(item.id)} className={cn("flex size-4.5 shrink-0 items-center justify-center rounded-md border", item.done ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
-                        {item.done && <Check className="size-3" strokeWidth={3} />}
-                      </button>
-                      <span className={cn("flex-1 text-[13px]", item.done && "text-muted-foreground line-through")}>{item.text}</span>
-                      <button type="button" onClick={() => deleteItem(item.id)}><Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" /></button>
-                    </div>
-                  ))}
-                  {items.length === 0 && <div className="text-[12px] text-muted-foreground">Состав урока пуст</div>}
-                </div>
-                <Input
-                  value={newItem}
-                  onChange={(e) => setNewItem(e.target.value)}
-                  onKeyDown={handleKey}
-                  placeholder="Состав урока (Enter)..."
-                  className="mt-2"
-                />
-              </div>
-
-              <div>
-                <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
-                <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value }, { debounce: true })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
-              </div>
-
               {/* Связь с заказом. Раньше её не было видно вовсе: заказ мог быть
                   привязан к уроку (явно или по совпадению предмета/класса/
                   четверти/номера), но из урока об этом узнать было нельзя и
@@ -345,19 +296,66 @@ export function LessonSheet({
                 <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заказ</div>
                 {governingOrder ? (
                   <div className="flex flex-col gap-2">
-                    <Link
-                      to={`/orders/${governingOrder.id}`}
-                      onClick={() => onOpenChange(false)}
-                      className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
-                        <div className="truncate text-[11.5px] text-muted-foreground">
-                          {governingOrder.client || "без клиента"} · {fmtMoney(orderTotal(governingOrder))}
+                    {/* Заказ целиком, не выходя из урока: статус, деньги, часы,
+                        таймер, позиции. Раньше здесь была только ссылка, и за
+                        каждым действием приходилось идти в список заказов. */}
+                    {(() => {
+                      const pay = orderPaymentState(governingOrder)
+                      const hours = actualHours(governingOrder)
+                      return (
+                        <div className="rounded-xl bg-muted px-3.5 py-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <Link to={`/orders/${governingOrder.id}`} onClick={() => onOpenChange(false)} className="min-w-0 hover:underline">
+                              <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
+                              <div className="truncate text-[11.5px] text-muted-foreground">{governingOrder.client || "без клиента"}</div>
+                            </Link>
+                            <StatusBadge status={governingOrder.status} onChange={changeStatus} />
+                          </div>
+
+                          <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-dashed border-border pt-2.5">
+                            <div>
+                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Сумма</div>
+                              <div className="text-[13px] font-bold tabular-nums">{fmtMoney(pay.full)}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">К доплате</div>
+                              <div className={cn("text-[13px] font-bold tabular-nums", pay.remaining > 0 ? "text-destructive" : "text-muted-foreground")}>
+                                {pay.remaining > 0 ? fmtMoney(pay.remaining) : "оплачено"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Часы</div>
+                              <div className="text-[13px] font-bold tabular-nums">{hours ? fmtHours(hours) : "—"}</div>
+                            </div>
+                          </div>
+
+                          {governingOrder.lines.length > 0 && (
+                            <div className="mt-2.5 flex flex-col gap-1 border-t border-dashed border-border pt-2.5">
+                              {governingOrder.lines.map((l) => (
+                                <div key={l.id} className="flex items-center justify-between gap-2 text-[12px]">
+                                  <span className={cn("min-w-0 truncate", l.ready && "text-muted-foreground line-through")}>{l.label || l.type}</span>
+                                  <span className="shrink-0 text-muted-foreground tabular-nums">
+                                    {isHourlyUnit(l) ? `${l.pomoHours} ч` : `${l.qty} ${l.type}`} × {fmtMoney(l.rate)} = <b className="text-foreground">{fmtMoney(calculateLineTotal(l))}</b>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="mt-3 flex items-center gap-2">
+                            <OrderTimerButton order={governingOrder} size="md" />
+                            <button
+                              type="button"
+                              onClick={() => onEditOrder(governingOrder)}
+                              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold hover:bg-background"
+                            >
+                              <Pencil className="size-3" />
+                              Изменить
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
-                    </Link>
+                      )
+                    })()}
 
                     {/* Ручное пополнение в обе стороны. Автоматически работает
                         только «заказ → урок», поэтому набранный в планировании
@@ -426,11 +424,64 @@ export function LessonSheet({
                       Создать заказ по этому уроку
                     </button>
                     <div className="mt-2 text-[11.5px] text-muted-foreground">
-                      Предмет, класс, четверть, номер и состав подставятся из урока, привязка проставится сразу. Цены и количество — за вами.
+                      Предмет, класс, четверть, номер и состав подставятся из урока, цены — по ставкам доски, привязка проставится сразу.
                     </div>
                   </div>
                 )}
               </div>
+
+              <div className="flex items-center justify-between rounded-full bg-muted px-3.5 py-2">
+                <span className="text-[12px] font-bold text-muted-foreground">Порядковый номер урока</span>
+                <input
+                  type="number"
+                  value={liveLesson.num}
+                  onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 }, { debounce: true })}
+                  className={cn(
+                    "w-16 rounded-full border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none",
+                    duplicateNum ? "border-destructive" : "border-border"
+                  )}
+                />
+              </div>
+              {duplicateNum && (
+                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-[11.5px] font-bold text-destructive">
+                  Номер {liveLesson.num} уже есть у урока «{duplicateNum.title || `Урок ${duplicateNum.num}`}». Два урока с одним номером
+                  путают привязку заказов, а при правке доски один из них будет удалён.
+                </div>
+              )}
+
+              <div>
+                <Input
+                  value={liveLesson.title}
+                  onChange={(e) => updateLesson({ title: e.target.value }, { debounce: true })}
+                  placeholder="Название урока..."
+                  className="mb-2.5 font-bold"
+                />
+                <div className="flex flex-col gap-1.5">
+                  {items.map((item) => (
+                    <div key={item.id} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-1.5", item.done ? "bg-success/15" : "bg-muted")}>
+                      <button type="button" onClick={() => toggleItem(item.id)} className={cn("flex size-4.5 shrink-0 items-center justify-center rounded-md border", item.done ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+                        {item.done && <Check className="size-3" strokeWidth={3} />}
+                      </button>
+                      <span className={cn("flex-1 text-[13px]", item.done && "text-muted-foreground line-through")}>{item.text}</span>
+                      <button type="button" onClick={() => deleteItem(item.id)}><Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" /></button>
+                    </div>
+                  ))}
+                  {items.length === 0 && <div className="text-[12px] text-muted-foreground">Состав урока пуст</div>}
+                </div>
+                <Input
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  onKeyDown={handleKey}
+                  placeholder="Состав урока (Enter)..."
+                  className="mt-2"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
+                <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value }, { debounce: true })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
+              </div>
+
             </div>
           </>
         )}

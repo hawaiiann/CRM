@@ -45,6 +45,7 @@ export function PlanningPage() {
   // Заказ из урока: форма заказа с предзаполненными предметом, классом,
   // четвертью, номером, составом и привязкой к уроку.
   const [orderPrefill, setOrderPrefill] = useState<Partial<Order> | null>(null)
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null)
 
   const sorted = useMemo(() => {
     let list = boards.slice()
@@ -131,13 +132,14 @@ export function PlanningPage() {
         lesson={activeLesson?.lesson ?? null}
         onOpenChange={(open) => !open && setActiveLesson(null)}
         onCreateOrder={(prefill) => { setActiveLesson(null); setOrderPrefill(prefill) }}
+        onEditOrder={(o) => setEditingOrder(o)}
       />
       <OrderFormDialog
-        open={!!orderPrefill}
-        editingOrder={null}
+        open={!!orderPrefill || !!editingOrder}
+        editingOrder={editingOrder}
         duplicateFrom={null}
         prefill={orderPrefill}
-        onOpenChange={(open) => !open && setOrderPrefill(null)}
+        onOpenChange={(open) => { if (!open) { setOrderPrefill(null); setEditingOrder(null) } }}
       />
     </div>
   )
