@@ -757,12 +757,22 @@ async function syncActivityLog() {
     const rows = unsent.map((e) => ({ user_id: userId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }))
     // id строки нужен для realtime-DELETE: в событии удаления приходит только
     // серверный id, а не наш entry_id.
-    // upsert с ignoreDuplicates: если прошлая вставка прошла, а ответ не
-    // дошёл, строки уже есть — повторная вставка не должна ни падать, ни
-    // дублировать. Раньше ошибка «duplicate key … entry_id» принималась за
-    // отсутствие колонки и переключала журнал на позиционную отправку,
-    // которая дописывала весь хвост ещё раз.
-    const { data, error } = await supabaseClient.from("activity_log").upsert(rows, { onConflict: "entry_id", ignoreDuplicates: true }).select("id, entry_id")
+    // Обычная вставка, а не upsert: ON CONFLICT (entry_id) требует полного
+    // уникального индекса, а в базе он частичный (where entry_id is not null),
+    // и Postgres отвечает «no unique or exclusion constraint matching».
+    // Дубль по ключу (прошлая вставка прошла, ответ не дошёл) — не ошибка:
+    // такие строки досылаются по одной, и «уже есть» считается отправленным.
+    const isDuplicate = (e: { code?: string; message?: string } | null) => e?.code === "23505" || /duplicate key/i.test(String(e?.message || ""))
+    let { data, error } = await supabaseClient.from("activity_log").insert(rows).select("id, entry_id")
+    if (error && isDuplicate(error)) {
+      data = []
+      error = null
+      for (const row of rows) {
+        const one = await supabaseClient.from("activity_log").insert(row).select("id, entry_id")
+        if (one.error && !isDuplicate(one.error)) { error = one.error; break }
+        if (!one.error) data.push(...(one.data || []))
+      }
+    }
     if (!error) {
       unsent.forEach(rememberSyncedEntry)
       ;(data || []).forEach((r: Row) => rememberServerId(r))
