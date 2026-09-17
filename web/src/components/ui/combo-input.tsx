@@ -45,7 +45,8 @@ export function ComboInput({
   const wrapRef = useRef<HTMLDivElement>(null)
   // Момент появления поля: фокус в первые полсекунды — это автофокус
   // модального окна, а не действие человека.
-  const mountedAt = useRef(Date.now())
+  const mountedAt = useRef(0)
+  useEffect(() => { mountedAt.current = Date.now() }, [])
 
   // Ближайший предок, который реально обрезает содержимое. Именно он, а не
   // окно, задаёт границы: у модального окна своя прокрутка внутри.

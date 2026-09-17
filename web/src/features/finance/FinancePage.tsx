@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Wallet } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -34,6 +34,7 @@ import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
+import { ReceivePaymentDialog } from "./ReceivePaymentDialog"
 import { TimeJournalTab } from "./TimeJournalTab"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
@@ -163,6 +164,7 @@ export function FinancePage() {
   const [search, setSearch] = useState("")
   const [showCancelled, setShowCancelled] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
+  const [receiveOpen, setReceiveOpen] = useState(false)
   const [advSearch, setAdvSearch] = useState("")
   const [advClient, setAdvClient] = useState("all")
   const [advSort, setAdvSort] = useState<AdvSort>("date_desc")
@@ -329,10 +331,16 @@ export function FinancePage() {
         title="Финансы"
         subtitle="Учет доходов, чистой прибыли, налоговых отчислений и управления авансами"
         actions={
-          <Button onClick={() => setDepositOpen(true)} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
-            <Plus />
-            Внести аванс
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setDepositOpen(true)}>
+              <Plus />
+              Внести аванс
+            </Button>
+            <Button onClick={() => setReceiveOpen(true)} className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
+              <Wallet />
+              Получить оплату
+            </Button>
+          </div>
         }
       />
 
@@ -667,6 +675,7 @@ export function FinancePage() {
       </Tabs>
 
       <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} />
+      <ReceivePaymentDialog open={receiveOpen} onOpenChange={setReceiveOpen} />
     </div>
   )
 }

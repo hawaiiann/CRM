@@ -23,10 +23,12 @@ export function ClientCardSheet({
   clientName,
   onOpenChange,
   onDeposit,
+  onReceive,
 }: {
   clientName: string | null
   onOpenChange: (open: boolean) => void
   onDeposit: (client: string) => void
+  onReceive: (client: string) => void
 }) {
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
@@ -91,10 +93,13 @@ export function ClientCardSheet({
 
             <SheetFooter>
               <Button
-                onClick={() => onDeposit(clientName)}
+                onClick={() => onReceive(clientName)}
                 className="w-full bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta"
               >
-                Внести аванс от этого клиента
+                Получить оплату
+              </Button>
+              <Button variant="outline" className="w-full" onClick={() => onDeposit(clientName)}>
+                Внести аванс
               </Button>
             </SheetFooter>
           </>
