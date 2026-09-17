@@ -5,7 +5,6 @@ import {
   Plus,
   Columns3,
   ChevronDown,
-  GripVertical,
   MoreVertical,
   Pencil,
   Copy,
@@ -19,7 +18,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Card,
@@ -191,7 +189,6 @@ export function OrdersPage() {
   const orders = useAppStore((s) => s.orders)
   const setOrders = useAppStore((s) => s.setOrders)
   const [search, setSearch] = useState("")
-  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>("all")
   const [sort, setSort] = useState<OrderSort>({ field: "deadline", dir: "asc" })
   const [clientFilter, setClientFilter] = useState("all")
@@ -199,7 +196,6 @@ export function OrdersPage() {
   const [showClient, setShowClient] = useState(true)
   const [showDue, setShowDue] = useState(true)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   // Открытая карточка живёт в адресе (/orders/:orderId), а не в состоянии:
   // так на неё можно сослаться откуда угодно — из урока, финансов, уведомления
   // таймера, — и карточка всегда показывает актуальный заказ из стора, а не
@@ -330,18 +326,6 @@ export function OrdersPage() {
     resetKey: [filter, search, sort.field, sort.dir, clientFilter].join("|"),
   })
 
-  function toggleRow(id: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (checked) next.add(id)
-      else next.delete(id)
-      return next
-    })
-  }
-  function toggleAll(checked: boolean) {
-    setSelected(checked ? new Set(active.map((r) => r.order.id)) : new Set())
-  }
-
   // Быстрая смена статуса прямо из списка — как было в ванильной версии.
   // Завершение заказа не должно требовать открытия формы: это самое частое
   // действие, а через форму его попросту не находили.
@@ -371,22 +355,6 @@ export function OrdersPage() {
     }
 
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)))
-    saveData()
-  }
-
-  function handleRowDrop(targetId: string) {
-    const draggedId = draggingId
-    setDraggingId(null)
-    if (!draggedId || draggedId === targetId) return
-    setOrders((prev) => {
-      const list = prev.slice()
-      const fromIdx = list.findIndex((o) => o.id === draggedId)
-      const toIdx = list.findIndex((o) => o.id === targetId)
-      if (fromIdx === -1 || toIdx === -1) return prev
-      const [moved] = list.splice(fromIdx, 1)
-      list.splice(toIdx, 0, moved)
-      return list
-    })
     saveData()
   }
 
@@ -439,7 +407,7 @@ export function OrdersPage() {
             </CardTitle>
             <CardAction>
               <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-                {active.length} всего
+                из {rows.length} всего
               </span>
             </CardAction>
           </CardHeader>
@@ -602,8 +570,6 @@ export function OrdersPage() {
             showClass={showClass}
             showClient={showClient}
             showDue={showDue}
-            checked={selected.has(order.id)}
-            onCheckedChange={(c) => toggleRow(order.id, c)}
             onOpen={() => setActiveOrder(order)}
             onEdit={() => openEditOrder(order)}
                 onStatusChange={(next) => changeStatus(order.id, next)}
@@ -632,8 +598,6 @@ export function OrdersPage() {
                 showClass={showClass}
                 showClient={showClient}
                 showDue={showDue}
-                checked={selected.has(order.id)}
-                onCheckedChange={(c) => toggleRow(order.id, c)}
                 onOpen={() => setActiveOrder(order)}
                 onEdit={() => openEditOrder(order)}
                 onStatusChange={(next) => changeStatus(order.id, next)}
@@ -651,8 +615,6 @@ export function OrdersPage() {
         <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] table-fixed border-collapse">
           <colgroup>
-            <col style={{ width: 26 }} />
-            <col style={{ width: 34 }} />
             <col />
             <col style={{ width: showClass ? 192 : 0 }} />
             <col style={{ width: showClient ? 124 : 0 }} />
@@ -664,13 +626,6 @@ export function OrdersPage() {
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead />
-              <TableHead>
-                <Checkbox
-                  checked={selected.size > 0 && selected.size === active.length}
-                  onCheckedChange={(c) => toggleAll(!!c)}
-                />
-              </TableHead>
               <TableHead className="px-3">Заказ</TableHead>
               {/* Столбец один, а полей в нём два, и сортировать просили по
                   каждому. Поэтому кликабельны обе подписи по отдельности, а
@@ -711,7 +666,7 @@ export function OrdersPage() {
           <TableBody>
             {visibleActive.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={10} className="py-10 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-[13px] text-muted-foreground">
                   {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
                 </TableCell>
               </TableRow>
@@ -726,17 +681,11 @@ export function OrdersPage() {
                 showClass={showClass}
                 showClient={showClient}
                 showDue={showDue}
-                checked={selected.has(order.id)}
-                onCheckedChange={(c) => toggleRow(order.id, c)}
                 onOpen={() => setActiveOrder(order)}
                 onEdit={() => openEditOrder(order)}
                 onStatusChange={(next) => changeStatus(order.id, next)}
                 onDuplicate={() => openDuplicateOrder(order)}
                 onDelete={() => openDeleteOrder(order)}
-                draggable
-                onDragStart={() => setDraggingId(order.id)}
-                onDragEnd={() => setDraggingId(null)}
-                onDropRow={() => handleRowDrop(order.id)}
               />
             ))}
           </TableBody>
@@ -756,8 +705,6 @@ export function OrdersPage() {
           <div className="overflow-x-auto">
           <table className="w-full min-w-[1120px] table-fixed border-collapse">
             <colgroup>
-              <col style={{ width: 26 }} />
-              <col style={{ width: 34 }} />
               <col />
               <col style={{ width: showClass ? 192 : 0 }} />
               <col style={{ width: showClient ? 124 : 0 }} />
@@ -778,8 +725,6 @@ export function OrdersPage() {
                   showClass={showClass}
                   showClient={showClient}
                   showDue={showDue}
-                  checked={selected.has(order.id)}
-                  onCheckedChange={(c) => toggleRow(order.id, c)}
                   onOpen={() => setActiveOrder(order)}
                   onEdit={() => openEditOrder(order)}
                 onStatusChange={(next) => changeStatus(order.id, next)}
@@ -797,7 +742,7 @@ export function OrdersPage() {
       {/* footer */}
       <div className="mt-3.5 flex flex-wrap items-center justify-between gap-4 px-1">
         <div className="text-[12.5px] text-muted-foreground">
-          {selected.size} из {totalRows} строк выбрано
+          {active.length} активных · {archived.length} в архиве · всего {totalRows}
         </div>
         {/* Раньше эта панель была здесь переписана вручную — при том, что
             PaginationBar уже используется на Клиентах и Финансах. Копия и
@@ -863,18 +808,12 @@ function OrderRow({
   showClass,
   showClient,
   showDue,
-  checked,
-  onCheckedChange,
   onOpen,
   onEdit,
   onDuplicate,
   onDelete,
   onStatusChange,
   muted,
-  draggable,
-  onDragStart,
-  onDragEnd,
-  onDropRow,
 }: {
   order: Order
   sum: number
@@ -883,47 +822,15 @@ function OrderRow({
   showClass: boolean
   showClient: boolean
   showDue: boolean
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
   onOpen: () => void
   onEdit: () => void
   onDuplicate: () => void
   onDelete: () => void
   onStatusChange: (next: Order["status"]) => void
   muted?: boolean
-  draggable?: boolean
-  onDragStart?: () => void
-  onDragEnd?: () => void
-  onDropRow?: () => void
 }) {
   return (
-    <TableRow
-      draggable={draggable}
-      onDragStart={draggable ? onDragStart : undefined}
-      onDragEnd={draggable ? onDragEnd : undefined}
-      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
-      onDrop={
-        draggable
-          ? (e) => {
-              e.preventDefault()
-              onDropRow?.()
-            }
-          : undefined
-      }
-    >
-      <TableCell>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className={cn("flex size-6.5 items-center justify-center text-muted-foreground", draggable ? "cursor-grab" : "cursor-default opacity-40")}>
-              <GripVertical className="size-3.5" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{draggable ? "Перетащить, чтобы изменить порядок" : "Порядок архива не меняется"}</TooltipContent>
-        </Tooltip>
-      </TableCell>
-      <TableCell>
-        <Checkbox checked={checked} onCheckedChange={(c) => onCheckedChange(!!c)} />
-      </TableCell>
+    <TableRow>
       <TableCell className="min-w-0 whitespace-normal px-3">
         <div className="flex min-w-0 max-w-[340px] items-center gap-1.5">
           <OrderTimerButton order={order} />
@@ -1019,8 +926,6 @@ function OrderCard({
   showClass,
   showClient,
   showDue,
-  checked,
-  onCheckedChange,
   onOpen,
   onEdit,
   onDuplicate,
@@ -1035,8 +940,6 @@ function OrderCard({
   showClass: boolean
   showClient: boolean
   showDue: boolean
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
   onOpen: () => void
   onEdit: () => void
   onDuplicate: () => void
@@ -1052,9 +955,6 @@ function OrderCard({
   return (
     <div className="glass-surface rounded-xl p-3.5">
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5">
-          <Checkbox checked={checked} onCheckedChange={(c) => onCheckedChange(!!c)} />
-        </div>
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className={cn("min-w-0 truncate text-[14px] font-bold", muted && "text-muted-foreground")}>{orderDisplayTitle(order)}</span>

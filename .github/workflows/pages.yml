@@ -37,8 +37,8 @@ jobs:
       - name: Установка зависимостей
         run: npm ci
         working-directory: web
-      - name: Проверка типов и линт
-        run: npx tsc --noEmit -p tsconfig.app.json && npx oxlint src
+      - name: Проверка типов, линт и тесты
+        run: npx tsc --noEmit -p tsconfig.app.json && npx oxlint src && npx vitest run
         working-directory: web
       - name: Сборка
         # Собираем в отдельную папку, а не в корень репозитория, как локально:
