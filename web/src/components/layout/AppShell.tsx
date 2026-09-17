@@ -70,7 +70,7 @@ export function AppShell() {
   const isDark = useThemeStore((s) => s.mode === "dark")
 
   useEffect(() => {
-    setOnNavigateToOrder(() => navigate("/orders"))
+    setOnNavigateToOrder((orderId) => navigate(`/orders/${orderId}`))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

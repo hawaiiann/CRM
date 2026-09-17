@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { AlertTriangle, Clock } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Input } from "@/components/ui/input"
@@ -38,7 +39,12 @@ export function ClientsPage() {
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState<SortMode>("name")
   const [state, setState] = useState<StateFilter>("all")
-  const [activeClient, setActiveClient] = useState<string | null>(null)
+  // Открытая карточка — в адресе (/clients/:client), чтобы на клиента можно
+  // было сослаться из Финансов и карточки заказа.
+  const navigate = useNavigate()
+  const params = useParams()
+  const activeClient = params.client ? decodeURIComponent(params.client) : null
+  const setActiveClient = (name: string | null) => navigate(name ? `/clients/${encodeURIComponent(name)}` : "/clients", { replace: !!activeClient })
   const [depositClient, setDepositClient] = useState<string | null>(null)
 
   const rows = useMemo(() => {

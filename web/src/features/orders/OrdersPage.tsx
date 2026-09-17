@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import {
   Search,
   Plus,
@@ -199,7 +200,14 @@ export function OrdersPage() {
   const [showDue, setShowDue] = useState(true)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [activeOrder, setActiveOrder] = useState<Order | null>(null)
+  // Открытая карточка живёт в адресе (/orders/:orderId), а не в состоянии:
+  // так на неё можно сослаться откуда угодно — из урока, финансов, уведомления
+  // таймера, — и карточка всегда показывает актуальный заказ из стора, а не
+  // снимок на момент клика.
+  const navigate = useNavigate()
+  const { orderId: activeOrderId } = useParams()
+  const activeOrder = useMemo(() => (activeOrderId ? orders.find((o) => o.id === activeOrderId) || null : null), [orders, activeOrderId])
+  const setActiveOrder = (o: Order | null) => navigate(o ? `/orders/${o.id}` : "/orders", { replace: !!activeOrderId })
   const [formOpen, setFormOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [duplicateFrom, setDuplicateFrom] = useState<Order | null>(null)

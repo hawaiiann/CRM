@@ -53,7 +53,12 @@ export function OrderDetailsSheet({
             <SheetHeader className="pr-10">
               <SheetTitle>{order.title || [order.subject, order.grade, order.lesson && `Урок ${order.lesson}`].filter(Boolean).join(", ")}</SheetTitle>
               <SheetDescription>
-                {order.client} · сдача {fmtDeadline(order.deadline)}
+                {order.client ? (
+                  <Link to={`/clients/${encodeURIComponent(order.client)}`} onClick={() => onOpenChange(false)} className="hover:underline">
+                    {order.client}
+                  </Link>
+                ) : "без клиента"}{" "}
+                · сдача {fmtDeadline(order.deadline)}
               </SheetDescription>
             </SheetHeader>
 
@@ -124,7 +129,7 @@ export function OrderDetailsSheet({
                   </div>
                   <div className="flex flex-col gap-2">
                     <Link
-                      to="/planning"
+                      to={`/planning/${linked.board.id}/${linked.lesson.id}`}
                       onClick={() => onOpenChange(false)}
                       className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
                     >

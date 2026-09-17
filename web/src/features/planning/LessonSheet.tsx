@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink, Unlink, TriangleAlert } from "lucide-react"
+import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink, Unlink, TriangleAlert, Plus } from "lucide-react"
 import { Link } from "react-router-dom"
 import {
   Sheet,
@@ -23,7 +23,7 @@ import {
 } from "@/lib/planningOrderSync"
 import { getVisibleCatalog } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
-import type { PlanningBoard, PlanningLesson } from "@/types/models"
+import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
 
 const COLORS: { key: string; label: string; className: string }[] = [
@@ -47,10 +47,12 @@ export function LessonSheet({
   board,
   lesson,
   onOpenChange,
+  onCreateOrder,
 }: {
   board: PlanningBoard | null
   lesson: PlanningLesson | null
   onOpenChange: (open: boolean) => void
+  onCreateOrder: (prefill: Partial<Order>) => void
 }) {
   const orders = useAppStore((s) => s.orders)
   const setPlanningBoards = useAppStore((s) => s.setPlanningBoards)
@@ -146,6 +148,31 @@ export function LessonSheet({
     updateLesson({ items: addOrderLinesToLessonItems(governingOrder, liveLesson, () => randId("i")) })
   }
 
+  /**
+   * Заказ из урока. Раньше здесь был только текст «заказ создаётся отдельно»,
+   * и предмет, класс, четверть, номер и состав приходилось перебивать руками.
+   * Позиции — по чек-листу урока, без цен: их не угадать.
+   */
+  function createOrder() {
+    if (!liveBoard || !liveLesson) return
+    const unit = getVisibleCatalog(appSettings, "units")[0] || "Слайд"
+    const lines = (liveLesson.items || [])
+      .filter((i) => i.text.trim())
+      .map((i) => ({ id: randId("l"), label: i.text.trim(), type: unit, qty: 1, pomoHours: 0, rate: 0, ignorePrice: false, ready: !!i.done }))
+    // Ключи со значением undefined в prefill не кладём: spread затёр бы ими
+    // умолчания формы (срок сдачи, первую позицию).
+    const prefill: Partial<Order> = {
+      subject: liveBoard.subject || "",
+      grade: liveBoard.title || "",
+      quarter: liveBoard.quarter || "",
+      lesson: String(liveLesson.num),
+      linkedLessonId: liveLesson.id,
+    }
+    if (liveBoard.deadline) prefill.deadline = liveBoard.deadline
+    if (lines.length) prefill.lines = lines
+    onCreateOrder(prefill)
+  }
+
   // Что именно изменится при отвязке — считаем заранее, чтобы написать это в
   // подтверждении. Связь держится на двух разных вещах (явная привязка и
   // совпадение полей), и «отвязал, а оно вернулось» — худшее, что тут может
@@ -238,9 +265,13 @@ export function LessonSheet({
                         : `По чек-листу: ${doneCount} из ${items.length}.`}
                   </div>
                   {governingOrder && (
-                    <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-foreground">
+                    <Link
+                      to={`/orders/${governingOrder.id}`}
+                      onClick={() => onOpenChange(false)}
+                      className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-foreground hover:underline"
+                    >
                       Заказ <ArrowRight className="size-3" />
-                    </span>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -297,7 +328,7 @@ export function LessonSheet({
                 {governingOrder ? (
                   <div className="flex flex-col gap-2">
                     <Link
-                      to="/orders"
+                      to={`/orders/${governingOrder.id}`}
                       onClick={() => onOpenChange(false)}
                       className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-3 hover:bg-muted/70"
                     >
@@ -368,9 +399,16 @@ export function LessonSheet({
                     <div className="text-[12.5px] text-muted-foreground">
                       К этому уроку не привязан ни один заказ.
                     </div>
-                    <div className="mt-1 text-[11.5px] text-muted-foreground">
-                      Состав урока в заказ не переносится сам — заказ создаётся отдельно, а привязывается полем
-                      «Привязать к уроку» в его форме либо совпадением предмета, класса, четверти и номера урока.
+                    <button
+                      type="button"
+                      onClick={createOrder}
+                      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-cta/90 px-3 py-2 text-[12.5px] font-extrabold text-cta-foreground hover:bg-cta"
+                    >
+                      <Plus className="size-3.5" strokeWidth={2.5} />
+                      Создать заказ по этому уроку
+                    </button>
+                    <div className="mt-2 text-[11.5px] text-muted-foreground">
+                      Предмет, класс, четверть, номер и состав подставятся из урока, привязка проставится сразу. Цены и количество — за вами.
                     </div>
                   </div>
                 )}

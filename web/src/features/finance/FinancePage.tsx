@@ -427,8 +427,8 @@ export function FinancePage() {
                   <div key={o.id} className="rounded-xl bg-muted/60 p-3.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <Link to="/orders" className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</Link>
-                        {o.client && <Link to="/clients" className="block truncate text-[12.5px] text-muted-foreground hover:underline">{o.client}</Link>}
+                        <Link to={`/orders/${o.id}`} className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</Link>
+                        {o.client && <Link to={`/clients/${encodeURIComponent(o.client)}`} className="block truncate text-[12.5px] text-muted-foreground hover:underline">{o.client}</Link>}
                       </div>
                       <PaymentBadge order={o} onClick={() => togglePayment(o)} />
                     </div>
@@ -489,9 +489,9 @@ export function FinancePage() {
                     return (
                       <TableRow key={o.id}>
                         <TableCell className="min-w-0 px-3">
-                          <Link to="/orders" className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</Link>
+                          <Link to={`/orders/${o.id}`} className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</Link>
                         </TableCell>
-                        <TableCell className="min-w-0 px-3">{o.client ? <Link to="/clients" className="block truncate text-foreground hover:underline">{o.client}</Link> : "—"}</TableCell>
+                        <TableCell className="min-w-0 px-3">{o.client ? <Link to={`/clients/${encodeURIComponent(o.client)}`} className="block truncate text-foreground hover:underline">{o.client}</Link> : "—"}</TableCell>
                         <TableCell className="px-3 text-right font-heading font-bold tabular-nums">{fmtMoney(full)}</TableCell>
                         <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{fmtMoney(tax)}</TableCell>
                         <TableCell className="px-3 text-right font-bold tabular-nums text-foreground">{pay.advUsed > 0 ? fmtMoney(pay.advUsed) : "—"}</TableCell>

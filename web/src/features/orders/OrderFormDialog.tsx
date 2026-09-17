@@ -92,12 +92,15 @@ export function OrderFormDialog({
   open,
   editingOrder,
   duplicateFrom,
+  prefill,
   startInDeleteConfirm,
   onOpenChange,
 }: {
   open: boolean
   editingOrder: Order | null
   duplicateFrom: Order | null
+  /** Новый заказ с заранее заполненными полями — например, из урока планирования. */
+  prefill?: Partial<Order> | null
   startInDeleteConfirm?: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -144,6 +147,8 @@ export function OrderFormDialog({
         // записывалась в журнал как отработанная сегодня ещё раз.
         lines: o.lines.length ? JSON.parse(JSON.stringify(o.lines)).map((l: OrderLine) => ({ ...l, ready: false, pomoHours: 0 })) : [],
       })
+    } else if (prefill) {
+      setDraft({ ...emptyDraft(defaults), ...prefill })
     } else {
       setDraft(emptyDraft(defaults))
     }
@@ -151,7 +156,7 @@ export function OrderFormDialog({
     setJournalDate(dateKey(new Date()))
     setJournalSkip(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editingOrder, duplicateFrom, startInDeleteConfirm])
+  }, [open, editingOrder, duplicateFrom, prefill, startInDeleteConfirm])
 
   const lessonOptions = useMemo(() => {
     const opts: { id: string; label: string }[] = []

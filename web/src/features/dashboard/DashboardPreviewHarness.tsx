@@ -136,11 +136,14 @@ export function DashboardPreviewHarness() {
           <Route element={<AppShell />}>
             <Route index element={<DashboardPage />} />
             <Route path="orders" element={<OrdersPage />} />
+            <Route path="orders/:orderId" element={<OrdersPage />} />
             <Route path="timeline" element={<TimelinePage />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="finance" element={<FinancePage />} />
             <Route path="clients" element={<ClientsPage />} />
+            <Route path="clients/:client" element={<ClientsPage />} />
             <Route path="planning" element={<PlanningPage />} />
+            <Route path="planning/:boardId/:lessonId" element={<PlanningPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

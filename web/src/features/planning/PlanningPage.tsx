@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { Plus, Download } from "lucide-react"
+import { OrderFormDialog } from "@/features/orders/OrderFormDialog"
+import type { Order } from "@/types/models"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,8 +29,22 @@ export function PlanningPage() {
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [boardFormOpen, setBoardFormOpen] = useState(false)
   const [editingBoard, setEditingBoard] = useState<PlanningBoard | null>(null)
-  const [activeLesson, setActiveLesson] = useState<{ board: PlanningBoard; lesson: PlanningLesson } | null>(null)
+  // Открытый урок — в адресе (/planning/:boardId/:lessonId): из карточки
+  // заказа теперь есть ссылка прямо на его урок.
+  const navigate = useNavigate()
+  const { boardId, lessonId } = useParams()
+  const activeLesson = useMemo(() => {
+    if (!boardId || !lessonId) return null
+    const board = boards.find((b) => b.id === boardId)
+    const lesson = board?.lessons.find((l) => l.id === lessonId)
+    return board && lesson ? { board, lesson } : null
+  }, [boards, boardId, lessonId])
+  const setActiveLesson = (next: { board: PlanningBoard; lesson: PlanningLesson } | null) =>
+    navigate(next ? `/planning/${next.board.id}/${next.lesson.id}` : "/planning", { replace: !!lessonId })
   const [exportOpen, setExportOpen] = useState(false)
+  // Заказ из урока: форма заказа с предзаполненными предметом, классом,
+  // четвертью, номером, составом и привязкой к уроку.
+  const [orderPrefill, setOrderPrefill] = useState<Partial<Order> | null>(null)
 
   const sorted = useMemo(() => {
     let list = boards.slice()
@@ -113,6 +130,14 @@ export function PlanningPage() {
         board={activeLesson?.board ?? null}
         lesson={activeLesson?.lesson ?? null}
         onOpenChange={(open) => !open && setActiveLesson(null)}
+        onCreateOrder={(prefill) => { setActiveLesson(null); setOrderPrefill(prefill) }}
+      />
+      <OrderFormDialog
+        open={!!orderPrefill}
+        editingOrder={null}
+        duplicateFrom={null}
+        prefill={orderPrefill}
+        onOpenChange={(open) => !open && setOrderPrefill(null)}
       />
     </div>
   )
