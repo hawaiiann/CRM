@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Check, Trash2, RotateCcw, ArrowRight, Unlink, TriangleAlert, Plus } from "lucide-react"
-import { Link } from "react-router-dom"
+import { OrderLink } from "@/components/ui/order-link"
 import {
   Sheet,
   SheetContent,
@@ -296,13 +296,13 @@ export function LessonSheet({
                         : `По чек-листу: ${doneCount} из ${items.length}.`}
                   </div>
                   {governingOrder && (
-                    <Link
-                      to={`/orders/${governingOrder.id}`}
+                    <OrderLink
+                      orderId={governingOrder.id}
                       onClick={() => onOpenChange(false)}
                       className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-foreground hover:underline"
                     >
                       Заказ <ArrowRight className="size-3" />
-                    </Link>
+                    </OrderLink>
                   )}
                 </div>
               </div>
@@ -324,10 +324,10 @@ export function LessonSheet({
                       return (
                         <div className="rounded-xl bg-muted px-3.5 py-3">
                           <div className="flex items-start justify-between gap-2">
-                            <Link to={`/orders/${governingOrder.id}`} onClick={() => onOpenChange(false)} className="min-w-0 hover:underline">
+                            <OrderLink orderId={governingOrder.id} onClick={() => onOpenChange(false)} className="min-w-0 hover:underline">
                               <div className="truncate text-[13px] font-bold">{orderTitle(governingOrder)}</div>
                               <div className="truncate text-[11.5px] text-muted-foreground">{governingOrder.client || "без клиента"}</div>
-                            </Link>
+                            </OrderLink>
                             <StatusBadge status={governingOrder.status} onChange={changeStatus} />
                           </div>
 

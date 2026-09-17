@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   Search,
   Plus,
@@ -235,9 +235,18 @@ export function OrdersPage() {
   // таймера, — и карточка всегда показывает актуальный заказ из стора, а не
   // снимок на момент клика.
   const navigate = useNavigate()
+  const location = useLocation()
   const { orderId: activeOrderId } = useParams()
   const activeOrder = useMemo(() => (activeOrderId ? orders.find((o) => o.id === activeOrderId) || null : null), [orders, activeOrderId])
-  const setActiveOrder = (o: Order | null) => navigate(o ? `/orders/${o.id}` : "/orders", { replace: !!activeOrderId })
+  // Откуда пришли в карточку (OrderLink кладёт адрес в state): закрытие
+  // карточки возвращает туда, а не оставляет в списке заказов. Редактирование
+  // остаётся в списке: форма живёт здесь, и уходить со страницы нельзя.
+  const cameFrom = (location.state as { from?: string } | null)?.from
+  const setActiveOrder = (o: Order | null, opts: { stay?: boolean } = {}) => {
+    if (o) { navigate(`/orders/${o.id}`, { replace: !!activeOrderId, state: cameFrom ? { from: cameFrom } : undefined }); return }
+    if (cameFrom && !opts.stay && cameFrom !== "/orders") { navigate(cameFrom, { replace: true }); return }
+    navigate("/orders", { replace: !!activeOrderId })
+  }
   const [formOpen, setFormOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [duplicateFrom, setDuplicateFrom] = useState<Order | null>(null)
@@ -250,7 +259,7 @@ export function OrdersPage() {
     setFormOpen(true)
   }
   function openEditOrder(o: Order) {
-    setActiveOrder(null)
+    setActiveOrder(null, { stay: true })
     setEditingOrder(o)
     setDuplicateFrom(null)
     setDeleteTarget(null)
@@ -407,6 +416,9 @@ export function OrdersPage() {
     return out
   }
   const classCol = showClass && !grouped
+  // Число колонок таблицы: раньше заголовки групп были на 8 колонок при
+  // семи видимых, и лишняя фантомная колонка съедала всё место справа.
+  const colCount = 5 + (classCol ? 1 : 0) + (showClient ? 1 : 0) + (showDue ? 1 : 0)
 
   // Быстрая смена статуса прямо из списка — как было в ванильной версии.
   // Завершение заказа не должно требовать открытия формы: это самое частое
@@ -717,7 +729,7 @@ export function OrdersPage() {
           <TableBody>
             {visibleActive.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="py-10 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={colCount} className="py-10 text-center text-[13px] text-muted-foreground">
                   {orders.length === 0 ? "Заказов пока нет — добавьте первый." : "Ничего не найдено."}
                 </TableCell>
               </TableRow>
@@ -742,7 +754,7 @@ export function OrdersPage() {
                   onDelete={() => openDeleteOrder(order)}
                 />
               ),
-              (g) => <GroupRow key={"g_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={8} />
+              (g) => <GroupRow key={"g_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={colCount} />
             )}
           </TableBody>
         </table>
@@ -794,7 +806,7 @@ export function OrdersPage() {
                     muted
                   />
                 ),
-                (g) => <GroupRow key={"ga_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={8} muted />
+                (g) => <GroupRow key={"ga_" + g.key} label={g.label} count={g.count} missing={g.missing} due={g.due} colSpan={colCount} muted />
               )}
             </TableBody>
           </table>
@@ -923,7 +935,7 @@ function OrderRow({
   return (
     <TableRow>
       <TableCell className="min-w-0 whitespace-normal px-3">
-        <div className="flex min-w-0 max-w-[340px] items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <OrderTimerButton order={order} />
           {/* В группе класс уже в заголовке: строка — это номер урока и
               состав, а не «Литература, 9 класс, 1, Урок 10» сорок раз подряд. */}

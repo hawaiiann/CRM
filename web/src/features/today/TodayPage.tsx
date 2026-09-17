@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import { OrderLink } from "@/components/ui/order-link"
 import { Wallet, Clock3, ArrowRight, CalendarClock, Play } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
@@ -188,14 +189,14 @@ function OrderRow({ order, today, onStatus }: { order: Order; today: string; onS
   return (
     <div className="flex items-center gap-2.5 rounded-xl bg-muted/60 px-3 py-2.5">
       <OrderTimerButton order={order} />
-      <Link to={`/orders/${order.id}`} className="min-w-0 flex-1">
+      <OrderLink orderId={order.id} className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-bold hover:underline">{orderDisplayTitle(order)}</div>
         <div className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-muted-foreground">
           <span className={cn("font-bold", due.tone === "overdue" && "text-destructive", due.tone === "soon" && "text-warning-foreground")}>{due.text}</span>
           {order.lines.length > 0 && <span>{ready}/{order.lines.length} поз.</span>}
           {order.client && <span className="truncate">{order.client}</span>}
         </div>
-      </Link>
+      </OrderLink>
       <StatusBadge status={order.status} onChange={onStatus} />
     </div>
   )

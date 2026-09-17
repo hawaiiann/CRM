@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { OrderLink } from "@/components/ui/order-link"
 import { ChevronDown } from "lucide-react"
 import { useAppStore } from "@/store/useAppStore"
 import { dateKey, addDays } from "@/lib/money"
@@ -78,14 +78,14 @@ export function WeekPlanningWidget() {
           return (
             <div key={o.id} className="grid grid-cols-7 gap-1">
               {/* Ссылка на карточку заказа: раньше полоска была просто подписью. */}
-              <Link
-                to={`/orders/${o.id}`}
+              <OrderLink
+                orderId={o.id}
                 title={orderWeekLabel(o)}
                 className={cn("truncate rounded-md px-2 py-1.5 text-[10.5px] font-bold hover:brightness-110", STATUS_BAR_STYLE[o.status])}
                 style={{ gridColumn: `${startCol} / span ${span}` }}
               >
                 {orderWeekLabel(o)}
-              </Link>
+              </OrderLink>
             </div>
           )
         })}
