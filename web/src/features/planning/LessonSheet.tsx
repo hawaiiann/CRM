@@ -104,6 +104,12 @@ export function LessonSheet({
   function resetColorLock() {
     updateLesson({ colorLocked: false })
   }
+  // Урок без материала: номер остаётся в сетке и графике, делать нечего.
+  const isEmpty = !!liveLesson?.colorLocked && liveLesson.color === "empty"
+  function toggleEmpty() {
+    if (isEmpty) updateLesson({ colorLocked: false, color: "gray" })
+    else updateLesson({ colorLocked: true, color: "empty" })
+  }
 
   function addItem() {
     const val = newItem.trim()
@@ -287,9 +293,16 @@ export function LessonSheet({
                     </button>
                   ))}
                 </div>
+                <label className={cn("mt-2 flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm", isEmpty ? "bg-muted font-bold" : "text-muted-foreground hover:bg-muted")}>
+                  <input type="checkbox" checked={isEmpty} onChange={toggleEmpty} />
+                  Без материала
+                  <span className="ml-auto text-2xs font-normal text-muted-foreground">номер остаётся, в прогресс и отставание не входит</span>
+                </label>
                 <div className="mt-1.5 flex items-center justify-between gap-2">
                   <div className="text-2xs text-muted-foreground">
-                    {liveLesson.colorLocked
+                    {isEmpty
+                      ? "Урок без материала: в сетке пунктиром, в прогрессе не считается."
+                      : liveLesson.colorLocked
                       ? "Цвет закреплён вручную — не пересчитывается автоматически."
                       : governingOrder
                         ? `По чек-листу: ${doneCount} из ${items.length}. Заказ — ${(STATUS_LABEL[governingOrder.status] || governingOrder.status).toLowerCase()}.`

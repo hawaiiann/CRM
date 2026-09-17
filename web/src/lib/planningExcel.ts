@@ -22,9 +22,10 @@ const FILL_HEX: Record<LessonColor, string> = {
   "green-2": "FFC4E38A",
   "green-3": "FF7CB518",
   red: "FFE4483F",
+  empty: "FFFFFFFF",
 }
 // Тёмный текст на светлой заливке, белый — на насыщенной.
-const DARK_TEXT: LessonColor[] = ["gray", "green-1", "green-2"]
+const DARK_TEXT: LessonColor[] = ["gray", "green-1", "green-2", "empty"]
 
 const HEADER_FILL = "FF2C2D31"
 const HEADER_FONT = "FFFFFFFF"
@@ -96,7 +97,7 @@ export async function buildPlanningWorkbook(
       const done = items.filter((i) => i.done).length
       const pct = total > 0 ? Math.round((done / total) * 100) : 0
       const color = lessonDisplayColor(lesson)
-      const statusLabel = color === "green-3" ? "Готово" : color === "gray" ? "Не начат" : "В работе"
+      const statusLabel = color === "empty" ? "Без материала" : color === "green-3" ? "Готово" : color === "gray" ? "Не начат" : "В работе"
 
       const row = byLesson.addRow([
         board.title || "Без названия", board.subject || "", board.quarter || "",

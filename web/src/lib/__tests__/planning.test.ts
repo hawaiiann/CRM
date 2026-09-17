@@ -1,6 +1,6 @@
 import { test, expect } from "vitest"
 import { syncPlanningWithOrders, orderMatchesLessonFuzzy, applyLessonItemsToOrderLines } from "../planningSync"
-import { lessonDisplayColor, isLessonDone } from "../planningStats"
+import { lessonDisplayColor, isLessonDone, isLessonEmpty, computeBoardProgress } from "../planningStats"
 import { unlinkOrdersFromLessons, planUnlink } from "../planningOrderSync"
 import type { Order, PlanningBoard } from "@/types/models"
 
@@ -78,4 +78,15 @@ test("снятие привязок у заказов удалённых уро�
   expect(next[2]).toBe(orders[2])
   expect(unlinkOrdersFromLessons(orders, [])).toBe(orders)
   expect(unlinkOrdersFromLessons(orders, ["nope"])).toBe(orders)
+})
+
+test("урок без материала: не готов, не в прогрессе, цвет empty", () => {
+  const b = board([{ id: "i1", text: "Презентация", done: false }])
+  const empty = { ...b.lessons[0], id: "L4", num: 4, colorLocked: true, color: "empty" }
+  expect(isLessonEmpty(empty)).toBe(true)
+  expect(isLessonDone(empty)).toBe(false)
+  expect(lessonDisplayColor(empty, null)).toBe("empty")
+  const p = computeBoardProgress({ ...b, lessons: [b.lessons[0], empty] })
+  expect(p.lessonsTotal).toBe(1)
+  expect(p.itemsTotal).toBe(1)
 })

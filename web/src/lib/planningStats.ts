@@ -9,7 +9,17 @@ export interface BoardProgress {
   byItem: { name: string; done: number; total: number }[]
 }
 
-export type LessonColor = "gray" | "yellow" | "green-1" | "green-2" | "green-3" | "red"
+export type LessonColor = "gray" | "yellow" | "green-1" | "green-2" | "green-3" | "red" | "empty"
+
+/**
+ * Урок без материала: номер нужен для нумерации и графика, а делать для
+ * него нечего. Хранится как закреплённый цвет "empty" (colorLocked), чтобы
+ * не добавлять колонку в planning_lessons. Такой урок не входит в прогресс
+ * и не считается отставанием.
+ */
+export function isLessonEmpty(l: PlanningLesson): boolean {
+  return !!l.colorLocked && l.color === "empty"
+}
 
 /** Доля закрытых пунктов чек-листа: 0…1; без пунктов — 0. */
 export function lessonRatio(l: PlanningLesson): number {
@@ -48,6 +58,7 @@ export function lessonDisplayColor(l: PlanningLesson, order?: Order | null): Les
  */
 export function isLessonDone(l: PlanningLesson): boolean {
   if (l.colorLocked) return l.color === "green-3"
+  if (isLessonEmpty(l)) return false
   const items = l.items || []
   return items.length > 0 && items.every((i) => i.done)
 }
@@ -65,6 +76,7 @@ export function computeBoardProgress(board: PlanningBoard): BoardProgress {
   const byItemMap: Record<string, { done: number; total: number }> = {}
 
   lessons.forEach((l) => {
+    if (isLessonEmpty(l)) return
     if (isLessonDone(l)) lessonsDone++
     ;(l.items || []).forEach((item) => {
       const name = item.text.trim()
@@ -80,7 +92,7 @@ export function computeBoardProgress(board: PlanningBoard): BoardProgress {
   })
 
   return {
-    lessonsTotal: lessons.length,
+    lessonsTotal: lessons.filter((l) => !isLessonEmpty(l)).length,
     lessonsDone,
     itemsTotal,
     itemsDone,

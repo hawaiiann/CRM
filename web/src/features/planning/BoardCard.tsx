@@ -9,7 +9,7 @@ import { dateKey } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { Order, PlanningBoard, PlanningLesson } from "@/types/models"
 import { confirmDialog } from "@/store/useDialogStore"
-import { computeBoardProgress, lessonDisplayColor, isLessonDone } from "@/lib/planningStats"
+import { computeBoardProgress, lessonDisplayColor, isLessonDone, isLessonEmpty } from "@/lib/planningStats"
 import { findGoverningOrder } from "@/lib/planningSync"
 import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
 import { scheduleValid, scheduleStatus, weekLabel, type ScheduleWeek } from "@/lib/boardSchedule"
@@ -21,6 +21,8 @@ const CELL_STYLE: Record<string, string> = {
   "green-2": "bg-success/65 text-success-foreground",
   "green-3": "bg-success text-success-foreground",
   red: "bg-destructive text-white",
+  // Без материала: пустая клетка с пунктиром — номер на месте, делать нечего.
+  empty: "border border-dashed border-border bg-transparent text-muted-foreground/60",
 }
 
 function randId(prefix: string) {
@@ -98,11 +100,13 @@ export function BoardCard({
   const typeBreakdown: Record<string, { done: number; total: number }> = {}
   progress.byItem.forEach(({ name, done, total }) => { typeBreakdown[name] = { done, total } })
 
-  const mainPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
-  const lessonsPct = lessons.length > 0 ? Math.round((greenLessons / lessons.length) * 100) : 0
+  const lessonsTotal = progress.lessonsTotal
+  const mainPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : lessonsTotal > 0 ? Math.round((greenLessons / lessonsTotal) * 100) : 0
+  const lessonsPct = lessonsTotal > 0 ? Math.round((greenLessons / lessonsTotal) * 100) : 0
 
   const today = dateKey(new Date())
-  const plan = scheduleValid(schedule) ? scheduleStatus(lessons, schedule, today, isLessonDone) : null
+  // Урок без материала для графика считается закрытым: отставать по нему нечему.
+  const plan = scheduleValid(schedule) ? scheduleStatus(lessons, schedule, today, (l) => isLessonDone(l) || isLessonEmpty(l)) : null
 
   function updateBoard(patch: Partial<PlanningBoard>) {
     setPlanningBoards((prev) => prev.map((b) => (b.id === board.id ? { ...b, ...patch } : b)))
@@ -161,7 +165,7 @@ export function BoardCard({
         key={lesson.id}
         type="button"
         data-lesson-id={lesson.id}
-        title={armed ? "Удалить урок" : lesson.title || `Урок ${lesson.num}`}
+        title={armed ? "Удалить урок" : isLessonEmpty(lesson) ? `Урок ${lesson.num} — без материала` : lesson.title || `Урок ${lesson.num}`}
         onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
         onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
         className={cn(
@@ -181,6 +185,7 @@ export function BoardCard({
     const items = lesson.items || []
     const done = items.filter((i) => i.done).length
     const week = plan?.weeks.find((w) => w.lessons.some((l) => l.id === lesson.id))
+    const empty = isLessonEmpty(lesson)
     const topic = ktpMode && lesson.title && !/^урок\s*\d+$/i.test(lesson.title) ? lesson.title : ""
     const armed = deleteArmedId === lesson.id
     return (
@@ -198,7 +203,7 @@ export function BoardCard({
         <span className="min-w-0 flex-1">
           <span className={cn("block truncate text-sm", topic ? "font-bold" : ktpMode ? "text-muted-foreground" : "font-bold")}>{topic || (ktpMode ? "Без темы" : lesson.title || `Урок ${lesson.num}`)}</span>
           <span className="block truncate text-2xs text-muted-foreground">
-            {items.length ? `${done}/${items.length}: ${items.map((i) => (i.done ? "✓ " : "") + i.text).join(", ")}` : "состав пуст"}
+            {empty ? "без материала — в прогресс не входит" : items.length ? `${done}/${items.length}: ${items.map((i) => (i.done ? "✓ " : "") + i.text).join(", ")}` : "состав пуст"}
           </span>
         </span>
         {week && <span className="hidden shrink-0 text-2xs font-bold text-muted-foreground uppercase sm:block">{week.index + 1} нед</span>}
@@ -222,7 +227,7 @@ export function BoardCard({
     }
     if (!visible.length) return null
     const past = w.end < today
-    const lagging = past && w.lessons.some((l) => !isLessonDone(l))
+    const lagging = past && w.lessons.some((l) => !isLessonDone(l) && !isLessonEmpty(l))
     return (
       <div
         key={w.index}
@@ -302,7 +307,7 @@ export function BoardCard({
             </div>
             <div className="rounded-xl bg-muted px-3 py-2.5">
               <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Уроки</div>
-              <div className="font-heading mt-0.5 text-sm font-bold">{greenLessons}/{lessons.length}</div>
+              <div className="font-heading mt-0.5 text-sm font-bold">{greenLessons}/{lessonsTotal}</div>
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${lessonsPct}%` }} /></div>
             </div>
             {plan && (

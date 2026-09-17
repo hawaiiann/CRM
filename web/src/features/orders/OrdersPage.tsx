@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, reassignJournalOrder } from "@/lib/cloudSync"
 import { mergeOrders, duplicateOrderGroups } from "@/lib/orderMerge"
+import { isLessonEmpty } from "@/lib/planningStats"
 import { orderTitleWithTopic, lessonTopicForOrder } from "@/lib/orderTitle"
 import type { Order } from "@/types/models"
 import { fmtMoney, orderPaymentState, isOrderOverdue, dateKey } from "@/lib/money"
@@ -448,9 +449,20 @@ export function OrdersPage() {
       g.due += r.pay.remaining
     })
     const list = [...map.values()].sort((a, b) => compareGroups(a.sample, b.sample))
-    const missing = new Map(list.map((g) => [g.key, missingLessons(g.all)]))
+    // Уроки, помеченные в планировании «без материала», пропуском не считаются.
+    const norm = (s: string) => (s || "").trim().toLowerCase()
+    const emptyNums = (o: Order) => {
+      const set = new Set<number>()
+      boards.forEach((b) => {
+        if (norm(b.title) !== norm(o.grade)) return
+        if (b.subject && o.subject && norm(b.subject) !== norm(o.subject)) return
+        b.lessons.forEach((l) => { if (isLessonEmpty(l)) set.add(l.num) })
+      })
+      return set
+    }
+    const missing = new Map(list.map((g) => { const skip = emptyNums(g.sample); return [g.key, missingLessons(g.all).filter((n) => !skip.has(n))] }))
     return { list, missing }
-  }, [rows])
+  }, [rows, boards])
 
   // Старые в архиве: сделанные и оплаченные (или отменённые) больше месяца назад.
   const archiveCutoff = dateKey(new Date(Date.now() - 30 * 86400000))
