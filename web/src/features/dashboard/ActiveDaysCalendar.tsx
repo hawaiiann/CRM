@@ -3,7 +3,7 @@ import { X, Pencil, Check } from "lucide-react"
 import { useAppStore } from "@/store/useAppStore"
 import { fmtHours, dateKey, parseHours } from "@/lib/money"
 import { cn } from "@/lib/utils"
-import { deleteActivityLogEntries, saveData } from "@/lib/cloudSync"
+import { deleteActivityLogEntries, setActivityEntryDelta, saveData } from "@/lib/cloudSync"
 import { confirmDialog } from "@/store/useDialogStore"
 import type { ActivityLogEntry } from "@/types/models"
 import {
@@ -29,7 +29,6 @@ function monthOptions() {
 export function ActiveDaysCalendar() {
   const activityLog = useAppStore((s) => s.activityLog)
   const orders = useAppStore((s) => s.orders)
-  const setActivityLog = useAppStore((s) => s.setActivityLog)
   const options = useMemo(() => monthOptions(), [])
   const [monthValue, setMonthValue] = useState(options[0].value)
   const [openDay, setOpenDay] = useState<string | null>(null)
@@ -81,19 +80,15 @@ export function ActiveDaysCalendar() {
   /**
    * Правка числа записи вместо удаления — когда часы посчитаны неверно, но
    * не полностью выдуманы (например, урок реально был, просто автоматика
-   * накинула лишнее). У записи нет отдельного «обновить» в облаке — там
-   * только вставка (см. syncActivityLog в cloudSync.ts), поэтому правка это
-   * старую запись удалить и добавить новую с тем же днём и заказом, но
-   * верным числом. С точки зрения журнала результат неотличим от того, если
-   * бы изначально записали правильно.
+   * накинула лишнее). Запись правится на месте, облако получает UPDATE
+   * (см. syncActivityLog в cloudSync.ts); ноль убирает запись.
    */
   function saveEdit() {
     if (!editing) return
     const delta = parseHours(editing.value)
     setEditing(null)
     if (!Number.isFinite(delta) || delta === editing.entry.delta) return
-    deleteActivityLogEntries([editing.entry])
-    setActivityLog((prev) => [...prev, { date: editing.entry.date, orderId: editing.entry.orderId, field: editing.entry.field, delta }])
+    setActivityEntryDelta(editing.entry, delta)
     saveData()
   }
 

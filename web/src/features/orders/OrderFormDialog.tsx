@@ -23,10 +23,10 @@ import {
 } from "@/components/ui/select"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
-import { saveData, deleteFromCloud, deleteActivityLogForOrder } from "@/lib/cloudSync"
-import { recordActivityChanges } from "@/lib/activity"
+import { saveData, deleteFromCloud, deleteActivityLogForOrder, applyHoursDelta } from "@/lib/cloudSync"
+import { actualHours } from "@/lib/activity"
 import { cn } from "@/lib/utils"
-import { parseNum, fmtMoney, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, orderTaxRate, draftPaymentState } from "@/lib/money"
+import { parseNum, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, orderTaxRate, draftPaymentState } from "@/lib/money"
 import { getClientAdvanceStats } from "@/lib/advances"
 import { normalizePayment } from "@/lib/normalize"
 import { confirmDialog } from "@/store/useDialogStore"
@@ -112,6 +112,12 @@ export function OrderFormDialog({
   const defaults = { type: getVisibleCatalog(appSettings, "types")[0] || "Презентация", unit: getVisibleCatalog(appSettings, "units")[0] || "Слайд" }
   const [draft, setDraft] = useState<Order>(() => emptyDraft(defaults))
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // За какой день записать в журнал разницу часов, набранную руками в этой
+  // форме, и записывать ли вообще. Раньше любая правка «Факт. часов» или
+  // часов у позиции молча уходила в журнал как отработанное СЕГОДНЯ — так и
+  // появлялись «30 часов за день» после опечатки в поле.
+  const [journalDate, setJournalDate] = useState(() => dateKey(new Date()))
+  const [journalSkip, setJournalSkip] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -133,12 +139,17 @@ export function OrderFormDialog({
         deadline: dateKey(addDays(newStart, durationDays)),
         estimatedHours: o.estimatedHours,
         taxType: o.taxType,
-        lines: o.lines.length ? JSON.parse(JSON.stringify(o.lines)).map((l: OrderLine) => ({ ...l, ready: false })) : [],
+        // Часы таймера у копии обнуляются: это время отработано по ОРИГИНАЛУ.
+        // Раньше они копировались, и при сохранении копии вся сумма часов
+        // записывалась в журнал как отработанная сегодня ещё раз.
+        lines: o.lines.length ? JSON.parse(JSON.stringify(o.lines)).map((l: OrderLine) => ({ ...l, ready: false, pomoHours: 0 })) : [],
       })
     } else {
       setDraft(emptyDraft(defaults))
     }
     setConfirmDelete(!!startInDeleteConfirm)
+    setJournalDate(dateKey(new Date()))
+    setJournalSkip(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingOrder, duplicateFrom, startInDeleteConfirm])
 
@@ -187,6 +198,10 @@ export function OrderFormDialog({
   // больше, чем клиент когда-либо платил, и перерасход не было видно —
   // «Доступно» обрезается до нуля через Math.max(0, …) и всё выглядело нормально.
   const advanceOverdraft = Math.max(0, parseNum(draft.advanceUsed) - advanceAvailableHere)
+
+  // На сколько часов черновик отличается от сохранённого заказа — ровно эта
+  // разница уйдёт в журнал при сохранении (за день из journalDate).
+  const hoursDelta = Math.round((actualHours(draft) - (editingOrder ? actualHours(editingOrder) : 0)) * 10000) / 10000
 
   // Та же логика, что в таймере (useTimerStore.flushSegment): время идёт в
   // первую неготовую позицию, а если готовы все — в последнюю.
@@ -324,13 +339,14 @@ export function OrderFormDialog({
     finalOrder.isPaid = draftPaymentState(finalOrder).isFullyPaid
     finalOrder.paidAt = cleanPayments.length ? cleanPayments[0].date || null : null
 
-    const entry = recordActivityChanges(editingOrder, finalOrder)
-
     setOrders((prev) => {
       const idx = prev.findIndex((o) => o.id === finalOrder.id)
       return idx >= 0 ? prev.map((o, i) => (i === idx ? finalOrder : o)) : [...prev, finalOrder]
     })
-    if (entry) setActivityLog((prev) => [...prev, entry])
+
+    // Считаем по уже очищенным позициям — то же, что уйдёт в заказ.
+    const delta = Math.round((actualHours(finalOrder) - (editingOrder ? actualHours(editingOrder) : 0)) * 10000) / 10000
+    if (delta && !journalSkip) applyHoursDelta(finalOrder.id, journalDate || dateKey(new Date()), delta)
 
     saveData()
     onOpenChange(false)
@@ -438,6 +454,29 @@ export function OrderFormDialog({
                 <Input inputMode="decimal" value={draft.actualHours} onChange={(e) => setDraft((d) => ({ ...d, actualHours: e.target.value }))} placeholder="Факт. часы" />
               </Field>
             </div>
+
+            {/* Появляется только когда часы в форме реально изменились: сюда
+                входят и «Факт. часы», и часы у позиций. Без этого блока
+                разница записывалась в журнал за сегодня без спроса. */}
+            {hoursDelta !== 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-[12px]">
+                <span>
+                  Часы по заказу {hoursDelta > 0 ? "вырастут" : "уменьшатся"} на{" "}
+                  <b className="font-bold">{fmtHours(Math.abs(hoursDelta))}</b>. Записать в журнал за
+                </span>
+                <Input
+                  type="date"
+                  value={journalDate}
+                  disabled={journalSkip}
+                  onChange={(e) => setJournalDate(e.target.value)}
+                  className="h-8 w-auto"
+                />
+                <label className="flex cursor-pointer items-center gap-1.5 font-bold">
+                  <Checkbox checked={journalSkip} onCheckedChange={(c) => setJournalSkip(!!c)} />
+                  Не записывать в журнал
+                </label>
+              </div>
+            )}
 
             {/* Аванс */}
             <div className="rounded-xl border border-border bg-muted/60 p-4">

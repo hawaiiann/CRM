@@ -22,7 +22,7 @@ import {
 } from "./normalize"
 import { orderPaymentsTotal, parseNum, dateKey } from "./money"
 import { syncPlanningWithOrders } from "./planningSync"
-import { triggerDiskBackup } from "./diskBackup"
+import { scheduleDiskBackup } from "./diskBackup"
 import {
   STORAGE_KEY,
   SETTINGS_KEY,
@@ -35,6 +35,7 @@ import {
 import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries } from "./pendingDeletes"
 import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
+import { mergeHoursEntry, setEntryDelta } from "./journal"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
 type Row = Record<string, any>
@@ -118,6 +119,10 @@ interface CloudSnapshot {
   appSettings: AppSettings | null
   activityLogSyncedCount: number
   activityLogSyncedIds: Set<string>
+  // Что именно облако знает по каждой записи журнала (число часов и день).
+  // Запись дня теперь ПРАВИТСЯ, а не только добавляется (см. lib/journal.ts),
+  // и без этого снимка не понять, какие строки надо обновить в облаке.
+  activityLogSynced: Record<string, { delta: number; date: string }>
   updatedAt: {
     orders: Record<string, string>
     tasks: Record<string, string>
@@ -129,8 +134,21 @@ interface CloudSnapshot {
 
 const cloudSnapshot: CloudSnapshot = {
   orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {},
-  appSettings: null, activityLogSyncedCount: 0, activityLogSyncedIds: new Set(),
+  appSettings: null, activityLogSyncedCount: 0, activityLogSyncedIds: new Set(), activityLogSynced: {},
   updatedAt: { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} },
+}
+
+function rememberSyncedEntry(e: ActivityLogEntry) {
+  if (!e.entryId) return
+  cloudSnapshot.activityLogSyncedIds.add(e.entryId)
+  cloudSnapshot.activityLogSynced[e.entryId] = { delta: e.delta, date: e.date }
+}
+
+function resetSyncedEntries(log: ActivityLogEntry[]) {
+  cloudSnapshot.activityLogSyncedIds = new Set()
+  cloudSnapshot.activityLogSynced = {}
+  log.forEach(rememberSyncedEntry)
+  cloudSnapshot.activityLogSyncedCount = log.length
 }
 
 function snapshotCopy<T>(value: T): T {
@@ -303,8 +321,40 @@ export function deleteActivityLogEntries(entries: ActivityLogEntry[]) {
   if (!entries.length) return
   const toRemove = new Set(entries)
   useAppStore.getState().setActivityLog((prev) => prev.filter((e) => !toRemove.has(e)))
-  // Запись без entryId ещё не отправлена в облако — удалять там нечего.
-  entries.forEach((e) => { if (e.entryId) deleteFromCloud("activity_log", e.entryId) })
+  forgetEntriesInCloud(entries)
+}
+
+// Запись без entryId ещё не отправлена в облако — удалять там нечего.
+function forgetEntriesInCloud(entries: ActivityLogEntry[]) {
+  entries.forEach((e) => {
+    if (!e.entryId) return
+    cloudSnapshot.activityLogSyncedIds.delete(e.entryId)
+    delete cloudSnapshot.activityLogSynced[e.entryId]
+    deleteFromCloud("activity_log", e.entryId)
+  })
+}
+
+/**
+ * Единственный вход для «отработано ещё N часов по заказу за день». Таймер,
+ * форма заказа и правка в календаре идут через него, поэтому в журнале на
+ * день по заказу всегда одна строка (см. lib/journal.ts). Сохранение вызывает
+ * тот, кто вызвал, — обычно оно всё равно идёт следом за правкой заказа.
+ */
+export function applyHoursDelta(orderId: string, date: string, delta: number) {
+  const store = useAppStore.getState()
+  const change = mergeHoursEntry(store.activityLog, orderId, date, delta)
+  if (change.log === store.activityLog) return
+  store.setActivityLog(change.log)
+  forgetEntriesInCloud(change.removed)
+}
+
+/** Поправить число у конкретной записи; ноль убирает её. */
+export function setActivityEntryDelta(entry: ActivityLogEntry, delta: number) {
+  const store = useAppStore.getState()
+  const change = setEntryDelta(store.activityLog, entry, delta)
+  if (change.log === store.activityLog) return
+  store.setActivityLog(change.log)
+  forgetEntriesInCloud(change.removed)
 }
 
 export async function deleteActivityLogForOrder(orderId: string) {
@@ -325,9 +375,7 @@ async function deleteObsoleteJournalFieldsFromCloud(fields: string[]) {
   try {
     const { error } = await supabaseClient.from("activity_log").delete().eq("user_id", userId).in("field", fields)
     if (error) throw error
-    const activityLog = useAppStore.getState().activityLog
-    cloudSnapshot.activityLogSyncedIds = new Set(activityLog.map((e) => e.entryId).filter(Boolean) as string[])
-    cloudSnapshot.activityLogSyncedCount = activityLog.length
+    resetSyncedEntries(useAppStore.getState().activityLog)
   } catch (err) {
     console.error("Не удалось убрать устаревшие записи журнала из облака:", err)
     markSyncFailed()
@@ -487,13 +535,31 @@ async function syncActivityLog() {
   const activityLog = useAppStore.getState().activityLog
 
   if (activityLogSupportsEntryId) {
+    // Сначала правки уже отправленных строк: запись дня по заказу теперь
+    // накапливает часы, а не плодит новые строки (lib/journal.ts), поэтому
+    // облако должно получать UPDATE, а не INSERT.
+    const changed = activityLog.filter((e) => {
+      if (!e.entryId) return false
+      const known = cloudSnapshot.activityLogSynced[e.entryId]
+      return !!known && (known.delta !== e.delta || known.date !== e.date)
+    })
+    for (const e of changed) {
+      const { error } = await supabaseClient
+        .from("activity_log")
+        .update({ delta: e.delta, date: e.date })
+        .eq("entry_id", e.entryId as string)
+        .eq("user_id", userId)
+      if (error) throw error
+      rememberSyncedEntry(e)
+    }
+
     const unsent = activityLog.filter((e) => !e.entryId || !cloudSnapshot.activityLogSyncedIds.has(e.entryId))
     if (!unsent.length) return
     unsent.forEach((e) => { if (!e.entryId) e.entryId = makeEntryId() })
     const rows = unsent.map((e) => ({ user_id: userId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }))
     const { error } = await supabaseClient.from("activity_log").insert(rows)
     if (!error) {
-      unsent.forEach((e) => cloudSnapshot.activityLogSyncedIds.add(e.entryId as string))
+      unsent.forEach(rememberSyncedEntry)
       cloudSnapshot.activityLogSyncedCount = activityLog.length
       return
     }
@@ -724,8 +790,7 @@ async function cloudLoadData() {
   cloudSnapshot.planningLessons = {}
   boards.forEach((b) => (b.lessons || []).forEach((l) => { cloudSnapshot.planningLessons[l.id] = snapshotCopy({ ...l, boardId: b.id }) }))
   cloudSnapshot.appSettings = pulledSettings ? JSON.parse(JSON.stringify(pulledSettings)) : null
-  cloudSnapshot.activityLogSyncedCount = pulledLog.length
-  cloudSnapshot.activityLogSyncedIds = new Set(pulledLog.map((e) => e.entryId).filter(Boolean) as string[])
+  resetSyncedEntries(pulledLog)
 
   cloudSnapshot.updatedAt = { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} }
   ;(ordersRes.data || []).forEach((r: Row) => { cloudSnapshot.updatedAt.orders[r.id] = r.updated_at })
@@ -848,7 +913,9 @@ export function saveData() {
 
   const backupSettings = useAppStore.getState().backupSettings
   if (backupSettings.enabled && backupSettings.interval === "change") {
-    triggerDiskBackup()
+    // Отложенно, не на каждое нажатие клавиши: бэкап читает и пишет файл на
+    // диске и опрашивает облако за каждый другой аккаунт (см. diskBackup.ts).
+    scheduleDiskBackup()
   }
 }
 

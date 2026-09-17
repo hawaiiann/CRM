@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Check, Trash2, RotateCcw, ArrowRight, ExternalLink, Unlink, TriangleAlert } from "lucide-react"
 import { Link } from "react-router-dom"
 import {
@@ -62,12 +62,27 @@ export function LessonSheet({
   const liveBoard = useAppStore((s) => s.planningBoards.find((b) => b.id === board?.id)) || board
   const liveLesson = liveBoard?.lessons.find((l) => l.id === lesson?.id) || lesson
 
-  function updateLesson(patch: Partial<PlanningLesson>) {
+  // Текстовые поля (название, заметки, номер) сохраняются с задержкой: раньше
+  // каждое нажатие клавиши вызывало saveData() — пересинхронизацию всех досок
+  // с заказами, шесть записей в localStorage, отправку в облако и дисковый
+  // бэкап. Галочки и кнопки по-прежнему сохраняются сразу.
+  const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function flushPendingSave() {
+    if (!pendingSave.current) return
+    clearTimeout(pendingSave.current)
+    pendingSave.current = null
+    saveData()
+  }
+  useEffect(() => flushPendingSave, [lesson?.id])
+
+  function updateLesson(patch: Partial<PlanningLesson>, { debounce = false } = {}) {
     if (!liveBoard || !liveLesson) return
     setPlanningBoards((prev) =>
       prev.map((b) => (b.id !== liveBoard.id ? b : { ...b, lessons: b.lessons.map((l) => (l.id === liveLesson.id ? { ...l, ...patch } : l)) }))
     )
-    saveData()
+    if (!debounce) { flushPendingSave(); saveData(); return }
+    if (pendingSave.current) clearTimeout(pendingSave.current)
+    pendingSave.current = setTimeout(() => { pendingSave.current = null; saveData() }, 800)
   }
 
   function setColor(color: string) {
@@ -235,7 +250,7 @@ export function LessonSheet({
                 <input
                   type="number"
                   value={liveLesson.num}
-                  onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 })}
+                  onChange={(e) => updateLesson({ num: parseInt(e.target.value) || 1 }, { debounce: true })}
                   className="w-16 rounded-full border border-border bg-background px-2 py-1 text-center text-[12.5px] font-bold outline-none"
                 />
               </div>
@@ -243,7 +258,7 @@ export function LessonSheet({
               <div>
                 <Input
                   value={liveLesson.title}
-                  onChange={(e) => updateLesson({ title: e.target.value })}
+                  onChange={(e) => updateLesson({ title: e.target.value }, { debounce: true })}
                   placeholder="Название урока..."
                   className="mb-2.5 font-bold"
                 />
@@ -270,7 +285,7 @@ export function LessonSheet({
 
               <div>
                 <div className="mb-1.5 text-[10.5px] font-extrabold tracking-wide text-muted-foreground uppercase">Заметки к уроку</div>
-                <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
+                <Textarea value={liveLesson.notes} onChange={(e) => updateLesson({ notes: e.target.value }, { debounce: true })} placeholder="Идеи, правки, ссылки на материалы..." rows={3} />
               </div>
 
               {/* Связь с заказом. Раньше её не было видно вовсе: заказ мог быть

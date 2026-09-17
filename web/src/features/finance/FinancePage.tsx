@@ -17,7 +17,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
-import { recordActivityChanges } from "@/lib/activity"
 import {
   fmtMoney,
   fmtHours,
@@ -155,7 +154,6 @@ export function FinancePage() {
   const advances = useAppStore((s) => s.advances)
   const setOrders = useAppStore((s) => s.setOrders)
   const setAdvances = useAppStore((s) => s.setAdvances)
-  const setActivityLog = useAppStore((s) => s.setActivityLog)
 
   const [sort, setSort] = useState<SortMode>("deadline_desc")
   const [payFilter, setPayFilter] = useState<PayFilter>("all")
@@ -264,9 +262,8 @@ export function FinancePage() {
       if (rest > 0) payments.push(normalizePayment({ amount: rest, date: dateKey(new Date()), note: "" }))
       next = { ...o, payments, paidAmount: orderPaymentsTotal({ ...o, payments }), isPaid: true, paidAt: o.paidAt || dateKey(new Date()) }
     }
-    const entry = recordActivityChanges(o, next)
+    // Оплата не меняет часов — журнал активности здесь ни при чём.
     setOrders((prev) => prev.map((x) => (x.id === o.id ? next : x)))
-    if (entry) setActivityLog((prev) => [...prev, entry])
     saveData()
   }
 

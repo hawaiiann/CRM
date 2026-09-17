@@ -169,6 +169,38 @@ async function pruneOldBackups(dir: FileSystemDirectoryHandle) {
   } catch { /* перебор недоступен — пропускаем чистку, это не критично */ }
 }
 
+/**
+ * Отложенный бэкап для режима «при каждом изменении».
+ *
+ * Раньше saveData() вызывал triggerDiskBackup() напрямую — на КАЖДОЕ
+ * нажатие клавиши в названии урока или справочнике: чтение вчерашнего файла,
+ * запись нового и по пять запросов к облаку за каждый другой аккаунт. Теперь
+ * первое изменение заводит таймер, все последующие в него укладываются, и
+ * бэкап уходит не чаще раза в минуту. Если вкладку прячут раньше — пишем
+ * сразу, чтобы не потерять последние правки.
+ */
+const BACKUP_DEBOUNCE_MS = 60_000
+let backupTimer: ReturnType<typeof setTimeout> | null = null
+
+export function scheduleDiskBackup() {
+  if (backupTimer) return
+  backupTimer = setTimeout(() => {
+    backupTimer = null
+    triggerDiskBackup()
+  }, BACKUP_DEBOUNCE_MS)
+}
+
+function flushScheduledBackup() {
+  if (!backupTimer) return
+  clearTimeout(backupTimer)
+  backupTimer = null
+  triggerDiskBackup()
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushScheduledBackup() })
+}
+
 export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
   const store = useAppStore.getState()
   const backupData = {

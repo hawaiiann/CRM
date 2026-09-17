@@ -1,9 +1,8 @@
 import { create } from "zustand"
 import { useAppStore } from "./useAppStore"
 import { useToastStore } from "./useToastStore"
-import { saveData } from "@/lib/cloudSync"
-import { recordActivityChanges } from "@/lib/activity"
-import { parseHours } from "@/lib/money"
+import { saveData, applyHoursDelta } from "@/lib/cloudSync"
+import { parseHours, dateKey } from "@/lib/money"
 import { fmtMilestoneDuration } from "@/lib/money"
 import { requestNotificationPermission, isPageBackground, sendSystemNotification } from "@/lib/notifications"
 
@@ -82,13 +81,16 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     const line = order.lines.find((l) => !l.ready) || order.lines[order.lines.length - 1]
     if (!line) return
-    const before = JSON.parse(JSON.stringify(order))
     const addHours = segmentMs / 1000 / 3600
     const nextPomo = Math.round((parseHours(line.pomoHours) + addHours) * 10000) / 10000
     const nextOrder = { ...order, lines: order.lines.map((l) => (l.id === line.id ? { ...l, pomoHours: nextPomo } : l)) }
-    const entry = recordActivityChanges(before, nextOrder)
     app.setOrders((prev) => prev.map((o) => (o.id === nextOrder.id ? nextOrder : o)))
-    if (entry) app.setActivityLog((prev) => [...prev, entry])
+    // Время таймера — это реально отработанные часы, они идут в журнал всегда
+    // и вливаются в запись сегодняшнего дня по этому заказу, а не добавляют
+    // новую строку каждую минуту (lib/journal.ts). Раньше дельта считалась
+    // через «Факт. часы», и стоило заполнить это поле руками, как таймер
+    // переставал попадать в журнал вовсе.
+    applyHoursDelta(order.id, dateKey(new Date()), addHours)
   },
 
   tick: () => {

@@ -1,5 +1,5 @@
-import type { Order, ActivityLogEntry } from "@/types/models"
-import { parseNum, dateKey } from "./money"
+import type { Order } from "@/types/models"
+import { parseNum } from "./money"
 
 /**
  * Часы, которые реально отработаны по заказу: сначала «Факт. часы», вписанные
@@ -18,14 +18,7 @@ export function actualHours(o: Order): number {
   return (o.lines || []).reduce((s, l) => s + parseNum(l.pomoHours), 0)
 }
 
-// Ported from db.js's recordActivityChanges — writes only the HOURS delta
-// between the old and new order into the activity log (revenue/материалы are
-// derived directly from orders elsewhere, see js/stats.js's original comment).
-export function recordActivityChanges(oldOrder: Order | null, newOrder: Order, onDate?: string): ActivityLogEntry | null {
-  const today = onDate || dateKey(new Date())
-  const oldHours = oldOrder ? actualHours(oldOrder) : 0
-  const newHours = actualHours(newOrder)
-  const hoursDelta = newHours - oldHours
-  if (!hoursDelta) return null
-  return { date: today, orderId: newOrder.id, field: "hours", delta: hoursDelta }
-}
+// recordActivityChanges (дельта «стало минус было» с сегодняшней датой)
+// убрана: разница часов теперь считается прямо в форме заказа и уходит в
+// журнал через applyHoursDelta за выбранный человеком день, а таймер пишет
+// своё время напрямую (см. lib/journal.ts и cloudSync.applyHoursDelta).
