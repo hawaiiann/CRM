@@ -34,6 +34,7 @@ import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
+import { TimeJournalTab } from "./TimeJournalTab"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { orderMatchesQuery } from "@/lib/orderSearch"
 import type { Order } from "@/types/models"
@@ -329,6 +330,10 @@ export function FinancePage() {
             <span className="sm:hidden">Время</span>
             <span className="hidden sm:inline">Отчёт по времени</span>
           </TabsTrigger>
+          <TabsTrigger value="journal">
+            <span className="sm:hidden">Журнал</span>
+            <span className="hidden sm:inline">Журнал часов</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -621,6 +626,10 @@ export function FinancePage() {
 
         <TabsContent value="timereport" className="mt-4">
           <TimeReportTab />
+        </TabsContent>
+
+        <TabsContent value="journal" className="mt-4">
+          <TimeJournalTab />
         </TabsContent>
       </Tabs>
 

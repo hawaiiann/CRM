@@ -35,7 +35,7 @@ import {
 import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries } from "./pendingDeletes"
 import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
-import { mergeHoursEntry, setEntryDelta } from "./journal"
+import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
 type Row = Record<string, any>
@@ -355,6 +355,25 @@ export function setActivityEntryDelta(entry: ActivityLogEntry, delta: number) {
   if (change.log === store.activityLog) return
   store.setActivityLog(change.log)
   forgetEntriesInCloud(change.removed)
+}
+
+/** Задать дню по заказу точное число часов (таблица правки журнала). */
+export function setJournalDayHours(orderId: string, date: string, hours: number) {
+  const store = useAppStore.getState()
+  const change = setDayHours(store.activityLog, orderId, date, hours)
+  if (change.log === store.activityLog) return
+  store.setActivityLog(change.log)
+  forgetEntriesInCloud(change.removed)
+}
+
+/** Схлопнуть старые построчные записи до одной на день и заказ. Возвращает, сколько строк ушло. */
+export function compactJournal(): number {
+  const store = useAppStore.getState()
+  const change = compactLog(store.activityLog)
+  if (change.log === store.activityLog) return 0
+  store.setActivityLog(change.log)
+  forgetEntriesInCloud(change.removed)
+  return change.removed.length
 }
 
 export async function deleteActivityLogForOrder(orderId: string) {

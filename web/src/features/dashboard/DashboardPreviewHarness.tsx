@@ -12,7 +12,7 @@ import { FinancePage } from "@/features/finance/FinancePage"
 import { ClientsPage } from "@/features/clients/ClientsPage"
 import { PlanningPage } from "@/features/planning/PlanningPage"
 import { SettingsPage } from "@/features/settings/SettingsPage"
-import type { Order, Task, Advance, PlanningBoard } from "@/types/models"
+import type { Order, Task, Advance, PlanningBoard, ActivityLogEntry } from "@/types/models"
 
 // Классы и предметы намеренно разные и «неудобные»: с однобуквенными литерами,
 // с двузначным номером и без номера вовсе. На одинаковых данных превью не
@@ -98,14 +98,29 @@ function fakeBoard(): PlanningBoard {
   }
 }
 
+// Журнал в «старом» формате — как его писали прежние версии: по строке на
+// минуту таймера и пара «+30, −30» от опечатки. Нужен, чтобы видеть в
+// превью вкладку «Журнал часов» со схлопыванием и сверкой.
+function fakeActivityLog(orders: Order[]): ActivityLogEntry[] {
+  const log: ActivityLogEntry[] = []
+  const day = (offset: number) => dateKey(new Date(Date.now() - offset * 86400000))
+  for (let i = 0; i < 40; i++) log.push({ date: day(1), orderId: orders[0].id, field: "hours", delta: 1 / 60, entryId: "m" + i })
+  log.push({ date: day(1), orderId: orders[1].id, field: "hours", delta: 30, entryId: "p1" })
+  log.push({ date: day(1), orderId: orders[1].id, field: "hours", delta: -30, entryId: "p2" })
+  log.push({ date: day(2), orderId: orders[1].id, field: "hours", delta: 2.5, entryId: "p3" })
+  log.push({ date: day(3), orderId: orders[2].id, field: "hours", delta: 4, entryId: "p4" })
+  log.push({ date: day(5), orderId: "deleted_order", field: "hours", delta: 1.25, entryId: "p5" })
+  return log
+}
+
 export function DashboardPreviewHarness() {
   useEffect(() => {
+    const orders = Array.from({ length: 16 }, (_, i) =>
+      fakeOrder(i - 5, 15000 + i * 1500, i % 6 === 0 ? "done" : "progress", "Клиент " + (i + 1))
+    )
     useAppStore.setState({
-      orders: [
-        ...Array.from({ length: 16 }, (_, i) =>
-          fakeOrder(i - 5, 15000 + i * 1500, i % 6 === 0 ? "done" : "progress", "Клиент " + (i + 1))
-        ),
-      ],
+      orders,
+      activityLog: fakeActivityLog(orders),
       tasks: fakeTasks(),
       advances: fakeAdvances(),
       planningBoards: [fakeBoard()],
