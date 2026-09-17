@@ -24,11 +24,13 @@ export function ClientCardSheet({
   onOpenChange,
   onDeposit,
   onReceive,
+  onAct,
 }: {
   clientName: string | null
   onOpenChange: (open: boolean) => void
   onDeposit: (client: string) => void
   onReceive: (client: string) => void
+  onAct: (client: string) => void
 }) {
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
@@ -98,9 +100,14 @@ export function ClientCardSheet({
               >
                 Получить оплату
               </Button>
-              <Button variant="outline" className="w-full" onClick={() => onDeposit(clientName)}>
-                Внести аванс
-              </Button>
+              <div className="flex w-full gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => onDeposit(clientName)}>
+                  Внести аванс
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => onAct(clientName)}>
+                  Акт за месяц
+                </Button>
+              </div>
             </SheetFooter>
           </>
         )}

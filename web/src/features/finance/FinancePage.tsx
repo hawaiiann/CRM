@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { Plus, Trash2, Wallet } from "lucide-react"
+import { Plus, Trash2, Wallet, FileText } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -35,6 +35,7 @@ import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
 import { DepositDialog } from "./DepositDialog"
 import { ReceivePaymentDialog } from "./ReceivePaymentDialog"
+import { ActDialog } from "./ActDialog"
 import { TimeJournalTab } from "./TimeJournalTab"
 import { AnalyticsTab } from "./AnalyticsTab"
 import { ClientsContent } from "@/features/clients/ClientsPage"
@@ -167,6 +168,7 @@ export function FinancePage() {
   const [showCancelled, setShowCancelled] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
+  const [actOpen, setActOpen] = useState(false)
   const [advSearch, setAdvSearch] = useState("")
   const [advClient, setAdvClient] = useState("all")
   const [advSort, setAdvSort] = useState<AdvSort>("date_desc")
@@ -334,6 +336,10 @@ export function FinancePage() {
         subtitle="Учет доходов, чистой прибыли, налоговых отчислений и управления авансами"
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setActOpen(true)}>
+              <FileText />
+              Акт за месяц
+            </Button>
             <Button variant="outline" onClick={() => setDepositOpen(true)}>
               <Plus />
               Внести аванс
@@ -685,6 +691,7 @@ export function FinancePage() {
 
       <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} />
       <ReceivePaymentDialog open={receiveOpen} onOpenChange={setReceiveOpen} />
+      <ActDialog open={actOpen} onOpenChange={setActOpen} />
     </div>
   )
 }

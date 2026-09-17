@@ -17,6 +17,7 @@ import { getClientAdvanceStats } from "@/lib/advances"
 import { ClientCardSheet } from "./ClientCardSheet"
 import { DepositDialog } from "@/features/finance/DepositDialog"
 import { ReceivePaymentDialog } from "@/features/finance/ReceivePaymentDialog"
+import { ActDialog } from "@/features/finance/ActDialog"
 import { PaginationBar } from "@/components/ui/pagination-bar"
 import { usePagination } from "@/lib/usePagination"
 
@@ -58,6 +59,7 @@ export function ClientsContent() {
   const setActiveClient = (name: string | null) => navigate(name ? `/clients/${encodeURIComponent(name)}` : "/clients", { replace: !!activeClient })
   const [depositClient, setDepositClient] = useState<string | null>(null)
   const [receiveClient, setReceiveClient] = useState<string | null>(null)
+  const [actClient, setActClient] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     const names = new Set((appSettings.clients || []).filter(Boolean))
@@ -218,7 +220,9 @@ export function ClientsContent() {
         onOpenChange={(open) => !open && setActiveClient(null)}
         onDeposit={(client) => { setActiveClient(null); setDepositClient(client) }}
         onReceive={(client) => { setActiveClient(null); setReceiveClient(client) }}
+        onAct={(client) => { setActiveClient(null); setActClient(client) }}
       />
+      <ActDialog open={!!actClient} onOpenChange={(open) => !open && setActClient(null)} initialClient={actClient || undefined} />
       <DepositDialog open={!!depositClient} onOpenChange={(open) => !open && setDepositClient(null)} initialClient={depositClient || undefined} />
       <ReceivePaymentDialog open={!!receiveClient} onOpenChange={(open) => !open && setReceiveClient(null)} initialClient={receiveClient || undefined} />
     </div>
