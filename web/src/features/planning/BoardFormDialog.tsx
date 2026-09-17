@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2, X } from "lucide-react"
 import {
   Dialog,
@@ -17,7 +17,9 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud } from "@/lib/cloudSync"
 import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
 import { boardTemplateLines } from "@/lib/boardTemplate"
-import type { PlanningBoard, PlanningLesson, OrderTemplateLine } from "@/types/models"
+import type { AppSettings, PlanningBoard, PlanningLesson, OrderTemplateLine } from "@/types/models"
+import { defaultFirstWeekLessons, weekdayIndex, weekdayLabel, weekLabel } from "@/lib/boardSchedule"
+import { dateKey, addDays } from "@/lib/money"
 
 function randId(prefix: string) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -48,9 +50,25 @@ export function BoardFormDialog({
   const [perWeek, setPerWeek] = useState(0)
   const [startDate, setStartDate] = useState("")
   const [materialsLink, setMaterialsLink] = useState("")
-  const [lessonNums, setLessonNums] = useState<number[]>([])
+  // Уроки класса = существующие уроки доски + диапазон «от … до», минус те,
+  // что убраны крестиком. Диапазон применяется сразу при вводе: раньше он
+  // добавлялся только кнопкой, и «от 1 до 39» без нажатия молча оставлял 24.
+  const [existingNums, setExistingNums] = useState<number[]>([])
   const [rangeFrom, setRangeFrom] = useState(1)
   const [rangeTo, setRangeTo] = useState(24)
+  const [removedNums, setRemovedNums] = useState<Set<number>>(new Set())
+  const lessonNums = useMemo(() => {
+    const from = Math.max(1, Math.min(rangeFrom, rangeTo))
+    const to = Math.min(Math.max(rangeFrom, rangeTo), 500)
+    const nums = new Set(existingNums)
+    for (let n = from; n <= to; n++) nums.add(n)
+    removedNums.forEach((n) => nums.delete(n))
+    return [...nums].sort((a, b) => a - b)
+  }, [existingNums, rangeFrom, rangeTo, removedNums])
+  // График: первая неделя может быть неполной (старт в среду), исключения —
+  // каникулы и короткие недели. 0 в «уроков в первой неделе» — авто.
+  const [firstWeekLessons, setFirstWeekLessons] = useState(0)
+  const [exceptions, setExceptions] = useState<{ id: string; week: number; lessons: number }[]>([])
   // Состав урока со ставками: то же, что раньше было списком названий, но с
   // единицей, количеством и ставкой — по нему заказ из урока получает цены.
   type TplRow = OrderTemplateLine & { id: string }
@@ -69,10 +87,13 @@ export function BoardFormDialog({
       const sched = appSettings.boardSchedules?.[board.id]
       setPerWeek(sched?.perWeek || 0)
       setStartDate(sched?.start || "")
+      setFirstWeekLessons(sched?.firstWeekLessons || 0)
+      setExceptions(Object.entries(sched?.exceptions || {}).map(([w, n]) => ({ id: randId("ex"), week: parseInt(w, 10), lessons: n })).sort((a, b) => a.week - b.week))
       setMaterialsLink(appSettings.boardLinks?.[board.id] || "")
-      setLessonNums(nums)
-      setRangeFrom((nums[nums.length - 1] || 0) + 1)
-      setRangeTo((nums[nums.length - 1] || 0) + 8)
+      setExistingNums(nums)
+      setRemovedNums(new Set())
+      setRangeFrom(nums[0] || 1)
+      setRangeTo(nums[nums.length - 1] || 1)
       const lines = boardTemplateLines(appSettings, board, orders, defaultUnit)
       setTemplate(lines.length ? lines.map(row) : [row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     } else {
@@ -82,10 +103,13 @@ export function BoardFormDialog({
       setDeadline("")
       setPerWeek(0)
       setStartDate("")
+      setFirstWeekLessons(0)
+      setExceptions([])
       setMaterialsLink("")
-      setLessonNums(Array.from({ length: 24 }, (_, i) => i + 1))
-      setRangeFrom(25)
-      setRangeTo(32)
+      setExistingNums([])
+      setRemovedNums(new Set())
+      setRangeFrom(1)
+      setRangeTo(24)
       setTemplate([row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     }
     // Зависим от конкретных справочников, а не от appSettings целиком, и это
@@ -94,23 +118,20 @@ export function BoardFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, board, appSettings.subjects, appSettings.classes])
 
-  function addRange() {
-    const from = Math.max(1, Math.min(rangeFrom, rangeTo))
-    const to = Math.max(rangeFrom, rangeTo)
-    const nums = new Set(lessonNums)
-    for (let n = from; n <= to; n++) nums.add(n)
-    setLessonNums([...nums].sort((a, b) => a - b))
-  }
   function removeLessonNum(n: number) {
-    setLessonNums((prev) => prev.filter((x) => x !== n))
+    setRemovedNums((prev) => new Set([...prev, n]))
   }
+
+  const scheduleDraft = perWeek > 0 && startDate ? { start: startDate, perWeek: Math.floor(perWeek) } : null
+  const autoFirstWeek = scheduleDraft ? defaultFirstWeekLessons(scheduleDraft.start, scheduleDraft.perWeek) : 0
+  const firstWeekEnd = scheduleDraft ? dateKey(addDays(new Date(scheduleDraft.start + "T00:00:00"), 6 - weekdayIndex(scheduleDraft.start))) : ""
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     // Подсказка в форме, а не системным окном: сказать надо про конкретное
     // поле, и человек должен видеть его, пока читает.
     if (lessonNums.length === 0) {
-      setError("Добавьте хотя бы один урок — укажите диапазон и нажмите «Добавить диапазон».")
+      setError("Добавьте хотя бы один урок — укажите диапазон «от … до».")
       return
     }
     setError("")
@@ -126,8 +147,14 @@ export function BoardFormDialog({
       boardSchedules: { ...(appSettings.boardSchedules || {}) },
       boardLinks: { ...(appSettings.boardLinks || {}) },
     }
-    if (perWeek > 0 && startDate) nextSettings.boardSchedules[boardId] = { start: startDate, perWeek: Math.floor(perWeek) }
-    else delete nextSettings.boardSchedules[boardId]
+    if (scheduleDraft) {
+      const sched: AppSettings["boardSchedules"][string] = { ...scheduleDraft }
+      if (firstWeekLessons > 0) sched.firstWeekLessons = Math.floor(firstWeekLessons)
+      const ex: Record<string, number> = {}
+      exceptions.filter((x) => x.week >= 1).forEach((x) => { ex[String(Math.floor(x.week))] = Math.max(0, Math.floor(x.lessons)) })
+      if (Object.keys(ex).length) sched.exceptions = ex
+      nextSettings.boardSchedules[boardId] = sched
+    } else delete nextSettings.boardSchedules[boardId]
     if (materialsLink.trim()) nextSettings.boardLinks[boardId] = materialsLink.trim()
     else delete nextSettings.boardLinks[boardId]
     let changed = JSON.stringify(appSettings.boardTemplates?.[boardId] || []) !== JSON.stringify(templateLines)
@@ -208,35 +235,69 @@ export function BoardFormDialog({
               <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[110px_1fr_1.4fr]">
-            <Field label="Уроков в неделю">
-              <NumberInput value={perWeek} onChange={setPerWeek} inputMode="numeric" placeholder="0" />
-            </Field>
-            <Field label="Старт программы">
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            </Field>
-            <Field label="Материалы (ссылка)">
-              <Input value={materialsLink} onChange={(e) => setMaterialsLink(e.target.value)} placeholder="https://drive.google.com/…" className="col-span-2 sm:col-span-1" />
-            </Field>
+          <div>
+            <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">График (по КТП)</Label>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-[120px_1fr_130px]">
+              <Field label="Уроков в неделю">
+                <NumberInput value={perWeek} onChange={setPerWeek} inputMode="numeric" placeholder="0" />
+              </Field>
+              <Field label="Первый учебный день">
+                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </Field>
+              <Field label="В 1-й неделе">
+                <NumberInput value={firstWeekLessons} onChange={setFirstWeekLessons} inputMode="numeric" placeholder={scheduleDraft ? `авто: ${autoFirstWeek}` : "авто"} title="Сколько уроков в первой, неполной неделе. 0 — посчитать по учебным дням." />
+              </Field>
+            </div>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              {scheduleDraft ? (
+                <>
+                  Недели считаются с понедельника. Старт — {weekdayLabel(scheduleDraft.start)}, первая неделя {weekLabel({ start: scheduleDraft.start, end: firstWeekEnd })}:{" "}
+                  <b className="text-foreground">{firstWeekLessons > 0 ? firstWeekLessons : autoFirstWeek}</b> {plural(firstWeekLessons > 0 ? firstWeekLessons : autoFirstWeek)}, дальше по {scheduleDraft.perWeek} в неделю.
+                </>
+              ) : (
+                "Укажите уроков в неделю и первый учебный день — сетка разложится по календарным неделям, и на карточке будет видно отставание."
+              )}
+            </div>
+
+            {scheduleDraft && (
+              <div className="mt-2.5">
+                <div className="mb-1 text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">Исключения по неделям</div>
+                <div className="flex flex-col gap-1.5">
+                  {exceptions.map((x) => (
+                    <div key={x.id} className="grid grid-cols-[90px_1fr_28px] items-center gap-1.5 sm:grid-cols-[110px_130px_1fr_28px]">
+                      <NumberInput value={x.week} onChange={(n) => setExceptions((p) => p.map((y) => (y.id === x.id ? { ...y, week: n } : y)))} inputMode="numeric" placeholder="№ недели" title="Номер недели, с 1" />
+                      <NumberInput value={x.lessons} onChange={(n) => setExceptions((p) => p.map((y) => (y.id === x.id ? { ...y, lessons: n } : y)))} inputMode="numeric" placeholder="уроков" title="Сколько уроков в этой неделе; 0 — каникулы" />
+                      <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{x.lessons === 0 ? "каникулы" : `${x.lessons} ${plural(x.lessons)} вместо ${scheduleDraft.perWeek}`}</span>
+                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => setExceptions((p) => p.filter((y) => y.id !== x.id))}>
+                        <Trash2 className="text-muted-foreground" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button type="button" variant="outline" size="sm" className="mt-1.5" onClick={() => setExceptions((p) => [...p, { id: randId("ex"), week: p.length ? Math.max(...p.map((x) => x.week)) + 1 : 2, lessons: 0 }])}>
+                  <Plus />Каникулы или короткая неделя
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="-mt-2 text-[11px] text-muted-foreground">
-            С графиком сетка уроков раскладывается по неделям от даты старта, и на карточке видно, отстаёт ли класс. Ссылка на материалы открывается с карточки класса и из урока.
-          </div>
+          <Field label="Материалы (ссылка)">
+            <Input value={materialsLink} onChange={(e) => setMaterialsLink(e.target.value)} placeholder="https://drive.google.com/…" />
+          </Field>
 
           <div>
             <Label className="mb-1.5 block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">Уроки класса</Label>
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] text-muted-foreground">От</span>
-                <Input type="number" min={1} value={rangeFrom} onChange={(e) => setRangeFrom(parseInt(e.target.value) || 1)} className="w-20" />
+                <Input type="number" min={1} max={500} value={rangeFrom} onChange={(e) => setRangeFrom(parseInt(e.target.value) || 1)} className="w-20" />
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] text-muted-foreground">До</span>
-                <Input type="number" min={1} value={rangeTo} onChange={(e) => setRangeTo(parseInt(e.target.value) || 1)} className="w-20" />
+                <Input type="number" min={1} max={500} value={rangeTo} onChange={(e) => setRangeTo(parseInt(e.target.value) || 1)} className="w-20" />
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={addRange}>
-                <Plus />Добавить диапазон
-              </Button>
+              {removedNums.size > 0 && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setRemovedNums(new Set())}>Вернуть убранные ({removedNums.size})</Button>
+              )}
             </div>
 
             {lessonNums.length > 0 && (
@@ -252,7 +313,7 @@ export function BoardFormDialog({
               </div>
             )}
             <div className="mt-1.5 text-[11px] text-muted-foreground">
-              {lessonNums.length} {lessonNums.length === 1 ? "урок" : "уроков"} в классе. Уже существующие уроки сохранят прогресс, если их номер остаётся в списке — уберите крестиком только те, что нужно удалить.
+              {lessonNums.length} {plural(lessonNums.length)} в классе: диапазон применяется сразу. Существующие уроки сохраняют прогресс; убрать урок (вместе с составом) можно только крестиком.
             </div>
           </div>
           <div>
@@ -296,6 +357,13 @@ export function BoardFormDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function plural(n: number): string {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return "урок"
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "урока"
+  return "уроков"
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

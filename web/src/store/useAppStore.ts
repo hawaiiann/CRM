@@ -44,8 +44,12 @@ interface AppState {
   // Почему не сохранилось — коротко, для индикатора. Раньше в сайдбаре была
   // только надпись «Не сохранено», без причины и без способа повторить.
   syncError: string | null
+  // База не обновлена до нужной схемы (см. lib/cloudSchema.ts) — жёлтое
+  // предупреждение в сайдбаре с готовым SQL, а не вечное «не сохранено».
+  schemaIssue: string | null
 
   setAuth: (userId: string | null, email: string | null) => void
+  setSchemaIssue: (v: string | null) => void
   setAuthLoading: (v: boolean) => void
   setAddAccountOverlayOpen: (v: boolean) => void
   setDataLoaded: (v: boolean) => void
@@ -77,8 +81,10 @@ export const useAppStore = create<AppState>((set) => ({
   dataLoaded: false,
   syncStatus: "idle",
   syncError: null,
+  schemaIssue: null,
 
   setAuth: (userId, email) => set({ cloudUserId: userId, cloudUserEmail: email }),
+  setSchemaIssue: (v) => set({ schemaIssue: v }),
   setAuthLoading: (v) => set({ authLoading: v }),
   setAddAccountOverlayOpen: (v) => set({ addAccountOverlayOpen: v }),
   setDataLoaded: (v) => set({ dataLoaded: v }),

@@ -131,11 +131,12 @@ export function DashboardPreviewHarness() {
       planningBoards: [fakeBoard()],
       appSettings: {
         ...useAppStore.getState().appSettings,
-        boardSchedules: { pb1: { start, perWeek: 2 } },
+        boardSchedules: { pb1: { start, perWeek: 2, exceptions: { "2": 0 } } },
         boardLinks: { pb1: "https://drive.google.com/drive/folders/preview" },
       },
       dataLoaded: true,
       cloudUserEmail: "preview@example.com",
+      schemaIssue: "entry_id",
     })
   }, [])
 

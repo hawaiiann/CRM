@@ -40,6 +40,7 @@ import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
 import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
 import { sameData } from "./stableJson"
+import { SCHEMA_ISSUE_ENTRY_ID } from "./cloudSchema"
 import { mergeUnsentLocal } from "./cloudMerge"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
@@ -380,8 +381,19 @@ function deleteTarget(table: string): { table: string; column: string } {
   return { table, column: "id" }
 }
 
-/** Одна попытка удаления. true — облако подтвердило. */
-async function tryDelete(table: string, id: string): Promise<boolean> {
+/** Ошибка «колонки нет» (Postgres 42703) — база не обновлена, повторять бессмысленно. */
+function isMissingColumnError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null
+  return e?.code === "42703" || /does not exist/i.test(String(e?.message || ""))
+}
+
+/**
+ * Одна попытка удаления. true — облако подтвердило; "schema" — удалять
+ * нечем (нет колонки entry_id), запись остаётся в очереди до обновления базы
+ * и не считается сбоем синхронизации: раньше такая очередь держала индикатор
+ * красным навсегда, хотя всё остальное сохранялось.
+ */
+async function tryDelete(table: string, id: string): Promise<boolean | "schema"> {
   try {
     const target = deleteTarget(table)
     const { error } = await supabaseClient.from(target.table).delete().eq(target.column, id)
@@ -390,6 +402,7 @@ async function tryDelete(table: string, id: string): Promise<boolean> {
     dropFromSnapshot(table, id)
     return true
   } catch (err) {
+    if (table === "activity_log" && isMissingColumnError(err)) { noteEntryIdMissing(); return "schema" }
     console.error(`Не удалось удалить запись из облака (${table}/${id}):`, err)
     lastSyncError = errorText(err)
     return false
@@ -400,7 +413,8 @@ async function tryDelete(table: string, id: string): Promise<boolean> {
 async function flushPendingDeletes() {
   let allOk = true
   for (const { table, id } of pendingDeleteEntries()) {
-    if (!(await tryDelete(table, id))) allOk = false
+    if (table === "activity_log" && !activityLogSupportsEntryId) continue
+    if ((await tryDelete(table, id)) === false) allOk = false
   }
   if (!allOk) markSyncFailed("не прошло удаление")
 }
@@ -412,7 +426,8 @@ export async function deleteFromCloud(table: string, id: string) {
   rememberDelete(table, id)
   dropFromSnapshot(table, id)
   if (!useAppStore.getState().cloudUserId) return
-  if (!(await tryDelete(table, id))) markSyncFailed("не прошло удаление")
+  if (table === "activity_log" && !activityLogSupportsEntryId) return
+  if ((await tryDelete(table, id)) === false) markSyncFailed("не прошло удаление")
 }
 
 /**
@@ -674,14 +689,47 @@ function resyncPlanning() {
 /* ---------- Журнал активности ---------- */
 let activityLogSupportsEntryId = true
 
+function noteEntryIdMissing() {
+  if (!activityLogSupportsEntryId) return
+  activityLogSupportsEntryId = false
+  console.warn("activity_log.entry_id отсутствует — используется прежняя позиционная отправка. Выполните SQL из lib/cloudSchema.ts.")
+  useAppStore.getState().setSchemaIssue(SCHEMA_ISSUE_ENTRY_ID)
+}
+
 function makeEntryId(): string {
   return "al_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)
 }
+
+/**
+ * Строки журнала, лежащие в облаке БЕЗ entry_id (записаны до обновления
+ * базы). Локально им выдан entry_id; когда колонка появится, его надо
+ * проставить в существующие строки (UPDATE по серверному id), а не вставлять
+ * их заново — иначе часы задвоятся при первой же синхронизации.
+ */
+let legacyServerIdByEntry: Record<string, number> = {}
 
 async function syncActivityLog() {
   const userId = useAppStore.getState().cloudUserId
   if (!userId) return
   const activityLog = useAppStore.getState().activityLog
+
+  if (activityLogSupportsEntryId) {
+    // Досев entry_id старым строкам — по одной, UPDATE по id. Если колонки
+    // всё ещё нет, первый же запрос это покажет, и дальше идём по-старому.
+    for (const e of activityLog) {
+      const serverId = e.entryId ? legacyServerIdByEntry[e.entryId] : undefined
+      if (serverId === undefined) continue
+      const { error } = await supabaseClient.from("activity_log").update({ entry_id: e.entryId }).eq("id", serverId).eq("user_id", userId)
+      if (error) {
+        if (isMissingColumnError(error)) { noteEntryIdMissing(); break }
+        throw error
+      }
+      delete legacyServerIdByEntry[e.entryId as string]
+      rememberSyncedEntry(e)
+      serverIdByEntry[e.entryId as string] = serverId
+      entryByServerId[String(serverId)] = e.entryId as string
+    }
+  }
 
   if (activityLogSupportsEntryId) {
     // Сначала правки уже отправленных строк: запись дня по заказу теперь
@@ -702,7 +750,8 @@ async function syncActivityLog() {
       rememberSyncedEntry(e)
     }
 
-    const unsent = activityLog.filter((e) => !e.entryId || !cloudSnapshot.activityLogSyncedIds.has(e.entryId))
+    // Строки, ждущие досева entry_id, уже лежат в облаке — вставлять их нельзя.
+    const unsent = activityLog.filter((e) => (!e.entryId || !cloudSnapshot.activityLogSyncedIds.has(e.entryId)) && !(e.entryId && legacyServerIdByEntry[e.entryId] !== undefined))
     if (!unsent.length) return
     unsent.forEach((e) => { if (!e.entryId) e.entryId = makeEntryId() })
     const rows = unsent.map((e) => ({ user_id: userId, entry_id: e.entryId, date: e.date, order_id: e.orderId, field: e.field, delta: e.delta }))
@@ -716,8 +765,7 @@ async function syncActivityLog() {
       return
     }
     if (String(error.message || "").includes("entry_id")) {
-      activityLogSupportsEntryId = false
-      console.warn("activity_log.entry_id отсутствует — используется прежняя позиционная отправка.")
+      noteEntryIdMissing()
     } else {
       throw error
     }
@@ -982,12 +1030,24 @@ async function cloudLoadData() {
   const pulledSettings = settingsRes.data ? (settingsRes.data as Row).data : null
   serverIdByEntry = {}
   entryByServerId = {}
+  legacyServerIdByEntry = {}
+  // Колонки entry_id нет вовсе (в строках нет такого ключа) — база не
+  // обновлена; узнаём об этом сразу, а не после первого неудачного запроса.
+  const firstLogRow = (logRes.data || [])[0] as Row | undefined
+  if (firstLogRow && !("entry_id" in firstLogRow)) noteEntryIdMissing()
   const pulledLog: ActivityLogEntry[] = (logRes.data || [])
     .filter((r: Row) => !r.entry_id || !isPendingDelete("activity_log", r.entry_id))
     .filter((r: Row) => !isPendingDelete(ACTIVITY_BY_ORDER, r.order_id))
     .map((r: Row) => {
       rememberServerId(r)
-      return { date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id || undefined }
+      if (r.entry_id) return { date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId: r.entry_id }
+      // Старая строка без идентификатора: выдаём свой — детерминированный, от
+      // серверного id, чтобы при каждой загрузке он был тем же (иначе кэш и
+      // облако не сойдутся при слиянии). После обновления базы он проставится
+      // в строку UPDATE'ом, а не вставкой.
+      const entryId = r.id != null ? "legacy_" + r.id : makeEntryId()
+      if (r.id != null) legacyServerIdByEntry[entryId] = r.id
+      return { date: r.date, orderId: r.order_id, field: r.field, delta: r.delta, entryId }
     })
 
   // В снимок — нормализованный заказ, тот же, что попадёт в память: раньше

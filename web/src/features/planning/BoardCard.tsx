@@ -161,8 +161,18 @@ export function BoardCard({
 
   function renderWeek(w: ScheduleWeek) {
     const visible = w.lessons.filter(isVisible)
-    if (!visible.length) return null
     const current = plan && w.index === plan.currentWeek
+    // Неделя без уроков по графику (каникулы) — узкая плашка, чтобы счёт
+    // недель на сетке сходился с КТП.
+    if (w.planned === 0) {
+      return (
+        <div key={w.index} className={cn("flex flex-col justify-center rounded-[15px] border border-dashed px-2 py-1.5", current ? "border-emphasis/50" : "border-border")}>
+          <div className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">{w.index + 1} нед</div>
+          <div className="text-[10px] text-muted-foreground">каникулы</div>
+        </div>
+      )
+    }
+    if (!visible.length) return null
     const past = w.end < today
     const lagging = past && w.lessons.some((l) => !isLessonDone(l))
     return (

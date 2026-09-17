@@ -21,6 +21,7 @@ import { AppDialogRoot } from "./AppDialogRoot"
 import { AccountSwitcher } from "./AccountSwitcher"
 import { GlassBackdrop } from "@/features/dashboard/GlassBackdrop"
 import { APP_VERSION } from "@/lib/version"
+import { REQUIRED_SQL, SCHEMA_ISSUE_TEXT } from "@/lib/cloudSchema"
 
 type NavItem = {
   label: string
@@ -209,9 +210,40 @@ function ThemeToggle() {
 function SidebarFooter() {
   const syncStatus = useAppStore((s) => s.syncStatus)
   const syncError = useAppStore((s) => s.syncError)
+  const schemaIssue = useAppStore((s) => s.schemaIssue)
+  const [sqlCopied, setSqlCopied] = useState(false)
+
+  async function copySql() {
+    try {
+      await navigator.clipboard.writeText(REQUIRED_SQL)
+      setSqlCopied(true)
+      setTimeout(() => setSqlCopied(false), 2500)
+    } catch {
+      window.prompt("Скопируйте SQL и выполните в Supabase → SQL Editor:", REQUIRED_SQL)
+    }
+  }
 
   return (
     <div className="pt-3">
+      {/* База не обновлена: жёлтое, не красное — данные сохраняются, но не
+          всё. Раньше это выглядело как вечное «не сохранено в облако». */}
+      {schemaIssue && (
+        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-[11px] text-warning-foreground">
+          <div className="flex items-center gap-1.5 font-bold">
+            <Database className="size-3.5 shrink-0" />
+            Нужно обновить базу
+          </div>
+          <div className="mt-0.5 pl-5 opacity-90">{SCHEMA_ISSUE_TEXT[schemaIssue] || schemaIssue}</div>
+          <button
+            type="button"
+            onClick={copySql}
+            className="mt-1.5 ml-5 rounded-md border border-warning-foreground/30 px-2 py-0.5 font-bold hover:bg-warning"
+          >
+            {sqlCopied ? "Скопировано" : "Скопировать SQL"}
+          </button>
+          <div className="mt-1 pl-5 opacity-80">Вставить в Supabase → SQL Editor → Run, затем обновить страницу.</div>
+        </div>
+      )}
       {/* Причина и кнопка повтора: раньше была только надпись, и оставалось
           гадать, что случилось и ждать ли автоматического повтора. */}
       {syncStatus === "failed" && (

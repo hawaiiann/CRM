@@ -152,7 +152,7 @@ export interface AppSettings {
    */
   boardTemplates: Record<string, OrderTemplateLine[]>
   /** График класса: уроков в неделю и дата старта (lib/boardSchedule.ts). Ключ — id доски. */
-  boardSchedules: Record<string, { start: string; perWeek: number }>
+  boardSchedules: Record<string, { start: string; perWeek: number; firstWeekLessons?: number; exceptions?: Record<string, number> }>
   /** Ссылка на материалы класса (папка на диске). Ключ — id доски. */
   boardLinks: Record<string, string>
 }
