@@ -580,12 +580,12 @@ export function OrderFormDialog({
                 )}
               </div>
               {advanceExceedsOrder && (
-                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
+                <div className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">
                   Списано больше, чем стоит заказ ({fmtMoney(totalWithTax)}).
                 </div>
               )}
               {advanceOverdraft > 0 && (
-                <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
+                <div className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">
                   Списано больше, чем внесено: у клиента доступно {fmtMoney(advanceAvailableHere)}, не хватает {fmtMoney(advanceOverdraft)}.
                   Внесите аванс на Финансах или уменьшите сумму.
                 </div>
@@ -620,7 +620,7 @@ export function OrderFormDialog({
                   просто перестали умещаться в его новую цену. Правится теми же
                   полями — списанием аванса выше и платежами ниже. */}
               {pay.overpaid > 0 && (
-                <div className="mt-3 rounded-lg bg-warning px-3 py-2 text-xs font-bold text-warning-foreground">
+                <div className="mt-3 rounded-lg bg-notice px-3 py-2 text-xs font-bold text-notice-foreground">
                   Заказ стоит {fmtMoney(totalWithTax)}, а аванс и платежи по нему в сумме дают {fmtMoney(parseNum(draft.advanceUsed) + paymentsTotal)}.
                   {" "}{fmtMoney(pay.overpaid)} не попадают ни в «Получено», ни в «К доплате». Уменьшите списание аванса или платёж, либо верните позицию.
                 </div>

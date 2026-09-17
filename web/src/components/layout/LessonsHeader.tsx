@@ -19,7 +19,7 @@ export function LessonsHeader({ subtitle, actions }: { subtitle: string; actions
       <div>
         <h1 className="font-heading text-3xl font-bold tracking-tight">Уроки</h1>
         <p className="text-base text-muted-foreground">{subtitle}</p>
-        <div className="mt-3 inline-flex gap-0.5 rounded-[10px] bg-muted p-[3px]">
+        <div className="mt-3 inline-flex gap-0.5 rounded-lg bg-muted p-[3px]">
           {VIEWS.map((v) => (
             <NavLink
               key={v.to}

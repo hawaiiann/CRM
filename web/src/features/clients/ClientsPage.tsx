@@ -143,7 +143,7 @@ export function ClientsContent() {
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-base font-bold">{r.name}</span>
               {r.hasOverdue ? (
-                <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-2xs font-bold text-destructive">
+                <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-danger-soft px-2.5 text-2xs font-bold text-danger-soft-foreground">
                   <AlertTriangle className="size-3" />
                   Просрочка
                 </span>
@@ -193,7 +193,7 @@ export function ClientsContent() {
                 <TableCell className="text-right font-bold tabular-nums text-destructive">{r.totalDue > 0 ? fmtMoney(r.totalDue) : "—"}</TableCell>
                 <TableCell className="pr-4">
                   {r.hasOverdue ? (
-                    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-2xs font-bold text-destructive">
+                    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-danger-soft px-2.5 text-2xs font-bold text-danger-soft-foreground">
                       <AlertTriangle className="size-3" />
                       Есть просрочка
                     </span>

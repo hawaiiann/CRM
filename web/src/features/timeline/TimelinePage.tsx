@@ -102,7 +102,7 @@ export function TimelinePage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex gap-0.5 rounded-[10px] bg-muted p-[3px]">
+        <div className="inline-flex gap-0.5 rounded-lg bg-muted p-[3px]">
           {(["1w", "2w", "1m"] as TlMode[]).map((m) => (
             <button
               key={m}

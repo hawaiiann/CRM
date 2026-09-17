@@ -148,12 +148,12 @@ export function TodayPage() {
               <Stat label="За неделю" value={fmtHours(money.hoursWeek)} />
             </div>
             {money.legacyDays > 0 && (
-              <Link to="/finance?tab=journal" className="mt-3 block rounded-lg bg-warning/60 px-3 py-2 text-xs font-bold text-warning-foreground hover:bg-warning">
+              <Link to="/finance?tab=journal" className="mt-3 block rounded-lg bg-notice px-3 py-2 text-xs font-bold text-notice-foreground hover:opacity-90">
                 В журнале {money.legacyDays} {money.legacyDays === 1 ? "день" : money.legacyDays < 5 ? "дня" : "дней"} со старыми поминутными строками — схлопнуть в Журнале часов
               </Link>
             )}
             {overdueCount > 0 && (
-              <div className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
+              <div className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">
                 Просрочено: {overdueCount}. Они наверху в списках, с красной пометкой.
               </div>
             )}
@@ -200,9 +200,12 @@ function OrderRow({ order, title, today, onStatus }: { order: Order; title: stri
   const due = deadlineLabel(order.deadline, today)
   const ready = order.lines.filter((l) => l.ready).length
   return (
-    <div className="flex items-center gap-2.5 rounded-xl bg-muted/60 px-3 py-2.5">
-      <OrderTimerButton order={order} />
-      <OrderLink orderId={order.id} className="min-w-0 flex-1">
+    // На телефоне таймер, название и статус не влезают в одну строку:
+    // название уезжало в «Литература, …». Там название идёт первой строкой
+    // на всю ширину, таймер и статус — второй.
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl bg-muted/60 px-3 py-2.5">
+      <div className="order-2 sm:order-1"><OrderTimerButton order={order} /></div>
+      <OrderLink orderId={order.id} className="order-1 min-w-0 basis-full sm:order-2 sm:flex-1 sm:basis-auto">
         <div className="truncate text-sm font-bold hover:underline">{title}</div>
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           <span className={cn("font-bold", due.tone === "overdue" && "text-destructive", due.tone === "soon" && "text-warning-foreground")}>{due.text}</span>
@@ -210,7 +213,7 @@ function OrderRow({ order, title, today, onStatus }: { order: Order; title: stri
           {order.client && <span className="truncate">{order.client}</span>}
         </div>
       </OrderLink>
-      <StatusBadge status={order.status} onChange={onStatus} />
+      <div className="order-3 ml-auto sm:ml-0"><StatusBadge status={order.status} onChange={onStatus} /></div>
     </div>
   )
 }

@@ -34,7 +34,7 @@ export function PaymentBadge({ order, onClick }: { order: Order; onClick: () => 
       type="button"
       onClick={onClick}
       title="Оплаты не было. Клик — отметить полную оплату"
-      className="inline-flex h-6 items-center rounded-full bg-destructive/10 px-2.5 text-2xs font-bold text-destructive"
+      className="inline-flex h-6 items-center rounded-full bg-danger-soft px-2.5 text-2xs font-bold text-danger-soft-foreground"
     >
       Не оплачено
     </button>

@@ -169,7 +169,7 @@ export function BoardCard({
         onClick={() => (armed ? deleteLesson(lesson.id) : onOpenLesson(lesson))}
         onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
         className={cn(
-          "flex size-11 items-center justify-center rounded-[13px] text-base font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
+          "flex size-11 items-center justify-center rounded-lg text-base font-bold transition-transform hover:brightness-105 active:scale-[0.93]",
           armed ? "bg-destructive text-white" : CELL_STYLE[colorClass]
         )}
       >
@@ -197,7 +197,7 @@ export function BoardCard({
         onContextMenu={(e) => { e.preventDefault(); setDeleteArmedId(lesson.id) }}
         className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-muted"
       >
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold", armed ? "bg-destructive text-white" : CELL_STYLE[colorClass])}>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold", armed ? "bg-destructive text-white" : CELL_STYLE[colorClass])}>
           {armed ? <X className="size-4" strokeWidth={2.5} /> : lesson.num}
         </span>
         <span className="min-w-0 flex-1">
@@ -219,7 +219,7 @@ export function BoardCard({
     // недель на сетке сходился с КТП.
     if (w.planned === 0) {
       return (
-        <div key={w.index} className={cn("flex flex-col justify-center rounded-[15px] border border-dashed px-2 py-1.5", current ? "border-emphasis/50" : "border-border")}>
+        <div key={w.index} className={cn("flex flex-col justify-center rounded-xl border border-dashed px-2 py-1.5", current ? "border-emphasis/50" : "border-border")}>
           <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">{w.index + 1} нед</div>
           <div className="text-2xs text-muted-foreground">каникулы</div>
         </div>
@@ -232,7 +232,7 @@ export function BoardCard({
       <div
         key={w.index}
         className={cn(
-          "rounded-[15px] border p-1.5",
+          "rounded-xl border p-1.5",
           current ? "border-emphasis/50 bg-emphasis/8" : "border-transparent",
           lagging && !current && "border-destructive/30"
         )}
@@ -276,7 +276,7 @@ export function BoardCard({
             </a>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <div className="mr-1 flex rounded-md border border-border p-0.5">
             <button type="button" title="Клетки" onClick={() => switchView("grid")} className={cn("flex size-7 items-center justify-center rounded", view === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
               <LayoutGrid className="size-3.5" />

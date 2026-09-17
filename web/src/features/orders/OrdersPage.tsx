@@ -573,7 +573,7 @@ export function OrdersPage() {
               className="w-full pl-8 sm:w-60"
             />
           </div>
-          <div className="bg-muted inline-flex gap-0.5 rounded-[10px] p-[3px]">
+          <div className="bg-muted inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg p-[3px]">
             {(
               [
                 ["all", "Все"],
@@ -587,7 +587,7 @@ export function OrdersPage() {
                 type="button"
                 onClick={() => setFilter(value)}
                 className={cn(
-                  "rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors",
+                  "rounded-lg px-3.5 py-1.5 text-sm font-bold whitespace-nowrap transition-colors",
                   filter === value
                     ? "bg-background text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
@@ -659,11 +659,13 @@ export function OrdersPage() {
           только этот класс. С тремя-четырьмя классами и полусотней заказов
           это быстрее любого поиска. */}
       {groups.list.length > 1 && (
-        <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
+        {/* На телефоне чипы одной прокручиваемой строкой: десять классов в
+            три ряда съедали половину экрана до первого заказа. */}
+        <div className="mb-3.5 flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
             type="button"
             onClick={() => setClassFilter(null)}
-            className={cn("rounded-full px-3 py-1 text-xs font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
+            className={cn("shrink-0 rounded-full px-3 py-1 text-xs font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
           >
             Все классы
           </button>
@@ -674,7 +676,7 @@ export function OrdersPage() {
               onClick={() => setClassFilter((v) => (v === g.key ? null : g.key))}
               title={`${g.all.length} заказов, ${g.activeCount} в работе${g.due > 0 ? `, к доплате ${fmtMoney(g.due)}` : ""}`}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-colors",
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-colors",
                 classFilter === g.key ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/70"
               )}
             >
@@ -973,7 +975,7 @@ function GroupHeadingInner({ label, count, missing, due }: { label: string; coun
       <span className="text-sm font-extrabold text-foreground">{label}</span>
       <span className="text-xs font-bold text-muted-foreground">{count} {count === 1 ? "заказ" : count < 5 ? "заказа" : "заказов"}</span>
       {missing.length > 0 && (
-        <span className="rounded-full bg-warning px-2 py-px text-2xs font-bold text-warning-foreground" title="Между первым и последним заказом класса нет заказов с этими номерами">
+        <span className="rounded-full bg-notice px-2 py-px text-2xs font-bold text-notice-foreground" title="Между первым и последним заказом класса нет заказов с этими номерами">
           нет уроков: {missing.slice(0, 8).join(", ")}{missing.length > 8 ? "…" : ""}
         </span>
       )}
@@ -1073,7 +1075,7 @@ function OrderRow({
           >
             {displayTitle}
           </button>
-          {duplicates && <span className="shrink-0 rounded-full bg-warning px-1.5 text-2xs font-bold text-warning-foreground" title="На этот урок несколько заказов — объединить можно из меню строки">дубль</span>}
+          {duplicates && <span className="shrink-0 rounded-full bg-notice px-1.5 text-2xs font-bold text-notice-foreground" title="На этот урок несколько заказов — объединить можно из меню строки">дубль</span>}
           {order.priority && <span className="shrink-0">🔥</span>}
           {overdue && <span className="shrink-0 text-2xs font-bold text-destructive">просрочен</span>}
         </div>
@@ -1210,7 +1212,7 @@ function OrderCard({
               <span className="font-heading shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold tabular-nums">{n === Number.MAX_SAFE_INTEGER ? "—" : `№ ${n}`}</span>
             )}
             <span className={cn("min-w-0 truncate text-base font-bold", muted && "text-muted-foreground")}>{displayTitle}</span>
-            {duplicates && <span className="shrink-0 rounded-full bg-warning px-1.5 text-2xs font-bold text-warning-foreground">дубль</span>}
+            {duplicates && <span className="shrink-0 rounded-full bg-notice px-1.5 text-2xs font-bold text-notice-foreground">дубль</span>}
             {order.priority && <span className="shrink-0">🔥</span>}
           </div>
           {metaParts.length > 0 && (

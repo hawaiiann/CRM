@@ -122,7 +122,7 @@ export function TemplateEditorDialog({
           </div>
 
           {error && (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">{error}</div>
+            <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">{error}</div>
           )}
 
           <DialogFooter>

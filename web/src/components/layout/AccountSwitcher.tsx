@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { ChevronDown, LogOut, Plus, X } from "lucide-react"
+import { ChevronDown, LogOut, Plus, X, Sun, Moon } from "lucide-react"
+import { useThemeStore } from "@/store/useThemeStore"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -13,6 +14,8 @@ import { getKnownAccounts, forgetAccount } from "@/lib/accountSwitcher"
 import { alertDialog } from "@/store/useDialogStore"
 
 export function AccountSwitcher() {
+  const mode = useThemeStore((s) => s.mode)
+  const setMode = useThemeStore((s) => s.setMode)
   const email = useAppStore((s) => s.cloudUserEmail)
   const cloudUserId = useAppStore((s) => s.cloudUserId)
   const setAddAccountOverlayOpen = useAppStore((s) => s.setAddAccountOverlayOpen)
@@ -50,7 +53,7 @@ export function AccountSwitcher() {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button type="button" className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-overlay/10">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-emphasis/90 font-heading text-sm font-extrabold text-emphasis-foreground">Д</div>
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-emphasis/90 font-heading text-sm font-extrabold text-emphasis-foreground">Д</div>
           <div className="min-w-0 flex-1">
             <div className="font-heading text-lg font-extrabold tracking-tight">Дизайн · CRM</div>
             <div className="truncate text-2xs font-semibold text-muted-foreground">{email || "—"}</div>
@@ -71,6 +74,10 @@ export function AccountSwitcher() {
         <DropdownMenuItem onClick={() => setAddAccountOverlayOpen(true)}>
           <Plus />
           Войти под другим аккаунтом
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setMode(mode === "dark" ? "light" : "dark")}>
+          {mode === "dark" ? <Sun /> : <Moon />}
+          {mode === "dark" ? "Светлая тема" : "Тёмная тема"}
         </DropdownMenuItem>
         <DropdownMenuItem variant="destructive" onClick={() => supabaseClient.auth.signOut().then(() => window.location.reload())}>
           <LogOut />

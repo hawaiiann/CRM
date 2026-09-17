@@ -7,7 +7,6 @@ import {
   CloudOff,
   HardDrive,
   Sun,
-  Moon,
   Menu,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -16,6 +15,7 @@ import { useTimerStore } from "@/store/useTimerStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { restoreBackupDirectoryHandle, triggerDiskBackup, confirmBackupDirectoryAccess } from "@/lib/diskBackup"
 import { hotkeyFor, HOTKEY_HINT } from "./hotkeys"
+import { SidebarNotice, SidebarNoticeButton } from "./SidebarNotice"
 import { retryCloudSync } from "@/lib/cloudSync"
 import { SidebarTimerCard } from "./SidebarTimerCard"
 import { ToastRoot } from "./ToastRoot"
@@ -142,7 +142,7 @@ export function AppShell() {
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-base font-bold transition-colors",
+                    "flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-base font-bold transition-colors",
                     isActive || (item.match || []).some((m) => location.pathname.startsWith(m))
                       ? "bg-emphasis/88 text-emphasis-foreground"
                       : "text-muted-foreground hover:bg-overlay/10 hover:text-foreground"
@@ -159,7 +159,6 @@ export function AppShell() {
         <div className="flex-1" />
 
         <SidebarTimerCard />
-        <ThemeToggle />
         <SidebarFooter />
       </aside>
 
@@ -172,7 +171,7 @@ export function AppShell() {
           >
             <Menu className="size-5" />
           </button>
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-emphasis/90 font-heading text-2xs font-extrabold text-emphasis-foreground">Д</div>
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emphasis/90 font-heading text-2xs font-extrabold text-emphasis-foreground">Д</div>
           <div className="font-heading text-base font-extrabold tracking-tight">Дизайн · CRM</div>
         </div>
 
@@ -191,38 +190,6 @@ export function AppShell() {
 
       <ToastRoot />
       <AppDialogRoot />
-    </div>
-  )
-}
-
-function ThemeToggle() {
-  const mode = useThemeStore((s) => s.mode)
-  const setMode = useThemeStore((s) => s.setMode)
-
-  return (
-    <div className="mb-1 flex gap-1 rounded-lg bg-muted p-1">
-      <button
-        type="button"
-        onClick={() => setMode("light")}
-        className={cn(
-          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold transition-colors",
-          mode === "light" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Sun className="size-3.5" strokeWidth={1.8} />
-        Светлая
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode("dark")}
-        className={cn(
-          "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold transition-colors",
-          mode === "dark" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Moon className="size-3.5" strokeWidth={1.8} />
-        Тёмная
-      </button>
     </div>
   )
 }
@@ -276,62 +243,31 @@ function SidebarFooter() {
 
   return (
     <div className="pt-3">
+      {/* Уведомления свёрнуты в строку (SidebarNotice): подробности по клику. */}
+      {syncStatus === "failed" && (
+        <SidebarNotice tone="danger" icon={CloudOff} title="Не сохранено в облако" defaultOpen>
+          {syncError && <div>{syncError}</div>}
+          <SidebarNoticeButton onClick={retryCloudSync}>Повторить сейчас</SidebarNoticeButton>
+        </SidebarNotice>
+      )}
       {backupStale && (
-        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-2xs text-warning-foreground">
-          <div className="flex items-center gap-1.5 font-bold">
-            <HardDrive className="size-3.5 shrink-0" />
-            Бэкап на диск не пишется
-          </div>
-          <div className="mt-0.5 pl-5 opacity-90">
+        <SidebarNotice tone="notice" icon={HardDrive} title="Бэкап на диск не пишется">
+          <div>
             {!backupDirAccess ? "Нужно подтвердить доступ к папке — браузер спрашивает после перезапуска." : daysSinceBackup === null ? "Ещё ни разу не записан." : `Последний файл ${daysSinceBackup} дн. назад.`}
           </div>
-          <button type="button" disabled={backupBusy} onClick={fixBackup} className="mt-1.5 ml-5 rounded-md border border-warning-foreground/30 px-2 py-0.5 font-bold hover:bg-warning disabled:opacity-60">
-            {!backupDirAccess ? "Подтвердить доступ" : "Записать сейчас"}
-          </button>
-        </div>
+          <SidebarNoticeButton onClick={fixBackup} disabled={backupBusy}>{!backupDirAccess ? "Подтвердить доступ" : "Записать сейчас"}</SidebarNoticeButton>
+        </SidebarNotice>
       )}
-      {/* База не обновлена: жёлтое, не красное — данные сохраняются, но не
-          всё. Раньше это выглядело как вечное «не сохранено в облако». */}
       {schemaIssue && (
-        <div className="mb-2 rounded-lg bg-warning/60 px-2.5 py-2 text-2xs text-warning-foreground">
-          <div className="flex items-center gap-1.5 font-bold">
-            <Database className="size-3.5 shrink-0" />
-            Нужно обновить базу
-          </div>
-          <div className="mt-0.5 pl-5 opacity-90">{SCHEMA_ISSUE_TEXT[schemaIssue] || schemaIssue}</div>
-          <button
-            type="button"
-            onClick={copySql}
-            className="mt-1.5 ml-5 rounded-md border border-warning-foreground/30 px-2 py-0.5 font-bold hover:bg-warning"
-          >
-            {sqlCopied ? "Скопировано" : "Скопировать SQL"}
-          </button>
-          <div className="mt-1 pl-5 opacity-80">Вставить в Supabase → SQL Editor → Run, затем обновить страницу.</div>
-        </div>
+        <SidebarNotice tone="notice" icon={Database} title="Нужно обновить базу">
+          <div>{SCHEMA_ISSUE_TEXT[schemaIssue] || schemaIssue}</div>
+          <SidebarNoticeButton onClick={copySql}>{sqlCopied ? "Скопировано" : "Скопировать SQL"}</SidebarNoticeButton>
+          <div className="mt-1">Вставить в Supabase → SQL Editor → Run, затем обновить страницу.</div>
+        </SidebarNotice>
       )}
-      {/* Причина и кнопка повтора: раньше была только надпись, и оставалось
-          гадать, что случилось и ждать ли автоматического повтора. */}
-      {syncStatus === "failed" && (
-        <div className="mb-2 rounded-lg bg-destructive/10 px-2.5 py-2 text-2xs text-destructive">
-          <div className="flex items-center gap-1.5 font-bold">
-            <CloudOff className="size-3.5 shrink-0" />
-            Не сохранено в облако
-          </div>
-          {syncError && <div className="mt-0.5 pl-5 opacity-80">{syncError}</div>}
-          <button
-            type="button"
-            onClick={retryCloudSync}
-            className="mt-1.5 ml-5 rounded-md border border-destructive/40 px-2 py-0.5 font-bold hover:bg-destructive/10"
-          >
-            Повторить сейчас
-          </button>
-        </div>
-      )}
-      {/* Версия внизу сайдбара — как было в ванильной версии: по скриншоту
-          сразу видно, какая сборка у пользователя. Без разделителя: линия
-          отсекала подпись от таймера и выглядела лишней рамкой. */}
-      <div className="text-center text-2xs font-semibold text-muted-foreground">v{APP_VERSION}</div>
-      <div className="mt-1 hidden text-center text-2xs text-muted-foreground/70 md:block" title="Работают, когда курсор не в поле ввода">{HOTKEY_HINT}</div>
+      {/* Версия внизу сайдбара: по скриншоту сразу видно, какая сборка у
+          пользователя. Горячие клавиши — подсказкой при наведении. */}
+      <div className="cursor-default text-center text-2xs font-semibold text-muted-foreground" title={HOTKEY_HINT}>v{APP_VERSION}</div>
     </div>
   )
 }

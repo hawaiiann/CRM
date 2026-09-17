@@ -591,7 +591,7 @@ export function FinancePage() {
             </div>
 
             {unallocatedByClient.size > 0 && (
-              <div className="mb-3 rounded-lg bg-warning px-3 py-2.5 text-xs text-warning-foreground">
+              <div className="mb-3 rounded-lg bg-notice px-3 py-2.5 text-xs text-notice-foreground">
                 <b className="font-bold">Списания без привязки к авансу</b> (заказы из прежних версий):{" "}
                 {[...unallocatedByClient.entries()].map(([c, v]) => `${c} — ${fmtMoney(v)}`).join(", ")}.
                 {" "}В остатках по строкам они не учтены. Привязать можно в форме заказа, блок «Аванс клиента по заказу».

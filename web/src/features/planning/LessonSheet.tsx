@@ -420,7 +420,7 @@ export function LessonSheet({
                         как «можно добавить», а не как «работа не посчитана»,
                         поэтому про деньги сказано прямым текстом. */}
                     {toOrder.length > 0 && (
-                      <div className="flex gap-2 rounded-xl bg-warning px-3 py-2.5 text-warning-foreground">
+                      <div className="flex gap-2 rounded-xl bg-notice px-3 py-2.5 text-notice-foreground">
                         <TriangleAlert className="mt-px size-3.5 shrink-0" />
                         <div className="text-xs leading-relaxed">
                           <b className="font-bold">Состав расходится с заказом.</b> В чек-листе{" "}
@@ -475,7 +475,7 @@ export function LessonSheet({
                 />
               </div>
               {duplicateNum && (
-                <div className="-mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
+                <div className="-mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">
                   Номер {liveLesson.num} уже есть у урока «{duplicateNum.title || `Урок ${duplicateNum.num}`}». Два урока с одним номером
                   путают привязку заказов, а при правке доски один из них будет удалён.
                 </div>

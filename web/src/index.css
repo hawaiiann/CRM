@@ -59,6 +59,14 @@
     --color-success-foreground: var(--success-foreground);
     --color-warning: var(--warning);
     --color-warning-foreground: var(--warning-foreground);
+    /* Предупреждения «надо бы сделать» (бэкап, схема, дубли): серо-синий,
+       чтобы не спорить с жёлтым статусом «в работе». */
+    --color-notice: var(--notice);
+    --color-notice-foreground: var(--notice-foreground);
+    /* Мягкий красный для плашек об ошибке: читается и в тёмной теме, где
+       красный текст на красной подложке сливался. */
+    --color-danger-soft: var(--danger-soft);
+    --color-danger-soft-foreground: var(--danger-soft-foreground);
     --color-info: var(--info);
     --color-info-foreground: var(--info-foreground);
     --color-neutral-tone: var(--neutral-tone);
@@ -88,13 +96,16 @@
        tied to --warning's "needs attention" meaning. */
     --color-accent-warm: var(--accent-warm);
 
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+    /* Два радиуса на всё: 10 для элементов (кнопки, поля, клетки, пункты
+       меню), 16 для карточек. Раньше было пять разных, и соседние блоки
+       выглядели собранными из разных наборов. */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 16px;
+    --radius-2xl: 20px;
+    --radius-3xl: 24px;
+    --radius-4xl: 28px;
 }
 
 /* Dashboard glass-scope accent — the shader's warm/cool duotone, used as a
@@ -139,6 +150,10 @@
     --success-foreground: #7CB518;
     --warning: rgba(245, 166, 35, 0.18);
     --warning-foreground: #F5A623;
+    --notice: rgba(74, 96, 128, 0.10);
+    --notice-foreground: #465C7A;
+    --danger-soft: rgba(228, 72, 63, 0.10);
+    --danger-soft-foreground: #B93A32;
     --info: #E3EFFF;
     --info-foreground: #2E7BF6;
     --neutral-tone: #EFEFED;
@@ -150,7 +165,7 @@
     --chart-4: #2E7BF6;
     --chart-5: #E4483F;
 
-    --radius: 12px;
+    --radius: 10px;
 
     --sidebar: #FFFFFF;
     --sidebar-foreground: #1E1E1E;
@@ -206,6 +221,10 @@
     --success-foreground: #8FCB2C;
     --warning: rgba(242, 184, 77, 0.16);
     --warning-foreground: #F2B84D;
+    --notice: rgba(150, 175, 210, 0.14);
+    --notice-foreground: #B9C8DC;
+    --danger-soft: rgba(255, 98, 89, 0.16);
+    --danger-soft-foreground: #FFB8B2;
     --info: rgba(76, 154, 255, 0.16);
     --info-foreground: #4C9AFF;
     --neutral-tone: #2C2D31;
