@@ -72,7 +72,8 @@ export function LessonSheet({
   const [newItem, setNewItem] = useState("")
 
   // Always read the live lesson from the store so edits reflect immediately.
-  const liveBoard = useAppStore((s) => s.planningBoards.find((b) => b.id === board?.id)) || board
+  const allBoards = useAppStore((s) => s.planningBoards)
+  const liveBoard = allBoards.find((b) => b.id === board?.id) || board
   const liveLesson = liveBoard?.lessons.find((l) => l.id === lesson?.id) || lesson
 
   // Текстовые поля (название, заметки, номер) сохраняются с задержкой: раньше
@@ -161,7 +162,7 @@ export function LessonSheet({
     ? liveBoard.lessons.find((l) => l.id !== liveLesson.id && l.num === liveLesson.num)
     : null
 
-  const governingOrder = liveBoard && liveLesson ? findGoverningOrder(orders, liveBoard, liveLesson) : null
+  const governingOrder = liveBoard && liveLesson ? findGoverningOrder(orders, liveBoard, liveLesson, allBoards) : null
   const materialsLink = liveBoard ? appSettings.boardLinks?.[liveBoard.id] : undefined
   const noteLinks = liveLesson ? extractLinks(liveLesson.notes || "") : []
 

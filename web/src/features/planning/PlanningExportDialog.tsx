@@ -18,6 +18,7 @@ import {
 import { distinctQuarters } from "@/lib/planningStats"
 import { dateKey, pluralizeRu } from "@/lib/money"
 import { alertDialog } from "@/store/useDialogStore"
+import { useAppStore } from "@/store/useAppStore"
 import type { PlanningBoard } from "@/types/models"
 
 const ALL_QUARTERS = "__all__"
@@ -45,6 +46,8 @@ export function PlanningExportDialog({
 }) {
   const [quarter, setQuarter] = useState(ALL_QUARTERS)
   const [exporting, setExporting] = useState(false)
+  // Заказы — для цвета строк «По урокам»: жёлтый «в работе» идёт от заказа.
+  const orders = useAppStore((s) => s.orders)
 
   const quarters = distinctQuarters(boards)
   const matched = quarter === ALL_QUARTERS ? boards : boards.filter((b) => (b.quarter || "").trim() === quarter)
@@ -59,7 +62,7 @@ export function PlanningExportDialog({
         import("exceljs"),
         import("@/lib/planningExcel"),
       ])
-      const buffer = await buildPlanningWorkbook(ExcelJS.default ?? ExcelJS, matched)
+      const buffer = await buildPlanningWorkbook(ExcelJS.default ?? ExcelJS, matched, orders, boards)
       const scopeLabel = quarter === ALL_QUARTERS ? "все-четверти" : quarter.replace(/\s+/g, "-")
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
       const url = URL.createObjectURL(blob)

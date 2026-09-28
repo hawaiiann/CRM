@@ -1,14 +1,60 @@
 import type { Order, Advance } from "@/types/models"
-import { parseNum, ordersOfClient } from "./money"
+import { parseNum } from "./money"
+
+/**
+ * Ключ клиента для сравнения: без регистра, крайних и сдвоенных пробелов.
+ *
+ * Имя клиента — свободная строка (справочник, форма заказа, окно аванса), и
+ * «Школа №1» и «школа  №1» — один заказчик. Авансы и долг так и считались, а
+ * экраны сравнивали строку как есть: у Клиентов выходило две строки, в каждой
+ * общий долг, фильтр Финансов находил только точное написание. Группировать,
+ * фильтровать и убирать повторы — только по этому ключу.
+ */
+export function clientKey(name: unknown): string {
+  return String(name ?? "").trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+/** Заказы клиента по ключу (см. clientKey) — все, кроме отменённых, как ordersOfClient. */
+export function ordersOfClientKey(orders: Order[], clientName: string): Order[] {
+  const key = clientKey(clientName)
+  if (!key) return []
+  return orders.filter((o) => o.status !== "cancelled" && clientKey(o.client) === key)
+}
+
+/**
+ * Клиенты без повторов: по одному имени на ключ. Показываем написание из
+ * preferred (справочник), иначе самое частое, при равенстве — первое встреченное.
+ * preferred только выбирает написание и новых клиентов в список не добавляет.
+ */
+export function uniqueClientNames(names: Iterable<string | null | undefined>, preferred: string[] = []): string[] {
+  const pref = new Map<string, string>()
+  preferred.forEach((p) => { const k = clientKey(p); if (k && !pref.has(k)) pref.set(k, p.trim()) })
+  const counts = new Map<string, Map<string, number>>()
+  for (const raw of names) {
+    const k = clientKey(raw)
+    if (!k) continue
+    const spelled = String(raw).trim()
+    const m = counts.get(k) || new Map<string, number>()
+    m.set(spelled, (m.get(spelled) || 0) + 1)
+    counts.set(k, m)
+  }
+  return [...counts].map(([k, m]) => {
+    const p = pref.get(k)
+    if (p) return p
+    let best = "", bestN = 0
+    m.forEach((n, s) => { if (n > bestN) { best = s; bestN = n } })
+    return best
+  })
+}
 
 // Ported from js/finance.js's getClientAdvanceStats.
 export function getClientAdvanceStats(clientName: string, advances: Advance[], orders: Order[], excludeOrderId?: string) {
-  const name = (clientName || "").trim().toLowerCase()
+  const name = clientKey(clientName)
   if (!name) return { totalIn: 0, used: 0, available: 0 }
   const totalIn = advances
-    .filter((a) => (a.client || "").trim().toLowerCase() === name)
+    .filter((a) => clientKey(a.client) === name)
     .reduce((s, a) => s + parseNum(a.amount), 0)
-  const used = ordersOfClient(orders, clientName)
+  const used = ordersOfClientKey(orders, clientName)
     .filter((o) => o.id !== excludeOrderId)
     .reduce((s, o) => s + parseNum(o.advanceUsed), 0)
   return { totalIn, used, available: Math.max(0, totalIn - used) }
@@ -57,7 +103,7 @@ export function orderUnallocatedAdvance(o: Pick<Order, "advanceUsed" | "advanceA
 
 /** Сколько у клиента списано без привязки к авансу (старые заказы). */
 export function clientUnallocatedAdvance(clientName: string, orders: Order[], excludeOrderId?: string): number {
-  return ordersOfClient(orders, clientName)
+  return ordersOfClientKey(orders, clientName)
     .filter((o) => o.id !== excludeOrderId)
     .reduce((s, o) => s + orderUnallocatedAdvance(o), 0)
 }
@@ -72,10 +118,10 @@ export interface AdvanceRow {
 
 /** Авансы клиента с остатком по каждому, от старых к новым. */
 export function clientAdvanceRows(clientName: string, advances: Advance[], orders: Order[], excludeOrderId?: string): AdvanceRow[] {
-  const name = (clientName || "").trim().toLowerCase()
+  const name = clientKey(clientName)
   if (!name) return []
   return advances
-    .filter((a) => (a.client || "").trim().toLowerCase() === name)
+    .filter((a) => clientKey(a.client) === name)
     .slice()
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
     .map((advance) => {

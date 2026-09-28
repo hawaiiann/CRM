@@ -3,8 +3,9 @@
 // «Скачать», и без ленивой загрузки она вошла бы в стартовый кусок
 // приложения, который в v2.12.1 специально ужимали.
 import type ExcelJS from "exceljs"
-import type { PlanningBoard } from "@/types/models"
+import type { Order, PlanningBoard } from "@/types/models"
 import { computeBoardProgress, lessonDisplayColor, type LessonColor } from "./planningStats"
+import { findGoverningOrder } from "./planningSync"
 import { fmtDeadline } from "./dates"
 
 /**
@@ -48,10 +49,17 @@ function autoWidth(ws: ExcelJS.Worksheet, widths: number[]) {
  * «По урокам». Третий лист красит строку цветом клетки, каким она выглядит
  * в самом планировании (lessonDisplayColor) — увидеть «что уже полностью
  * пройдено» можно не читая проценты, а по цвету, как на экране.
+ *
+ * orders и allBoards нужны для цвета так же, как на экране: жёлтый «в работе»
+ * даёт управляющий заказ урока. Без них начатые по заказу уроки выгружались
+ * серыми. allBoards — все доски, а не только попавшие в выгрузку: по ним
+ * выбирается, какой доске принадлежит заказ.
  */
 export async function buildPlanningWorkbook(
   ExcelJSMod: typeof ExcelJS,
-  boards: PlanningBoard[]
+  boards: PlanningBoard[],
+  orders: Order[] = [],
+  allBoards: PlanningBoard[] = boards
 ): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJSMod.Workbook()
   wb.creator = "CRM"
@@ -96,7 +104,7 @@ export async function buildPlanningWorkbook(
       const total = items.length
       const done = items.filter((i) => i.done).length
       const pct = total > 0 ? Math.round((done / total) * 100) : 0
-      const color = lessonDisplayColor(lesson)
+      const color = lessonDisplayColor(lesson, findGoverningOrder(orders, board, lesson, allBoards))
       const statusLabel = color === "empty" ? "Без материала" : color === "green-3" ? "Готово" : color === "gray" ? "Не начат" : "В работе"
 
       const row = byLesson.addRow([

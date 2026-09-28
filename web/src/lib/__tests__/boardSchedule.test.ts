@@ -56,6 +56,23 @@ test("статус: текущая неделя, план к сегодняшн�
   expect(scheduleStatus(ls, s, "2026-10-20", isDone)).toMatchObject({ currentWeek: 3, plannedByNow: 6, behind: 4, thisWeek: [] })
 })
 
+test("уроки без материала засчитываются, только когда по графику уже прошли", () => {
+  const empty = (num: number): PlanningLesson => ({ ...lesson(num), colorLocked: true, color: "empty" })
+  const isEmpty = (l: PlanningLesson) => l.colorLocked && l.color === "empty"
+  const isDone = (l: PlanningLesson) => !isEmpty(l) && l.items.every((i) => i.done)
+  // 4 урока к сегодняшнему дню, ни один не сделан; 5–8 — будущие пустые.
+  const ls = [lesson(1), lesson(2), lesson(3), lesson(4), empty(5), empty(6), empty(7), empty(8)]
+  const s = { start: "2026-08-31", perWeek: 2 }
+  const st = scheduleStatus(ls, s, "2026-09-16", isDone, isEmpty)
+  expect(st.plannedByNow).toBe(4)
+  expect(st.done).toBe(0)
+  expect(st.behind).toBe(4)
+
+  // Пустой урок внутри прошедшего — закрыт, отставать по нему нечему.
+  const withGap = [lesson(1, true), lesson(2, true), empty(3), lesson(4), lesson(5), lesson(6)]
+  expect(scheduleStatus(withGap, s, "2026-09-16", isDone, isEmpty)).toMatchObject({ plannedByNow: 4, done: 3, behind: 1 })
+})
+
 test("валидность графика", () => {
   expect(scheduleValid({ start: "2026-09-01", perWeek: 2 })).toBe(true)
   expect(scheduleValid({ start: "", perWeek: 2 })).toBe(false)

@@ -1,10 +1,24 @@
-import { fmtMoney } from "@/lib/money"
-import { orderPaymentState } from "@/lib/money"
+import { fmtMoney, orderPaymentState } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { Order } from "@/types/models"
 
 export function PaymentBadge({ order, onClick }: { order: Order; onClick: () => void }) {
   const p = orderPaymentState(order)
+  // Заказ на 0 ₽ (все позиции «без оплаты» или почасовая без часов) — ни
+  // долга, ни оплаты. Раньше он светился «Не оплачено», а клик ставил isPaid
+  // без платежа. Нейтральная плашка, по клику ничего не происходит.
+  if (p.full <= 0) {
+    return (
+      <span
+        title={p.overpaid > 0
+          ? `Стоимость заказа 0 ₽, но на нём записано ${fmtMoney(p.overpaid)} — проверьте в форме заказа`
+          : "Стоимость заказа 0 ₽ — оплачивать нечего"}
+        className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-2xs font-bold text-muted-foreground"
+      >
+        0 ₽
+      </span>
+    )
+  }
   if (p.isFullyPaid) {
     return (
       <button

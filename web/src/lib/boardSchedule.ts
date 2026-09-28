@@ -40,7 +40,7 @@ export interface ScheduleStatus {
   currentWeek: number
   /** Сколько уроков должно быть закрыто к концу прошлой недели. */
   plannedByNow: number
-  /** Сколько уроков закрыто по факту. */
+  /** Сколько уроков закрыто по факту; уроки без материала — только уже прошедшие по графику. */
   done: number
   /** plannedByNow − done, если положительно. */
   behind: number
@@ -104,15 +104,28 @@ export function scheduleWeeks(lessons: PlanningLesson[], s: BoardSchedule): Sche
   return weeks
 }
 
-export function scheduleStatus(lessons: PlanningLesson[], s: BoardSchedule, today: string, isDone: (l: PlanningLesson) => boolean): ScheduleStatus {
+/**
+ * isEmpty — урок без материала: делать по нему нечего, поэтому он считается
+ * закрытым, но лишь когда по графику уже прошёл. Раньше пустые уроки в конце
+ * четверти засчитывались сразу и прятали реальное отставание.
+ */
+export function scheduleStatus(
+  lessons: PlanningLesson[],
+  s: BoardSchedule,
+  today: string,
+  isDone: (l: PlanningLesson) => boolean,
+  isEmpty: (l: PlanningLesson) => boolean = () => false
+): ScheduleStatus {
   const weeks = scheduleWeeks(lessons, s)
   let currentWeek = -1
   if (weeks.length && today >= weeks[0].start) {
     currentWeek = weeks.findIndex((w) => today >= w.start && today <= w.end)
     if (currentWeek === -1) currentWeek = weeks.length
   }
-  const plannedByNow = weeks.filter((w) => w.end < today).reduce((n, w) => n + w.lessons.length, 0)
-  const done = lessons.filter(isDone).length
+  const pastWeeks = weeks.filter((w) => w.end < today)
+  const plannedByNow = pastWeeks.reduce((n, w) => n + w.lessons.length, 0)
+  const due = new Set(pastWeeks.flatMap((w) => w.lessons))
+  const done = lessons.filter((l) => isDone(l) || (isEmpty(l) && due.has(l))).length
   return {
     weeks,
     currentWeek,

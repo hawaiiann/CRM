@@ -29,8 +29,8 @@ import {
   orderPayments,
   orderPaymentsTotal,
 } from "@/lib/money"
-import { orderRecognizedRevenue } from "@/lib/dashboardMetrics"
-import { getTotalAdvanceStats, advanceAllocated, clientUnallocatedAdvance } from "@/lib/advances"
+import { orderRecognizedRevenue, ordersPriceTotal } from "@/lib/dashboardMetrics"
+import { getTotalAdvanceStats, advanceAllocated, clientUnallocatedAdvance, clientKey, uniqueClientNames } from "@/lib/advances"
 import { downloadCsv } from "@/lib/csv"
 import { normalizePayment } from "@/lib/normalize"
 import { PaymentBadge } from "./PaymentBadge"
@@ -117,7 +117,8 @@ function matchesPayFilter(o: Order, f: PayFilter): boolean {
   if (f === "all") return true
   const p = orderPaymentState(o)
   if (f === "paid") return p.isFullyPaid
-  if (f === "debt") return !p.isFullyPaid
+  // Долг — только реальный остаток: заказ на 0 ₽ не «оплачен», но и не должен.
+  if (f === "debt") return p.remaining > 0
   if (f === "overpaid") return p.overpaid > 0
   return !p.isFullyPaid && (p.covered > 0 || p.advUsed > 0) // частично
 }
@@ -130,7 +131,7 @@ function filteredSortedFinanceList(
     // Отменённые по умолчанию скрыты: итоги наверху их тоже не считают, и
     // раньше таблица расходилась с этими цифрами.
     if (!opts.showCancelled && o.status === "cancelled") return false
-    if (opts.client !== "all" && (o.client || "") !== opts.client) return false
+    if (opts.client !== "all" && clientKey(o.client) !== clientKey(opts.client)) return false
     if (!inPeriod(o, opts.period)) return false
     if (!matchesPayFilter(o, opts.pay)) return false
     if (!orderMatchesQuery(o, opts.search)) return false
@@ -161,6 +162,7 @@ export function FinancePage() {
   const initialTab = new URLSearchParams(location.search).get("tab") || "overview"
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
+  const catalogClients = useAppStore((s) => s.appSettings.clients)
   const setOrders = useAppStore((s) => s.setOrders)
   const setAdvances = useAppStore((s) => s.setAdvances)
 
@@ -206,17 +208,18 @@ export function FinancePage() {
   )
 
   // Клиенты для фильтра — только те, что реально встречаются в заказах.
+  // Без повторов по регистру и пробелам (фильтр сравнивает по clientKey).
   const clientOptions = useMemo(
-    () => [...new Set(orders.map((o) => o.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
-    [orders]
+    () => uniqueClientNames(orders.map((o) => o.client), catalogClients).sort((a, b) => a.localeCompare(b, "ru")),
+    [orders, catalogClients]
   )
 
   // Итоги по отфильтрованному — иначе непонятно, что означает выборка.
   // Общие цифры остаются в плитках наверху, а это про «сколько сейчас видно».
+  // Сумма — по округлённой цене каждого заказа, как в строках и «к доплате».
   const finSubtotal = useMemo(() => {
-    let sum = 0, debt = 0
-    finList.forEach((o) => { sum += orderTotal(o); debt += orderPaymentState(o).remaining })
-    return { sum, debt }
+    const debt = finList.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+    return { sum: ordersPriceTotal(finList), debt }
   }, [finList])
 
   const filtersActive = payFilter !== "all" || periodFilter !== "all" || clientFilter !== "all" || search.trim() !== "" || showCancelled
@@ -238,7 +241,7 @@ export function FinancePage() {
   const advList = useMemo(() => {
     const q = advSearch.trim().toLowerCase()
     const list = advances.filter((a) => {
-      if (advClient !== "all" && a.client !== advClient) return false
+      if (advClient !== "all" && clientKey(a.client) !== clientKey(advClient)) return false
       if (q && !`${a.client} ${a.note || ""}`.toLowerCase().includes(q)) return false
       return true
     })
@@ -251,9 +254,11 @@ export function FinancePage() {
     return list
   }, [advances, advSearch, advClient, advSort])
 
+  // По одному на клиента: иначе «Школа №1» и «школа №1» попадали в список
+  // дважды, и плашка «без привязки» ниже называла одну сумму два раза.
   const advClientOptions = useMemo(
-    () => [...new Set(advances.map((a) => a.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru")),
-    [advances]
+    () => uniqueClientNames(advances.map((a) => a.client), catalogClients).sort((a, b) => a.localeCompare(b, "ru")),
+    [advances, catalogClients]
   )
   const advSum = useMemo(() => advList.reduce((s, a) => s + parseNum(a.amount), 0), [advList])
 
@@ -279,6 +284,10 @@ export function FinancePage() {
 
   async function togglePayment(o: Order) {
     const pay = orderPaymentState(o)
+    // Заказ на 0 ₽ оплачивать нечем. Раньше клик ставил isPaid без единого
+    // платежа, а когда цена потом появлялась, из этого флага выходила оплата,
+    // которой не было.
+    if (pay.full <= 0) return
     let next: Order
     if (pay.isFullyPaid) {
       // Снятие оплаты стирает все платежи заказа — одним кликом и без
@@ -326,7 +335,8 @@ export function FinancePage() {
       const tax = full - base
       const pay = orderPaymentState(o)
       let statusText = "Не оплачено"
-      if (pay.isFullyPaid) statusText = "Оплачен полностью"
+      if (pay.full <= 0) statusText = "0 ₽ — оплачивать нечего"
+      else if (pay.isFullyPaid) statusText = "Оплачен полностью"
       else if (pay.covered > 0) statusText = `Получено ${fmtMoney(pay.covered)}, к доплате ${fmtMoney(pay.remaining)}`
       return [o.title || "Без названия", o.client || "—", Math.round(full), Math.round(tax), pay.advUsed, pay.remaining, statusText]
     })

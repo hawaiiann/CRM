@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/select"
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, isOrderOverdue, ordersOfClient, clientDebt } from "@/lib/money"
-import { getClientAdvanceStats } from "@/lib/advances"
+import { fmtMoney, isOrderOverdue, orderPaymentState } from "@/lib/money"
+import { getClientAdvanceStats, ordersOfClientKey, uniqueClientNames } from "@/lib/advances"
 import { ClientCardSheet } from "./ClientCardSheet"
 import { DepositDialog } from "@/features/finance/DepositDialog"
 import { ReceivePaymentDialog } from "@/features/finance/ReceivePaymentDialog"
@@ -62,16 +62,20 @@ export function ClientsContent() {
   const [actClient, setActClient] = useState<string | null>(null)
 
   const rows = useMemo(() => {
-    const names = new Set((appSettings.clients || []).filter(Boolean))
-    orders.forEach((o) => { if (o.client) names.add(o.client) })
+    // Один клиент — одна строка, как бы ни было набрано имя (clientKey):
+    // раньше «Школа №1» из справочника и «школа №1» из заказов давали две
+    // строки, и в каждой — весь общий долг и аванс. Клиент, у которого пока
+    // только аванс (внесён в окне аванса, в справочник не попал), тоже здесь.
+    const catalog = (appSettings.clients || []).filter(Boolean)
+    const names = uniqueClientNames([...catalog, ...orders.map((o) => o.client), ...advances.map((a) => a.client)], catalog)
 
-    let list = [...names].map((name) => {
+    let list = names.map((name) => {
       const stats = getClientAdvanceStats(name, advances, orders)
-      const clientOrders = ordersOfClient(orders, name)
+      const clientOrders = ordersOfClientKey(orders, name)
       const activeOrders = clientOrders.filter((o) => o.status !== "done")
-      // Долг — по ВСЕМ заказам клиента, кроме отменённых (см. clientDebt:
+      // Долг — по ВСЕМ заказам клиента, кроме отменённых (как clientDebt:
       // именно этот отбор дважды разъезжался, в v2.8.1 и v2.8.2).
-      const totalDue = clientDebt(orders, name)
+      const totalDue = clientOrders.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
       // Просрочка — только по незавершённым: у сданного заказа срок сдачи уже
       // неактуален, там вопрос только к оплате.
       const hasOverdue = activeOrders.some(isOrderOverdue)

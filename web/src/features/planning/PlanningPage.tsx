@@ -101,7 +101,7 @@ export function PlanningPage() {
         <div className="rounded-xl border border-dashed border-border bg-card/50 py-16 text-center">
           <div className="text-base font-bold">Список планирования пуст</div>
           <p className="mt-1.5 text-sm text-muted-foreground">Создайте первый класс для ведения уроков.</p>
-          <Button onClick={() => setBoardFormOpen(true)} className="mt-4 bg-cta/90 font-extrabold text-cta-foreground">
+          <Button onClick={() => { setEditingBoard(null); setBoardFormOpen(true) }} className="mt-4 bg-cta/90 font-extrabold text-cta-foreground">
             Добавить класс
           </Button>
         </div>

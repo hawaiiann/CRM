@@ -2,6 +2,7 @@ import { useState } from "react"
 import { ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { planCatalogRename } from "@/lib/catalogRename"
+import { fmtMoney } from "@/lib/money"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
 import { saveData } from "@/lib/cloudSync"
@@ -27,32 +28,59 @@ export function CatalogList({ title, catalogKey }: { title: string; catalogKey: 
   }
 
   /**
-   * Переименование — по уходу из поля, с каскадом по заказам, авансам и
-   * доскам (lib/catalogRename.ts). Раньше правилось на каждое нажатие клавиши
-   * и только в самом списке: клиент «раздваивался» — новое имя в справочнике,
-   * старое во всех заказах.
+   * Переименование — по уходу из поля, с каскадом по заказам, авансам,
+   * доскам и шаблонам (lib/catalogRename.ts). Раньше правилось на каждое
+   * нажатие клавиши и только в самом списке: клиент «раздваивался» — новое имя
+   * в справочнике, старое во всех заказах.
    */
   async function commitRename(idx: number, val: string) {
     const from = list[idx]
     const to = val.trim()
     if (!to || to === from) return
-    const s = useAppStore.getState()
-    const plan = planCatalogRename(catalogKey, from, to, { settings: s.appSettings, orders: s.orders, advances: s.advances, planningBoards: s.planningBoards })
-    const total = plan.touched.orders + plan.touched.advances + plan.touched.boards
-    if (total > 0 || plan.merges) {
+    const buildPlan = () => {
+      const s = useAppStore.getState()
+      return planCatalogRename(catalogKey, from, to, { settings: s.appSettings, orders: s.orders, advances: s.advances, planningBoards: s.planningBoards })
+    }
+    // Этот план — только для текста подтверждения (см. ниже).
+    const preview = buildPlan()
+    const t = preview.touched
+    const total = t.orders + t.advances + t.boards + t.templates
+    const r = preview.repricing
+    if (total > 0 || preview.merges || r) {
       const bullets: string[] = []
-      if (plan.touched.orders) bullets.push(`Заказы: ${plan.touched.orders}${plan.touched.lines ? ` (позиций: ${plan.touched.lines})` : ""}`)
-      if (plan.touched.advances) bullets.push(`Авансы: ${plan.touched.advances}`)
-      if (plan.touched.boards) bullets.push(`Доски планирования: ${plan.touched.boards}`)
-      if (plan.merges) bullets.push(`«${to}» уже есть в справочнике — записи сольются в одну`)
+      if (t.orders) bullets.push(`Заказы: ${t.orders}${t.lines ? ` (позиций: ${t.lines})` : ""}`)
+      if (t.advances) bullets.push(`Авансы: ${t.advances}`)
+      if (t.boards) bullets.push(`Доски планирования: ${t.boards}${t.lessonItems ? ` (пунктов в уроках: ${t.lessonItems})` : ""}`)
+      if (t.templates) bullets.push(`Пункты шаблонов досок и заказов: ${t.templates}`)
+      if (preview.merges) bullets.push(`«${to}» уже есть в справочнике — записи сольются в одну`)
+      let body = total ? "Новое имя будет подставлено везде, где встречается старое:" : undefined
+      // Смена почасовой единицы на штучную (и наоборот) пересчитывает цены
+      // заказов — предупреждение первым абзацем и красная кнопка без фокуса,
+      // чтобы не подтвердить это Enter'ом не глядя.
+      if (r) {
+        const how = r.toHourly
+          ? `«${to}» — почасовая единица (в названии есть «час»): позиции будут считаться как часы × ставка, а не количество × ставка.`
+          : `«${to}» — не почасовая единица (в названии нет «час»): позиции будут считаться как количество × ставка, а не часы × ставка.`
+        const diff = r.after - r.before
+        const money = r.orders
+          ? `Цена изменится у заказов: ${r.orders}${r.paid ? ` (из них с оплатой или авансом: ${r.paid} — у них появится переплата или долг)` : ""}. Сумма по ним: ${fmtMoney(r.before)} → ${fmtMoney(r.after)} (${diff > 0 ? "+" : "−"}${fmtMoney(Math.abs(diff))}).`
+          : "Цены сохранённых заказов не изменятся."
+        body = `Внимание: ${how}\n${money}${body ? `\n\n${body}` : ""}`
+      }
       const ok = await confirmDialog({
-        title: `Переименовать «${from}» в «${to}»?`,
-        body: total ? "Новое имя будет подставлено везде, где встречается старое:" : undefined,
+        title: r?.orders ? `«${from}» → «${to}»: изменятся цены заказов` : `Переименовать «${from}» в «${to}»?`,
+        body,
         bullets,
-        confirmLabel: "Переименовать",
+        confirmLabel: r?.orders ? "Всё равно переименовать" : "Переименовать",
+        destructive: !!r?.orders,
       })
       if (!ok) return
     }
+    // Применяем план, собранный заново из ТЕКУЩЕГО состояния. Пока окно было
+    // открыто, таймер или правка с другого устройства могли изменить заказы и
+    // доски — запись плана, собранного до вопроса, молча их бы затёрла.
+    const plan = buildPlan()
+    const s = useAppStore.getState()
     s.setAppSettings(plan.settings)
     if (plan.touched.orders) s.setOrders(plan.orders)
     if (plan.touched.advances) s.setAdvances(plan.advances)

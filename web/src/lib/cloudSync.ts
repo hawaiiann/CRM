@@ -20,7 +20,7 @@ import {
   applySettingsMigrations,
   defaultPlanningBoards,
 } from "./normalize"
-import { orderPaymentsTotal, orderTotal, parseNum, dateKey } from "./money"
+import { orderPaymentsTotal, parseNum, dateKey } from "./money"
 import { syncPlanningWithOrders } from "./planningSync"
 import { scheduleDiskBackup } from "./diskBackup"
 import {
@@ -1153,19 +1153,14 @@ function purgeObsoleteJournalFields(activityLog: ActivityLogEntry[]): { log: Act
 // migratePaidFlagToAmount + migratePaidAmountToPayments folded into one step —
 // same two-stage history as db.js, applied to a fresh orders array.
 function migrateLegacyPayments(orders: Order[]): { orders: Order[]; migrated: number } {
-  let migrated = 0
+  const migrated = 0
   const next = orders.map((o) => {
     let order = o
-    // Только настоящие старые заказы: «оплачен» без сумм И без аванса. Заказ,
-    // закрытый авансом, тоже хранит isPaid без платежей — и если потом его
-    // цена росла (таймер на почасовой позиции), при каждой загрузке ему
-    // выдумывалась оплата на разницу, а долг пропадал.
-    if (order.isPaid && !parseNum(order.paidAmount) && !(order.payments && order.payments.length) && !parseNum(order.advanceUsed) && !(order.advanceAllocations || []).length) {
-      const full = Math.round(orderTotal(order))
-      const advUsed = Math.min(parseNum(order.advanceUsed), full)
-      const rest = Math.max(0, Math.round((full - advUsed) * 100) / 100)
-      if (rest > 0) { order = { ...order, paidAmount: rest }; migrated++ }
-    }
+    // Шаг «флаг оплачен → сумма оплаты» убран (v2.37.0). Настоящие старые
+    // заказы с одним флагом давно переведены: миграция шла при каждой загрузке
+    // и уходила в облако. А срабатывала она теперь только ложно — у заказа,
+    // закрытого авансом, или у заказа за 0 ₽, если его цена потом росла:
+    // ему выдумывалась оплата на разницу, и долг пропадал.
     if (!(order.payments && order.payments.length) && parseNum(order.paidAmount) > 0) {
       order = {
         ...order,

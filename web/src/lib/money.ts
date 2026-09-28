@@ -225,9 +225,12 @@ export function draftPaymentState(d: PricedOrder & Pick<Order, "advanceUsed" | "
  * Правило одно: отменённый заказ денег не стоит, завершённый — стоит.
  */
 export function ordersOfClient(orders: Order[], client: string): Order[] {
-  const name = (client || "").trim().toLowerCase()
+  // Тот же ключ, что clientKey в lib/advances.ts: регистр и лишние пробелы
+  // внутри имени не делают клиента другим.
+  const key = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ")
+  const name = key(client)
   if (!name) return []
-  return orders.filter((o) => (o.client || "").trim().toLowerCase() === name && o.status !== "cancelled")
+  return orders.filter((o) => key(o.client) === name && o.status !== "cancelled")
 }
 
 /** Долг клиента: сколько по нему осталось получить по всем неотменённым заказам. */

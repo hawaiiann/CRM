@@ -1,5 +1,6 @@
 import type { Order, Advance, ActivityLogEntry, DashboardMetric } from "@/types/models"
 import { parseNum, dateKey, addDays, orderPreTaxTotal, orderPayments, orderPaymentState } from "./money"
+import { clientKey } from "./advances"
 
 /* Ported from js/app.js */
 export interface MetricTypeInfo {
@@ -52,7 +53,12 @@ function splitLineUnits(lines: Order["lines"]) {
 }
 
 function advanceDateForClient(advances: Advance[], client: string): string | null {
-  const list = advances.filter((a) => a.client === client && a.date).sort((a, b) => (a.date < b.date ? -1 : 1))
+  // По ключу, как и сами списания (getClientAdvanceStats): при точном
+  // сравнении заказ «школа №1» не находил аванс «Школа №1», и списание
+  // уезжало в месяц заказа вместо месяца аванса.
+  const key = clientKey(client)
+  if (!key) return null
+  const list = advances.filter((a) => clientKey(a.client) === key && a.date).sort((a, b) => (a.date < b.date ? -1 : 1))
   return list.length ? list[0].date : null
 }
 function orderContributionDate(o: Order): string {
@@ -145,6 +151,16 @@ export function orderRecognizedRevenue(o: Order): { revenue: number; net: number
   if (covered >= full) return { revenue: full, net: Math.round(base) }
   const net = fullExact > 0 ? covered * (base / fullExact) : 0
   return { revenue: Math.round(covered * 100) / 100, net: Math.round(net * 100) / 100 }
+}
+
+/**
+ * Сумма цен заказов для итогов списка — по уже округлённой цене каждого
+ * (orderPaymentState.full), как в строках, долге и акте. Сумма неокруглённых
+ * orderTotal расходилась с ними на рубль: два заказа по 1053,52 ₽ давали
+ * «на сумму 2 107 ₽ · к доплате 2 108 ₽».
+ */
+export function ordersPriceTotal(orders: Order[]): number {
+  return orders.reduce((s, o) => s + orderPaymentState(o).full, 0)
 }
 
 const DERIVED_METRIC_SOURCES: Record<string, { from: "revenue" | "counts"; field: string; cumulative: boolean }> = {

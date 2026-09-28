@@ -1,5 +1,5 @@
 import { test, expect } from "vitest"
-import { parseKtp, scheduleFromKtp } from "../ktp"
+import { parseKtp, scheduleFromKtp, schoolYearStart } from "../ktp"
 
 test("таблица с табуляцией: номер, тема, часы, дата", () => {
   const text = [
@@ -38,4 +38,22 @@ test("график из дат: старт, уроков в неделю, пер
   ].map(([date], i) => ({ num: i + 1, title: "t", date }))
   expect(scheduleFromKtp(lessons)).toEqual({ start: "2026-09-02", perWeek: 3, firstWeekLessons: 2 })
   expect(scheduleFromKtp([{ num: 1, title: "t" }])).toBeNull()
+})
+
+test("дата без года — по учебному году: сентябрь–декабрь — год начала, январь — следующий", () => {
+  const r = parseKtp("1\tВводный урок\t02.09\n40\tПовторение\t15.01\n41\tИтоговый урок\t20.05.2027", { year: 2026 })
+  expect(r.lessons.map((l) => l.date)).toEqual(["2026-09-02", "2027-01-15", "2027-05-20"])
+  // Учебный год начинается с июля: в сентябре 2026 — 2026/27, в марте 2027 — тоже.
+  expect(schoolYearStart(new Date(2026, 8, 28))).toBe(2026)
+  expect(schoolYearStart(new Date(2027, 2, 1))).toBe(2026)
+  expect(schoolYearStart(new Date(2027, 6, 1))).toBe(2027)
+})
+
+test("дата — только из ячейки, которая целиком дата; числа в теме не трогаются", () => {
+  const r = parseKtp("1\tПараграф 1.2 Натуральные числа\t1\n2\tПараграф 1.3 Сложение\t1\t2.9\n3 | Деление | 02/09", { year: 2026 })
+  expect(r.lessons).toEqual([
+    { num: 1, title: "Параграф 1.2 Натуральные числа", hours: 1 },
+    { num: 2, title: "Параграф 1.3 Сложение", hours: 1, date: "2026-09-02" },
+    { num: 3, title: "Деление", date: "2026-09-02" },
+  ])
 })

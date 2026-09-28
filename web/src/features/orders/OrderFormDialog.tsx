@@ -133,8 +133,13 @@ export function OrderFormDialog({
       setDraft(JSON.parse(JSON.stringify(editingOrder)))
     } else if (duplicateFrom) {
       const o = duplicateFrom
-      const durationDays = Math.max(1, Math.round((new Date(o.deadline).getTime() - new Date(o.start).getTime()) / 86400000) || 7)
-      const newStart = o.deadline ? addDays(new Date(o.deadline), 1) : new Date()
+      // Даты — по местному времени (new Date("ГГГГ-ММ-ДД") читает их как UTC), и
+      // заказ «в тот же день» остаётся однодневным: раньше `|| 7` превращал
+      // нулевую длительность в неделю.
+      const local = (s: string) => { const [y, m, d] = (s || "").split("-").map(Number); return y && m && d ? new Date(y, m - 1, d) : null }
+      const startD = local(o.start), endD = local(o.deadline)
+      const durationDays = startD && endD ? Math.max(0, Math.round((endD.getTime() - startD.getTime()) / 86400000)) : 7
+      const newStart = endD ? addDays(endD, 1) : new Date()
       const lessonNumMatch = String(o.lesson || "").match(/^\d+$/)
       setDraft({
         ...emptyDraft(defaults),
@@ -314,7 +319,16 @@ export function OrderFormDialog({
     [advances, orders, draft.client, draft.id]
   )
   const unallocated = orderUnallocatedAdvance(draft)
-  const allocationOf = (advanceId: string) => (draft.advanceAllocations || []).find((a) => a.advanceId === advanceId)?.amount || 0
+  // Сумма, а не первая строка: после слияния дублей на один аванс бывало две.
+  const allocationOf = (advanceId: string) => (draft.advanceAllocations || []).filter((a) => a.advanceId === advanceId).reduce((s, a) => s + parseNum(a.amount), 0)
+  // Списания с авансов, которых нет среди авансов клиента: аванс удалили или
+  // у заказа сменили клиента. Раньше таких строк в форме не было вовсе —
+  // сумма висела невидимой, и правка соседней строки давала неверный итог.
+  const orphanAllocations = useMemo(() => {
+    const known = new Set(advanceRows.map((r) => r.advance.id))
+    const ids = [...new Set((draft.advanceAllocations || []).map((a) => a.advanceId))].filter((id) => !known.has(id))
+    return ids.map((id) => ({ advanceId: id, amount: (draft.advanceAllocations || []).filter((a) => a.advanceId === id).reduce((s, a) => s + parseNum(a.amount), 0), advance: advances.find((a) => a.id === id) }))
+  }, [advanceRows, draft.advanceAllocations, advances])
 
   function setAllocation(advanceId: string, amount: number) {
     setDraft((d) => {
@@ -342,10 +356,20 @@ export function OrderFormDialog({
   function applyTemplate(templateId: string) {
     const t = appSettings.orderTemplates.find((x) => x.id === templateId)
     if (!t) return
-    setDraft((d) => ({
-      ...d,
-      lines: t.lines.map((l) => ({ id: randId("l"), label: l.label, type: l.type, qty: l.qty, rate: l.rate, pomoHours: 0, ignorePrice: false, ready: false })),
-    }))
+    // Часы уже отработанных позиций не пропадают: переходят в позицию шаблона
+    // с тем же названием, а без пары — в первую. Раньше шаблон заменял всё, и
+    // «минус столько-то часов» уходил в журнал сегодняшним днём.
+    setDraft((d) => {
+      const norm = (s: string) => (s || "").trim().toLowerCase()
+      const lines: OrderLine[] = t.lines.map((l) => ({ id: randId("l"), label: l.label, type: l.type, qty: l.qty, rate: l.rate, pomoHours: 0, ignorePrice: false, ready: false }))
+      d.lines.forEach((old) => {
+        const h = parseHours(old.pomoHours)
+        if (!(h > 0) || !lines.length) return
+        const target = lines.find((l) => norm(l.label) === norm(old.label)) || lines[0]
+        target.pomoHours = Math.round((parseHours(target.pomoHours) + h) * 10000) / 10000
+      })
+      return { ...d, lines }
+    })
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -367,6 +391,8 @@ export function OrderFormDialog({
       id: editingOrder ? editingOrder.id : randId("o"),
       title,
       client: draft.client.trim(),
+      subject: draft.subject.trim(),
+      grade: draft.grade.trim(),
       quarter: draft.quarter.trim(),
       lesson: draft.lesson.trim(),
       payments: cleanPayments,
@@ -398,8 +424,8 @@ export function OrderFormDialog({
           return timerAdded > 1e-6 ? { ...l, pomoHours: round4(parseHours(l.pomoHours) + timerAdded) } : l
         })
         // Заказ без позиций: таймер пишет в «Факт. часы».
-        const factAdded = parseNum(stored.actualHours) - parseNum(editingOrder.actualHours)
-        if (!editingOrder.lines.length && factAdded > 1e-6) finalOrder.actualHours = String(round4(parseNum(finalOrder.actualHours) + factAdded))
+        const factAdded = parseHours(stored.actualHours) - parseHours(editingOrder.actualHours)
+        if (!editingOrder.lines.length && factAdded > 1e-6) finalOrder.actualHours = String(round4(parseHours(finalOrder.actualHours) + factAdded))
       }
     }
 
@@ -574,7 +600,7 @@ export function OrderFormDialog({
                   тратится. Раньше было одно число по клиенту, и в реестре
                   авансов нельзя было понять, что из них уже потрачено. */}
               <div className="mt-3 flex flex-col gap-1.5">
-                {advanceRows.length === 0 && unallocated === 0 && (
+                {advanceRows.length === 0 && unallocated === 0 && orphanAllocations.length === 0 && (
                   <div className="text-xs text-muted-foreground">
                     У клиента нет внесённых авансов — внести можно на Финансах или в карточке клиента.
                   </div>
@@ -602,6 +628,19 @@ export function OrderFormDialog({
                     </div>
                   )
                 })}
+                {orphanAllocations.map((r) => (
+                  <div key={r.advanceId} className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg border border-dashed border-border bg-notice/60 px-2.5 py-1.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold">
+                        {r.advance ? `Аванс другого клиента: ${r.advance.client || "без клиента"}` : "Аванс удалён"}
+                      </div>
+                      <div className="text-2xs text-muted-foreground">
+                        {r.advance ? "У заказа сменили клиента — перенесите списание на аванс этого клиента или обнулите." : "Списание осталось от удалённого аванса. Обнулите его или перенесите на другой аванс выше."}
+                      </div>
+                    </div>
+                    <NumberInput value={r.amount} onChange={(n) => setAllocation(r.advanceId, n)} className="h-8" />
+                  </div>
+                ))}
                 {unallocated > 0 && (
                   <div className="grid grid-cols-[1fr_110px] items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5">
                     <div className="min-w-0">

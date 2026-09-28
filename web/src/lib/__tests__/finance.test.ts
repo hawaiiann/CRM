@@ -86,7 +86,7 @@ describe("каскадное переименование справочнико
 
   test("клиент: заказы, авансы, скрытость переезжают", () => {
     const plan = planCatalogRename("clients", "Школа", "Школа №1", { ...data, orders: [o1, order({ id: "o2" }), order({ id: "z", client: "Другой" })] })
-    expect(plan.touched).toEqual({ orders: 2, advances: 2, boards: 0, lines: 0 })
+    expect(plan.touched).toEqual({ orders: 2, advances: 2, boards: 0, lines: 0, lessonItems: 0, templates: 0 })
     expect(plan.orders[2].client).toBe("Другой")
     expect(plan.advances[0].client).toBe("Школа №1")
     expect(plan.settings.clients).toEqual(["Школа №1", "Другой"])
@@ -105,7 +105,7 @@ describe("каскадное переименование справочнико
     plan = planCatalogRename("classes", "5 класс", "5А", data)
     expect(plan.orders[0].grade).toBe("5А"); expect(plan.planningBoards[0].title).toBe("5А")
     plan = planCatalogRename("types", "Презентация", "Презентация PDF", data)
-    expect(plan.orders[0].lines[0].label).toBe("Презентация PDF"); expect(plan.touched).toEqual({ orders: 1, advances: 0, boards: 0, lines: 1 })
+    expect(plan.orders[0].lines[0].label).toBe("Презентация PDF"); expect(plan.touched).toEqual({ orders: 1, advances: 0, boards: 0, lines: 1, lessonItems: 0, templates: 0 })
     plan = planCatalogRename("units", "Слайд", "Слайды", data)
     expect(plan.orders[0].lines[0].type).toBe("Слайды")
   })

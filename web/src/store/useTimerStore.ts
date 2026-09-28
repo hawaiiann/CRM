@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { useAppStore } from "./useAppStore"
 import { useToastStore } from "./useToastStore"
 import { saveData, applyHoursDelta } from "@/lib/cloudSync"
-import { parseHours, parseNum, dateKey, orderPaymentState, fmtHours } from "@/lib/money"
+import { parseHours, dateKey, orderPaymentState, fmtHours } from "@/lib/money"
 import { fmtMilestoneDuration } from "@/lib/money"
 import { requestNotificationPermission, isPageBackground, sendSystemNotification } from "@/lib/notifications"
 
@@ -58,7 +58,7 @@ function addHoursToOrder(orderId: string, hours: number, date: string): boolean 
   const line = order.lines.find((l) => !l.ready) || order.lines[order.lines.length - 1]
   let next = line
     ? { ...order, lines: order.lines.map((l) => (l.id === line.id ? { ...l, pomoHours: Math.round((parseHours(l.pomoHours) + hours) * 10000) / 10000 } : l)) }
-    : { ...order, actualHours: String(Math.round((parseNum(order.actualHours) + hours) * 10000) / 10000) }
+    : { ...order, actualHours: String(Math.round((parseHours(order.actualHours) + hours) * 10000) / 10000) }
   // Время на почасовой позиции поднимает цену. Отметка «оплачен» у заказа,
   // закрытого авансом, от этого должна сниматься: раньше она оставалась, и
   // при загрузке заказу выдумывалась оплата на разницу.

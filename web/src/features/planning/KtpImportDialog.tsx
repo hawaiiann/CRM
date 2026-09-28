@@ -52,14 +52,21 @@ export function KtpImportDialog({ open, onOpenChange }: { open: boolean; onOpenC
     if (existing) {
       setPlanningBoards((prev) => prev.map((b) => {
         if (b.id !== existing.id) return b
-        const byNum = new Map(b.lessons.map((l) => [l.num, l]))
+        // Индекс первого урока с таким номером. Раньше Map «номер → урок»
+        // молча выбрасывал второй урок с тем же номером — локально он
+        // пропадал, хотя в облаке оставался. Теперь тема ложится на первый,
+        // остальные не трогаются.
+        const lessons = b.lessons.slice()
+        const firstByNum = new Map<number, number>()
+        lessons.forEach((l, i) => { if (!firstByNum.has(l.num)) firstByNum.set(l.num, i) })
         parsed.lessons.forEach((k) => {
-          const l = byNum.get(k.num)
-          if (!l) { byNum.set(k.num, mkLesson(k.num, k.title)); return }
+          const i = firstByNum.get(k.num)
+          if (i === undefined) { firstByNum.set(k.num, lessons.length); lessons.push(mkLesson(k.num, k.title)); return }
+          const l = lessons[i]
           const isDefault = !l.title || /^урок\s*\d+$/i.test(l.title)
-          if (k.title && (overwrite || isDefault)) byNum.set(k.num, { ...l, title: k.title })
+          if (k.title && (overwrite || isDefault)) lessons[i] = { ...l, title: k.title }
         })
-        return { ...b, lessons: [...byNum.values()].sort((a, c) => a.num - c.num) }
+        return { ...b, lessons: lessons.sort((a, c) => a.num - c.num) }
       }))
     } else {
       const board: PlanningBoard = {

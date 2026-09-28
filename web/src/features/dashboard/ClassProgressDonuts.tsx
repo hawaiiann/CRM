@@ -1,6 +1,7 @@
 import { Pie, PieChart, Cell, Label } from "recharts"
 import { useAppStore } from "@/store/useAppStore"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
+import { computeBoardProgress } from "@/lib/planningStats"
 
 const chartConfig = {
   pct: { label: "Прогресс" },
@@ -59,10 +60,11 @@ export function ClassProgressDonuts() {
   // из колбэка map: побочный эффект внутри рендера — то, на чём ломается
   // работа React в конкурентном режиме (рендер могут прервать и повторить,
   // и счётчики удвоятся).
+  // Тот же расчёт, что на карточке класса (computeBoardProgress): уроки без
+  // материала в прогресс не входят — раньше пончик их считал и расходился с
+  // карточкой.
   const items = boards.map((board) => {
-    let total = 0
-    let done = 0
-    ;(board.lessons || []).forEach((l) => (l.items || []).forEach((i) => { total++; if (i.done) done++ }))
+    const { itemsTotal: total, itemsDone: done } = computeBoardProgress(board)
     return { id: board.id, title: board.title, subject: board.subject, total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
   })
   const totalAll = items.reduce((s, it) => s + it.total, 0)

@@ -47,6 +47,7 @@ export function BoardCard({
   onOpenLesson: (lesson: PlanningLesson) => void
 }) {
   const orders = useAppStore((s) => s.orders)
+  const allBoards = useAppStore((s) => s.planningBoards)
   const schedule = useAppStore((s) => s.appSettings.boardSchedules?.[board.id])
   const materialsLink = useAppStore((s) => s.appSettings.boardLinks?.[board.id])
   const ktpMode = useAppStore((s) => s.appSettings.ktpMode)
@@ -85,12 +86,14 @@ export function BoardCard({
   const lessons = board.lessons || []
   // Цвет клетки считается на лету по чек-листу и заказу урока — а не берётся
   // из сохранённого lesson.color, который мог посчитать другой, отставший
-  // клиент (см. lessonDisplayColor).
+  // клиент (см. lessonDisplayColor). Все доски — чтобы заказ, совпавший по
+  // полям с уроками нескольких досок, показывался только там, где его ведёт
+  // автосинхронизация.
   const governing = useMemo(() => {
     const map = new Map<string, Order | null>()
-    ;(board.lessons || []).forEach((l) => map.set(l.id, findGoverningOrder(orders, board, l)))
+    ;(board.lessons || []).forEach((l) => map.set(l.id, findGoverningOrder(orders, board, l, allBoards)))
     return map
-  }, [orders, board])
+  }, [orders, board, allBoards])
   const colorOf = (l: PlanningLesson) => lessonDisplayColor(l, governing.get(l.id))
 
   // Расчёт вынесен в lib/planningStats.ts — тот же самый использует экспорт
@@ -105,8 +108,9 @@ export function BoardCard({
   const lessonsPct = lessonsTotal > 0 ? Math.round((greenLessons / lessonsTotal) * 100) : 0
 
   const today = dateKey(new Date())
-  // Урок без материала для графика считается закрытым: отставать по нему нечему.
-  const plan = scheduleValid(schedule) ? scheduleStatus(lessons, schedule, today, (l) => isLessonDone(l) || isLessonEmpty(l)) : null
+  // Урок без материала для графика закрыт, но только когда по графику он уже
+  // прошёл: будущие пустые уроки не должны прятать реальное отставание.
+  const plan = scheduleValid(schedule) ? scheduleStatus(lessons, schedule, today, isLessonDone, isLessonEmpty) : null
 
   function updateBoard(patch: Partial<PlanningBoard>) {
     setPlanningBoards((prev) => prev.map((b) => (b.id === board.id ? { ...b, ...patch } : b)))

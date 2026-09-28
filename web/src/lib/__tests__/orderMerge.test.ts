@@ -40,3 +40,21 @@ test("дубли: одинаковый предмет, класс, четвер�
   expect(g).toHaveLength(1)
   expect(g[0].map((o) => o.id)).toEqual(["b", "a"])
 })
+
+test("объединение: списания с одного аванса складываются в одну строку", () => {
+  const a = order({ advanceUsed: 300, advanceAllocations: [{ advanceId: "adv1", amount: 300 }] })
+  const b = order({ id: "o2", createdAt: 2, advanceUsed: 250, advanceAllocations: [{ advanceId: "adv1", amount: 200 }, { advanceId: "adv2", amount: 50 }] })
+  const m = mergeOrders(a, b)
+  expect(m.advanceAllocations).toEqual([{ advanceId: "adv1", amount: 500 }, { advanceId: "adv2", amount: 50 }])
+  expect(m.advanceUsed).toBe(550)
+})
+
+test("дубли: «Урок 10» и «10» — одно, «10-11» и «10а» — другие уроки", () => {
+  const list = [
+    order({ id: "a", lesson: "10" }),
+    order({ id: "b", lesson: "Урок 10", createdAt: 2 }),
+    order({ id: "c", lesson: "10-11", createdAt: 3 }),
+    order({ id: "d", lesson: "10а", createdAt: 4 }),
+  ]
+  expect(duplicateOrderGroups(list).map((g) => g.map((o) => o.id))).toEqual([["a", "b"]])
+})

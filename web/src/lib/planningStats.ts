@@ -100,6 +100,24 @@ export function computeBoardProgress(board: PlanningBoard): BoardProgress {
   }
 }
 
+/**
+ * Номера уроков в форме класса: существующие + диапазон «от … до» − убранные
+ * крестиком. range = null — диапазон не трогали, и он ничего не добавляет:
+ * при редактировании форма показывает min…max существующих уроков, и раньше
+ * «Сохранить» без единой правки заново создавало удалённые уроки в «дырах»
+ * и после перенумерации.
+ */
+export function planLessonNums(existing: number[], range: { from: number; to: number } | null, removed: Iterable<number> = []): number[] {
+  const nums = new Set(existing)
+  if (range) {
+    const from = Math.max(1, Math.min(range.from, range.to))
+    const to = Math.min(Math.max(range.from, range.to), 500)
+    for (let n = from; n <= to; n++) nums.add(n)
+  }
+  for (const n of removed) nums.delete(n)
+  return [...nums].sort((a, b) => a - b)
+}
+
 /** Список четвертей, реально встречающихся в досках, — для выбора периода при экспорте. */
 export function distinctQuarters(boards: PlanningBoard[]): string[] {
   const set = new Set(boards.map((b) => (b.quarter || "").trim()).filter(Boolean))

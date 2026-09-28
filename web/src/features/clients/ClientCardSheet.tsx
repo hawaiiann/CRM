@@ -7,9 +7,10 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
-import { fmtMoney, orderTotal, ordersOfClient } from "@/lib/money"
+import { fmtMoney, orderPaymentState } from "@/lib/money"
 import { fmtDeadline } from "@/lib/dates"
-import { getClientAdvanceStats } from "@/lib/advances"
+import { getClientAdvanceStats, ordersOfClientKey } from "@/lib/advances"
+import { ordersPriceTotal } from "@/lib/dashboardMetrics"
 
 const STATUS_LABEL: Record<string, string> = {
   queue: "В очереди",
@@ -35,8 +36,10 @@ export function ClientCardSheet({
   const orders = useAppStore((s) => s.orders)
   const advances = useAppStore((s) => s.advances)
 
-  const clientOrders = ordersOfClient(orders, clientName || "")
-  const revenue = clientOrders.reduce((s, o) => s + orderTotal(o), 0)
+  // По ключу клиента — тем же отбором, что строка на странице Клиентов.
+  const clientOrders = ordersOfClientKey(orders, clientName || "")
+  // По округлённой цене каждого заказа — как долг и акт (см. ordersPriceTotal).
+  const revenue = ordersPriceTotal(clientOrders)
   const stats = clientName ? getClientAdvanceStats(clientName, advances, orders) : { totalIn: 0, used: 0, available: 0 }
   const sortedOrders = clientOrders.slice().sort((a, b) => (b.deadline || "").localeCompare(a.deadline || ""))
 
@@ -85,7 +88,7 @@ export function ClientCardSheet({
                           <div className="truncate text-sm font-bold">{title}</div>
                           <div className="text-xs text-muted-foreground">{STATUS_LABEL[o.status] || o.status} · сдача {fmtDeadline(o.deadline)}</div>
                         </div>
-                        <div className="shrink-0 text-sm font-bold">{fmtMoney(orderTotal(o))}</div>
+                        <div className="shrink-0 text-sm font-bold">{fmtMoney(orderPaymentState(o).full)}</div>
                       </div>
                     )
                   })}

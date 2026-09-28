@@ -23,13 +23,29 @@ export interface KtpParseResult {
   skipped: number
 }
 
-const DATE_RE = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/
-const DATE_RANGE_RE = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\s*[-–—]\s*(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/
+// Дата — только ячейка, которая целиком дата (или диапазон дат): «02.09»,
+// «2.9», «02.09.2026», «02/09», «09.09-11.09». Раньше бралась первая похожая
+// подстрока где угодно, и тема «Параграф 1.2 Натуральные числа» давала дату
+// 1 февраля, а «1.2» вырезалось из темы.
+const DATE_CELL_RE = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?:\s*[-–—]\s*\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)?\s*(?:г\.?)?$/
 
-function toIso(d: string, m: string, y: string | undefined, fallbackYear: number): string | undefined {
+/**
+ * Год начала учебного года: с июля — текущий, до июля — прошлый. В сентябре
+ * 2026 КТП на 2026/27, в марте 2027 — тоже на 2026/27.
+ */
+export function schoolYearStart(today: Date = new Date()): number {
+  return today.getMonth() + 1 >= 7 ? today.getFullYear() : today.getFullYear() - 1
+}
+
+/**
+ * Дата без года относится к учебному году: июль–декабрь — год начала,
+ * январь–июнь — следующий. Раньше подставлялся текущий календарный год, и
+ * в сентябре январские уроки КТП уезжали на восемь месяцев назад.
+ */
+function toIso(d: string, m: string, y: string | undefined, startYear: number): string | undefined {
   const day = parseInt(d, 10), mon = parseInt(m, 10)
   if (day < 1 || day > 31 || mon < 1 || mon > 12) return undefined
-  let year = y ? parseInt(y, 10) : fallbackYear
+  let year = y ? parseInt(y, 10) : mon >= 7 ? startYear : startYear + 1
   if (y && y.length === 2) year = 2000 + year
   return `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
@@ -41,8 +57,9 @@ function splitCells(line: string): string[] {
   return line.split(/\s{2,}/).map((s) => s.trim())
 }
 
+/** opts.year — год начала учебного года (2026 для 2026/27); по умолчанию — schoolYearStart(). */
 export function parseKtp(text: string, opts: { year?: number } = {}): KtpParseResult {
-  const year = opts.year ?? new Date().getFullYear()
+  const year = opts.year ?? schoolYearStart()
   const lessons: KtpLesson[] = []
   let skipped = 0
   let last: KtpLesson | null = null
@@ -53,14 +70,19 @@ export function parseKtp(text: string, opts: { year?: number } = {}): KtpParseRe
     const cells = splitCells(line).filter((c) => c !== "")
     if (!cells.length) return
 
-    // Дата: первая дата (или начало диапазона) в любой ячейке.
+    // Дата: первая ячейка, которая целиком дата (или диапазон — берём начало).
+    // Ячейки-даты (и «план», и «факт») из строки убираются целиком; числа
+    // внутри темы не трогаем.
     let date: string | undefined
-    let rest = cells
-    for (const c of cells) {
-      const r = c.match(DATE_RANGE_RE) || c.match(DATE_RE)
-      if (r) { date = toIso(r[1], r[2], r[3], year); break }
+    const cellDate = (c: string) => {
+      const r = c.match(DATE_CELL_RE)
+      return r ? toIso(r[1], r[2], r[3], year) : undefined
     }
-    if (date) rest = rest.map((c) => c.replace(DATE_RANGE_RE, "").replace(DATE_RE, "").trim()).filter(Boolean)
+    for (const c of cells) {
+      date = cellDate(c)
+      if (date) break
+    }
+    let rest = date ? cells.filter((c) => !cellDate(c)) : cells
 
     // Номер урока: первая ячейка, которая целиком число (или «12.» / «№12»).
     let num: number | undefined

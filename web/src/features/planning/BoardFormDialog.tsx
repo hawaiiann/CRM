@@ -19,6 +19,7 @@ import { unlinkOrdersFromLessons } from "@/lib/planningOrderSync"
 import { boardTemplateLines } from "@/lib/boardTemplate"
 import type { AppSettings, PlanningBoard, PlanningLesson, OrderTemplateLine } from "@/types/models"
 import { defaultFirstWeekLessons, weekdayIndex, weekdayLabel, weekLabel } from "@/lib/boardSchedule"
+import { planLessonNums } from "@/lib/planningStats"
 import { dateKey, addDays } from "@/lib/money"
 
 function randId(prefix: string) {
@@ -53,18 +54,19 @@ export function BoardFormDialog({
   // Уроки класса = существующие уроки доски + диапазон «от … до», минус те,
   // что убраны крестиком. Диапазон применяется сразу при вводе: раньше он
   // добавлялся только кнопкой, и «от 1 до 39» без нажатия молча оставлял 24.
+  // У существующей доски диапазон добавляет номера, только когда его
+  // изменили (rangeSeed — с чем форма открылась): иначе «Сохранить» заполнял
+  // дыры от удалённых уроков.
   const [existingNums, setExistingNums] = useState<number[]>([])
   const [rangeFrom, setRangeFrom] = useState(1)
   const [rangeTo, setRangeTo] = useState(24)
+  const [rangeSeed, setRangeSeed] = useState<{ from: number; to: number } | null>(null)
   const [removedNums, setRemovedNums] = useState<Set<number>>(new Set())
-  const lessonNums = useMemo(() => {
-    const from = Math.max(1, Math.min(rangeFrom, rangeTo))
-    const to = Math.min(Math.max(rangeFrom, rangeTo), 500)
-    const nums = new Set(existingNums)
-    for (let n = from; n <= to; n++) nums.add(n)
-    removedNums.forEach((n) => nums.delete(n))
-    return [...nums].sort((a, b) => a - b)
-  }, [existingNums, rangeFrom, rangeTo, removedNums])
+  const rangeActive = !rangeSeed || rangeSeed.from !== rangeFrom || rangeSeed.to !== rangeTo
+  const lessonNums = useMemo(
+    () => planLessonNums(existingNums, rangeActive ? { from: rangeFrom, to: rangeTo } : null, removedNums),
+    [existingNums, rangeActive, rangeFrom, rangeTo, removedNums]
+  )
   // График: первая неделя может быть неполной (старт в среду), исключения —
   // каникулы и короткие недели. 0 в «уроков в первой неделе» — авто.
   const [firstWeekLessons, setFirstWeekLessons] = useState(0)
@@ -94,6 +96,9 @@ export function BoardFormDialog({
       setRemovedNums(new Set())
       setRangeFrom(nums[0] || 1)
       setRangeTo(nums[nums.length - 1] || 1)
+      // Доска без уроков — диапазон 1…1 действует сразу, как и раньше: класс
+      // без единого урока форма не сохраняет.
+      setRangeSeed(nums.length ? { from: nums[0] || 1, to: nums[nums.length - 1] || 1 } : null)
       const lines = boardTemplateLines(appSettings, board, orders, defaultUnit)
       setTemplate(lines.length ? lines.map(row) : [row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     } else {
@@ -110,6 +115,7 @@ export function BoardFormDialog({
       setRemovedNums(new Set())
       setRangeFrom(1)
       setRangeTo(24)
+      setRangeSeed(null)
       setTemplate([row({ label: "Презентация", qty: 10 }), row({ label: "Рабочий лист" })])
     }
     // Зависим от конкретных справочников, а не от appSettings целиком, и это

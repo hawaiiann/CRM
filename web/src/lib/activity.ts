@@ -1,5 +1,5 @@
 import type { Order } from "@/types/models"
-import { parseNum } from "./money"
+import { parseHours } from "./money"
 
 /**
  * Часы, которые реально отработаны по заказу: сначала «Факт. часы», вписанные
@@ -13,9 +13,11 @@ import { parseNum } from "./money"
  * планов по нескольким заведённым заказам, а не реально потраченное время.
  */
 export function actualHours(o: Order): number {
-  const manual = parseNum(o.actualHours)
+  // parseHours, а не parseNum: «1:30» в «Факт. часах» — полтора часа, а
+  // parseNum выкидывал двоеточие и получал 130 — они и уходили в журнал.
+  const manual = parseHours(o.actualHours)
   if (manual > 0) return manual
-  return (o.lines || []).reduce((s, l) => s + parseNum(l.pomoHours), 0)
+  return (o.lines || []).reduce((s, l) => s + parseHours(l.pomoHours), 0)
 }
 
 // recordActivityChanges (дельта «стало минус было» с сегодняшней датой)
