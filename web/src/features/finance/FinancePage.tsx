@@ -24,7 +24,7 @@ import {
   parseNum,
   dateKey,
   orderTotal,
-  orderBaseTotal,
+  orderPreTaxTotal,
   orderPaymentState,
   orderPayments,
   orderPaymentsTotal,
@@ -321,7 +321,7 @@ export function FinancePage() {
   function exportFinanceCsv() {
     const header = ["Проект", "Заказчик", "Выручка (с налогом)", "Налог", "Оплачено из аванса", "К доплате", "Статус оплаты"]
     const rows = finList.map((o) => {
-      const base = orderBaseTotal(o)
+      const base = orderPreTaxTotal(o)
       const full = orderTotal(o)
       const tax = full - base
       const pay = orderPaymentState(o)
@@ -463,7 +463,7 @@ export function FinancePage() {
             <div className="flex flex-col gap-2.5 sm:hidden">
               {finList.length === 0 && <div className="py-8 text-center text-muted-foreground">Нет данных</div>}
               {pagedFinList.map((o) => {
-                const base = orderBaseTotal(o)
+                const base = orderPreTaxTotal(o)
                 const full = orderTotal(o)
                 const tax = full - base
                 const pay = orderPaymentState(o)
@@ -526,7 +526,7 @@ export function FinancePage() {
                     <TableRow className="hover:bg-transparent"><TableCell colSpan={7} className="py-8 text-center whitespace-normal text-muted-foreground">Нет данных</TableCell></TableRow>
                   )}
                   {pagedFinList.map((o) => {
-                    const base = orderBaseTotal(o)
+                    const base = orderPreTaxTotal(o)
                     const full = orderTotal(o)
                     const tax = full - base
                     const pay = orderPaymentState(o)

@@ -79,8 +79,58 @@ export function orderTaxLabel(o: Pick<Order, "taxType"> | undefined): string {
   return "Без налога"
 }
 
-export function orderTotal(o: Pick<Order, "lines" | "taxType">): number {
-  return orderBaseTotal(o) * (1 + orderTaxRate(o))
+/** Варианты доплаты за срочность в форме заказа, %. */
+export const URGENCY_OPTIONS = [15, 20, 30] as const
+
+type PricedOrder = Pick<Order, "lines" | "taxType"> & Partial<Pick<Order, "aiRate" | "urgencyPct">>
+
+/** Идёт ли на позицию надбавка за нейросети: только штучные, оплачиваемые, не отключённые. */
+export function lineTakesAi(l: OrderLine): boolean {
+  return !l.ignorePrice && !l.noAi && !isHourlyUnit(l)
+}
+
+/** Сколько единиц (слайдов, страниц…) попадает под надбавку за нейросети. */
+export function orderAiUnits(o: Pick<Order, "lines">): number {
+  return (o.lines || []).reduce((s, l) => s + (lineTakesAi(l) ? parseNum(l.qty) : 0), 0)
+}
+
+/**
+ * Цена заказа по шагам — в том порядке, в каком она складывается:
+ *   позиции + нейросети (ставка × единицы) → + срочность (% от этой суммы)
+ *   → + налог (% от всего вместе).
+ * Все остальные функции (orderTotal, orderPreTaxTotal) берут цифры отсюда,
+ * чтобы форма, Финансы, акт и дашборд не разошлись.
+ */
+export function orderPriceBreakdown(o: PricedOrder) {
+  const base = orderBaseTotal(o)
+  const aiRate = Math.max(0, parseNum(o.aiRate))
+  const aiUnits = aiRate > 0 ? orderAiUnits(o) : 0
+  const ai = aiRate * aiUnits
+  const subtotal = base + ai
+  const urgencyPct = Math.max(0, parseNum(o.urgencyPct))
+  const urgency = subtotal * urgencyPct / 100
+  const preTax = subtotal + urgency
+  const taxRate = orderTaxRate(o)
+  const tax = preTax * taxRate
+  return { base, aiRate, aiUnits, ai, subtotal, urgencyPct, urgency, preTax, taxRate, tax, total: preTax + tax }
+}
+
+/** Цена без налога: позиции + нейросети + срочность. */
+export function orderPreTaxTotal(o: PricedOrder): number {
+  return orderPriceBreakdown(o).preTax
+}
+
+export function orderTotal(o: PricedOrder): number {
+  return orderPriceBreakdown(o).total
+}
+
+/** Надбавки заказа одной строкой — для акта и карточек: «нейросети +120 ₽, срочность +20%». */
+export function orderExtrasLabel(o: PricedOrder): string {
+  const p = orderPriceBreakdown(o)
+  const parts: string[] = []
+  if (p.ai > 0) parts.push(`нейросети ${parseNum(p.aiRate)} ₽ × ${p.aiUnits} = ${fmtMoney(p.ai)}`)
+  if (p.urgencyPct > 0) parts.push(`срочность +${p.urgencyPct}% (${fmtMoney(p.urgency)})`)
+  return parts.join("; ")
 }
 
 export function orderPayments(o: Pick<Order, "payments" | "paidAmount" | "paidAt" | "deadline">) {
@@ -161,7 +211,7 @@ export function orderPaymentState(o: Order) {
  * удалить в форме все платежи, и старая сумма воскреснет, а заказ покажется
  * оплаченным. Поэтому здесь платежи берутся строго из списка.
  */
-export function draftPaymentState(d: Pick<Order, "lines" | "taxType" | "advanceUsed" | "payments">) {
+export function draftPaymentState(d: PricedOrder & Pick<Order, "advanceUsed" | "payments">) {
   const paymentsTotal = (d.payments || []).reduce((s, p) => s + parseNum(p.amount), 0)
   return paymentBreakdown(orderTotal(d), d.advanceUsed, paymentsTotal)
 }

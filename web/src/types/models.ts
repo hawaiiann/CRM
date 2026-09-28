@@ -11,6 +11,8 @@ export interface OrderLine {
   rate: number
   ignorePrice: boolean
   ready: boolean
+  /** Позиция без надбавки за нейросети (см. Order.aiRate). По умолчанию надбавка идёт. */
+  noAi?: boolean
 }
 
 export interface Payment {
@@ -48,6 +50,13 @@ export interface Order {
   payments: Payment[]
   paidAmount: number
   taxType: TaxType
+  /**
+   * Надбавка за нейросети, ₽ за единицу (слайд, страница…). Умножается на
+   * количество штучных позиций, почасовые и «без оплаты» не в счёт.
+   */
+  aiRate: number
+  /** Доплата за срочность, % (0, 15, 20, 30). Считается от позиций + нейросетей, до налога. */
+  urgencyPct: number
   start: string
   deadline: string
   estimatedHours: string | number

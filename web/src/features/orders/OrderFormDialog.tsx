@@ -26,7 +26,7 @@ import { useAppStore } from "@/store/useAppStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder, applyHoursDelta } from "@/lib/cloudSync"
 import { actualHours } from "@/lib/activity"
 import { cn } from "@/lib/utils"
-import { parseNum, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderBaseTotal, orderTaxRate, draftPaymentState } from "@/lib/money"
+import { parseNum, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderTotal, orderPriceBreakdown, lineTakesAi, URGENCY_OPTIONS, draftPaymentState } from "@/lib/money"
 import { getClientAdvanceStats, clientAdvanceRows, orderUnallocatedAdvance, allocateGreedy } from "@/lib/advances"
 import { fmtDeadline } from "@/lib/dates"
 import { normalizePayment } from "@/lib/normalize"
@@ -78,6 +78,8 @@ function emptyDraft(defaults: { type: string; unit: string }): Order {
     payments: [],
     paidAmount: 0,
     taxType: "none",
+    aiRate: 0,
+    urgencyPct: 0,
     start: dateKey(new Date()),
     deadline: dateKey(addDays(new Date(), 7)),
     estimatedHours: "",
@@ -144,6 +146,9 @@ export function OrderFormDialog({
         deadline: dateKey(addDays(newStart, durationDays)),
         estimatedHours: o.estimatedHours,
         taxType: o.taxType,
+        // Ставка за нейросети — свойство работы, у следующего урока она та же.
+        // Срочность — свойство конкретного заказа, её не переносим.
+        aiRate: o.aiRate || 0,
         // Часы таймера у копии обнуляются: это время отработано по ОРИГИНАЛУ.
         // Раньше они копировались, и при сохранении копии вся сумма часов
         // записывалась в журнал как отработанная сегодня ещё раз.
@@ -171,7 +176,11 @@ export function OrderFormDialog({
     return opts
   }, [planningBoards])
 
-  const baseTotal = orderBaseTotal(draft)
+  // Цена по шагам: позиции → нейросети → срочность → налог (lib/money.ts).
+  const price = orderPriceBreakdown(draft)
+  // Позиции, на которые вообще может идти надбавка за нейросети: штучные и
+  // оплачиваемые. Отключённые (noAi) тоже здесь — их можно вернуть.
+  const aiLines = draft.lines.filter((l) => !l.ignorePrice && !isHourlyUnit(l) && (l.label || l.type))
 
   // Раньше здесь стояли выражения, повторяющие orderPaymentState — третья
   // копия одной формулы, которая уже начинала расходиться с остальными.
@@ -262,8 +271,7 @@ export function OrderFormDialog({
     if (!line) return
 
     const nextLines = draft.lines.filter((l) => l.id !== id)
-    const nextBase = nextLines.reduce((s, l) => s + calculateLineTotal(l), 0)
-    const nextFull = Math.round(nextBase * (1 + orderTaxRate(draft)))
+    const nextFull = Math.round(orderTotal({ ...draft, lines: nextLines }))
     const committed = parseNum(draft.advanceUsed) + paymentsTotal
     const newlyOrphaned = Math.round((Math.max(0, committed - nextFull) - pay.overpaid) * 100) / 100
 
@@ -723,24 +731,86 @@ export function OrderFormDialog({
 
               <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addLine}><Plus />Добавить позицию</Button>
 
-              <Field label="Налог для конечной цены" className="mt-3">
-                <Select value={draft.taxType} onValueChange={(v) => setDraft((d) => ({ ...d, taxType: v as TaxType }))}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Без налога</SelectItem>
-                    <SelectItem value="individual">Физ. лицо (+4%)</SelectItem>
-                    <SelectItem value="entity">Юр. лицо (+6%)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <div className="mt-3 flex justify-between text-sm font-bold">
-                <span className="text-muted-foreground">Сумма позиций:</span>
-                <span className="tabular-nums">{fmtMoney(baseTotal)}</span>
+              {/* Надбавки идут в том же порядке, в каком считаются: нейросети
+                  к позициям, срочность к этой сумме, налог ко всему. */}
+              <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-border bg-muted/60 p-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Нейросети, ₽ за единицу</div>
+                  <div className="flex items-center gap-2">
+                    <NumberInput
+                      value={draft.aiRate}
+                      onChange={(n) => setDraft((d) => ({ ...d, aiRate: Math.max(0, n) }))}
+                      placeholder="0"
+                      className="h-8 w-20"
+                    />
+                    <span className="min-w-0 text-xs text-muted-foreground">
+                      {price.aiRate > 0 ? <>× {price.aiUnits} ед. = <b className="text-foreground tabular-nums">{fmtMoney(price.ai)}</b></> : "за слайд, страницу…"}
+                    </span>
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Срочность</div>
+                  <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+                    {[0, ...URGENCY_OPTIONS].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setDraft((d) => ({ ...d, urgencyPct: p }))}
+                        className={cn(
+                          "h-7 rounded px-3 text-xs font-bold tabular-nums transition-colors",
+                          draft.urgencyPct === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {p ? `+${p}%` : "Нет"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* На какие позиции идёт надбавка: по умолчанию на все штучные.
+                    Клик убирает позицию из расчёта (например, видео без нейросетей). */}
+                {price.aiRate > 0 && aiLines.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+                    <span className="text-2xs font-bold text-muted-foreground">Считать с:</span>
+                    {aiLines.map((l) => {
+                      const on = lineTakesAi(l)
+                      return (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => updateLine(l.id, { noAi: on ? true : undefined })}
+                          title={on ? "Надбавка идёт — нажмите, чтобы убрать с этой позиции" : "Без надбавки — нажмите, чтобы вернуть"}
+                          className={cn(
+                            "rounded-md border px-2 py-0.5 text-xs font-bold transition-colors",
+                            on ? "border-border bg-background text-foreground" : "border-dashed border-border text-muted-foreground line-through"
+                          )}
+                        >
+                          {l.label || l.type} · {parseNum(l.qty)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <Field label="Налог" className="sm:col-span-2">
+                  <Select value={draft.taxType} onValueChange={(v) => setDraft((d) => ({ ...d, taxType: v as TaxType }))}>
+                    <SelectTrigger className="w-full bg-background"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Без налога</SelectItem>
+                      <SelectItem value="individual">Физ. лицо (+4%)</SelectItem>
+                      <SelectItem value="entity">Юр. лицо (+6%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
-              <div className="flex justify-between text-sm font-bold">
-                <span className="text-muted-foreground">Конечная цена (с учётом налога):</span>
-                <span className="tabular-nums">{fmtMoney(totalWithTax)}</span>
+
+              <div className="mt-3 flex flex-col gap-0.5 text-sm">
+                <PriceRow label="Сумма позиций" value={fmtMoney(price.base)} />
+                {price.ai > 0 && <PriceRow label={`Нейросети · ${fmtMoney(price.aiRate)} × ${price.aiUnits}`} value={`+${fmtMoney(price.ai)}`} />}
+                {price.urgency > 0 && <PriceRow label={`Срочность · +${price.urgencyPct}%`} value={`+${fmtMoney(price.urgency)}`} />}
+                {price.tax > 0 && <PriceRow label={`Налог · +${Math.round(price.taxRate * 100)}%`} value={`+${fmtMoney(price.tax)}`} />}
+                <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-bold">
+                  <span>Конечная цена</span>
+                  <span className="tabular-nums">{fmtMoney(totalWithTax)}</span>
+                </div>
               </div>
             </div>
 
@@ -771,6 +841,15 @@ function Field({ label, children, className }: { label: React.ReactNode; childre
     <div className={className}>
       <Label className="mb-1.5 block text-2xs font-bold tracking-wide text-muted-foreground uppercase">{label}</Label>
       {children}
+    </div>
+  )
+}
+
+function PriceRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-bold tabular-nums">{value}</span>
     </div>
   )
 }

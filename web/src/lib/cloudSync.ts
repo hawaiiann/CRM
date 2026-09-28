@@ -40,7 +40,7 @@ import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
 import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
 import { sameData } from "./stableJson"
-import { SCHEMA_ISSUE_ENTRY_ID } from "./cloudSchema"
+import { SCHEMA_ISSUE_ENTRY_ID, SCHEMA_ISSUE_ORDER_PRICING, ORDER_PRICING_COLUMNS } from "./cloudSchema"
 import { duplicateOrderGroups } from "./orderMerge"
 import { mergeUnsentLocal } from "./cloudMerge"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
@@ -60,6 +60,10 @@ function orderToRow(o: Order, userId: string): Row {
     payments: o.payments || [],
     paid_amount: orderPaymentsTotal(o),
     tax_type: o.taxType || "none", start_date: o.start || null, deadline: o.deadline || null,
+    // Колонки ai_rate и urgency_pct новые (v2.35.0). Пока их нет в базе, они
+    // отбрасываются (stripKnownMissingColumns), а значения держатся в кэше
+    // устройства (см. cloudLoadData).
+    ai_rate: parseNum(o.aiRate), urgency_pct: parseNum(o.urgencyPct),
     estimated_hours: String(o.estimatedHours ?? ""), actual_hours: String(o.actualHours ?? ""),
     lines: o.lines || [], notes: o.notes || "", created_at: o.createdAt || Date.now(),
     linked_lesson_id: o.linkedLessonId || null,
@@ -75,6 +79,7 @@ function rowToOrder(r: Row): Partial<Order> {
     payments: Array.isArray(r.payments) ? r.payments : [],
     paidAmount: r.paid_amount || 0,
     taxType: r.tax_type || "none", start: r.start_date || "", deadline: r.deadline || "",
+    aiRate: parseNum(r.ai_rate), urgencyPct: parseNum(r.urgency_pct),
     estimatedHours: r.estimated_hours ?? "", actualHours: r.actual_hours ?? "",
     lines: r.lines || [], notes: r.notes || "", createdAt: r.created_at || Date.now(),
     linkedLessonId: r.linked_lesson_id || null,
@@ -261,7 +266,22 @@ function noteMissingColumn(table: string, error: any): boolean {
   if (missingColumnsByTable[table].has(col)) return false
   missingColumnsByTable[table].add(col)
   console.warn(`В таблице "${table}" нет колонки "${col}" — она не будет сохраняться, пока не выполнен ALTER TABLE. Остальные поля синхронизируются как обычно.`)
+  if (table === "orders" && (ORDER_PRICING_COLUMNS as readonly string[]).includes(col)) noteOrderPricingMissing()
   return true
+}
+
+/**
+ * Нет колонок надбавок заказа (ai_rate, urgency_pct): отправляем заказы без
+ * них и показываем в сайдбаре SQL. Сами значения живут в кэше устройства
+ * (см. cloudLoadData), чтобы перезагрузка их не обнуляла.
+ */
+let orderPricingMissing = false
+function noteOrderPricingMissing() {
+  if (!missingColumnsByTable.orders) missingColumnsByTable.orders = new Set()
+  ORDER_PRICING_COLUMNS.forEach((c) => missingColumnsByTable.orders.add(c))
+  if (orderPricingMissing) return
+  orderPricingMissing = true
+  useAppStore.getState().setSchemaIssue(SCHEMA_ISSUE_ORDER_PRICING)
 }
 
 async function tryConditionalUpdate<T>(
@@ -564,9 +584,16 @@ export async function performCloudSync() {
     const ordersMap = diffById(useAppStore.getState().orders)
     const ordersToUpsert = collectionChanged(ordersMap, cloudSnapshot.orders)
     if (ordersToUpsert.length) {
+      // Без колонок надбавок строка из облака приходит без них — подставляем
+      // здешние, иначе сверка при конфликте считала бы их чужой правкой.
+      const orderFromRow = (row: Row) => {
+        const o = normalizeOrder(rowToOrder(row), useAppStore.getState().appSettings)
+        const cur = orderPricingMissing ? useAppStore.getState().orders.find((x) => x.id === o.id) : undefined
+        return cur ? { ...o, aiRate: cur.aiRate, urgencyPct: cur.urgencyPct } : o
+      }
       await upsertWithConflictCheck("orders", ordersToUpsert, (o) => orderToRow(o, userId), cloudSnapshot.orders, cloudSnapshot.updatedAt.orders, (row, id) => {
         if (row) {
-          const o = normalizeOrder(rowToOrder(row), useAppStore.getState().appSettings)
+          const o = orderFromRow(row)
           useAppStore.getState().setOrders((prev) => {
             const idx = prev.findIndex((x) => x.id === o.id)
             const next = idx >= 0 ? prev.map((x, i) => (i === idx ? o : x)) : [...prev, o]
@@ -578,7 +605,7 @@ export async function performCloudSync() {
           delete cloudSnapshot.orders[id]
         }
         resyncPlanning()
-      }, (row) => snapshotCopy(normalizeOrder(rowToOrder(row), useAppStore.getState().appSettings)))
+      }, (row) => snapshotCopy(orderFromRow(row)))
     }
 
     const tasksMap = diffById(useAppStore.getState().tasks)
@@ -955,6 +982,8 @@ export async function runSyncSelfCheck(): Promise<string[] | null> {
   // Схема базы: без entry_id журнал не умеет править и удалять свои строки.
   const entryProbe = await supabaseClient.from("activity_log").select("entry_id").limit(1)
   if (entryProbe.error && isMissingColumnError(entryProbe.error)) problems.push("База: нет колонки activity_log.entry_id — выполните SQL из сайдбара")
+  const pricingProbe = await supabaseClient.from("orders").select(ORDER_PRICING_COLUMNS.join(", ")).limit(1)
+  if (pricingProbe.error && isMissingColumnError(pricingProbe.error)) problems.push("База: нет колонок срочности и нейросетей у заказов — выполните SQL из сайдбара")
 
   // Дубли журнала: одинаковые день, заказ и часы. Поминутные строки старых
   // версий сюда тоже попадают — их убирает «Схлопнуть» в Журнале часов.
@@ -1069,6 +1098,22 @@ async function cloudLoadData() {
   const alive = (table: string) => (r: Row) => !isPendingDelete(table, r.id)
 
   const pulledOrdersRaw = (ordersRes.data || []).filter(alive("orders")).map(rowToOrder)
+  // Колонок надбавок ещё нет в базе: облако отдаёт заказы без них, и
+  // перезагрузка обнулила бы срочность и нейросети. Берём их из кэша этого
+  // устройства — и в память, и в снимок, чтобы заказ не считался изменённым.
+  const firstOrderRow = (ordersRes.data || [])[0] as Row | undefined
+  if (firstOrderRow && !ORDER_PRICING_COLUMNS.every((c) => c in firstOrderRow)) noteOrderPricingMissing()
+  if (orderPricingMissing) {
+    try {
+      const raw = readCached(STORAGE_KEY)
+      const cached = raw ? (JSON.parse(raw) as Partial<Order>[]) : []
+      const byId = new Map(cached.map((o) => [o.id, o]))
+      pulledOrdersRaw.forEach((o) => {
+        const c = o.id ? byId.get(o.id) : undefined
+        if (c) { o.aiRate = parseNum(c.aiRate); o.urgencyPct = parseNum(c.urgencyPct) }
+      })
+    } catch { /* кэша нет — надбавок тоже */ }
+  }
   const pulledTasks = (tasksRes.data || []).filter(alive("tasks")).map((r) => normalizeTask(rowToTask(r)))
   const pulledAdvances = (advRes.data || []).filter(alive("advances")).map((r) => normalizeAdvance(rowToAdvance(r)))
   const boards = (boardsRes.data || []).filter(alive("planning_boards")).map(rowToBoard)

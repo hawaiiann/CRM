@@ -1,5 +1,5 @@
 import type { Order, OrderLine } from "@/types/models"
-import { isHourlyUnit, orderPaymentState, ordersOfClient, orderTotal, parseNum } from "./money"
+import { isHourlyUnit, orderExtrasLabel, orderPaymentState, ordersOfClient, orderTotal, parseNum } from "./money"
 
 /**
  * Акт за месяц для заказчика: что сдано, из чего состоит, сколько стоит,
@@ -52,7 +52,9 @@ export function actRows(orders: Order[]): ActRow[] {
     subject: o.subject || "",
     grade: o.grade || "",
     deadline: o.deadline || "",
-    composition: (o.lines || []).map(lineLabel).join("; "),
+    // Надбавки (нейросети, срочность) — в конце состава: без них сумма в акте
+    // не сходилась бы с позициями.
+    composition: [...(o.lines || []).map(lineLabel), orderExtrasLabel(o)].filter(Boolean).join("; "),
     total: Math.round(orderTotal(o)),
   }))
 }

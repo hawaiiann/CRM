@@ -5,7 +5,7 @@ import type { Order } from "@/types/models"
 
 const order = (id: string, price: number, over: Partial<Order> = {}): Order => ({
   id, title: id, client: "Школа", subject: "", grade: "", quarter: "", lesson: "", status: "done",
-  isPaid: false, priority: false, advanceUsed: 0, advanceAllocations: [], payments: [], paidAmount: 0, taxType: "none", start: "", deadline: "2026-08-10",
+  isPaid: false, priority: false, advanceUsed: 0, advanceAllocations: [], payments: [], paidAmount: 0, taxType: "none", aiRate: 0, urgencyPct: 0, start: "", deadline: "2026-08-10",
   estimatedHours: "", actualHours: "", notes: "", createdAt: 0, linkedLessonId: null, paidAt: null,
   lines: [{ id: "l", label: "Презентация", type: "Слайд", qty: 1, pomoHours: 0, rate: price, ignorePrice: false, ready: true }],
   ...over,

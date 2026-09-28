@@ -6,7 +6,7 @@ import type { Order, PlanningBoard } from "@/types/models"
 
 const order = (over: Partial<Order>): Order => ({
   id: "o1", title: "", client: "", subject: "Математика", grade: "5 класс", quarter: "1", lesson: "3", status: "progress",
-  isPaid: false, priority: false, advanceUsed: 0, advanceAllocations: [], payments: [], paidAmount: 0, taxType: "none", start: "", deadline: "",
+  isPaid: false, priority: false, advanceUsed: 0, advanceAllocations: [], payments: [], paidAmount: 0, taxType: "none", aiRate: 0, urgencyPct: 0, start: "", deadline: "",
   estimatedHours: "", actualHours: "", notes: "", createdAt: 0, linkedLessonId: null, paidAt: null,
   lines: [{ id: "l1", label: "Презентация", type: "Слайд", qty: 1, pomoHours: 0, rate: 0, ignorePrice: false, ready: false }],
   ...over,

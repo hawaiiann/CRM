@@ -40,7 +40,10 @@ function fakeOrder(daysOffset: number, total: number, status: Order["status"] = 
     advanceAllocations: [],
     payments: status === "done" ? [{ id: "p" + daysOffset, amount: total, date: deadline, note: "" }] : [],
     paidAmount: status === "done" ? total : 0,
-    taxType: "none",
+    taxType: daysOffset === 0 ? "individual" : "none",
+    // Один заказ с надбавками — чтобы в стенде было видно форму и карточку.
+    aiRate: daysOffset === 0 ? 5 : 0,
+    urgencyPct: daysOffset === 0 ? 20 : 0,
     start,
     deadline,
     estimatedHours: "6",

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import type { Order } from "@/types/models"
-import { fmtMoney, calculateLineTotal, orderPaymentState, isHourlyUnit, pluralizeRu } from "@/lib/money"
+import { fmtMoney, calculateLineTotal, orderPaymentState, orderPriceBreakdown, isHourlyUnit, pluralizeRu } from "@/lib/money"
 import { fmtDateRangeCompact, fmtDeadline } from "@/lib/dates"
 import { useAppStore } from "@/store/useAppStore"
 import { findLessonForOrder } from "@/lib/planningSync"
@@ -27,6 +27,7 @@ export function OrderDetailsSheet({
   onEdit: (order: Order) => void
 }) {
   const pay = order ? orderPaymentState(order) : null
+  const price = order ? orderPriceBreakdown(order) : null
 
   // Связь с уроком была видна только из планирования: отсюда нельзя было ни
   // узнать, что заказ вообще чем-то управляет, ни сверить состав.
@@ -119,6 +120,29 @@ export function OrderDetailsSheet({
                     ))}
                   </div>
                 )}
+                {/* Надбавки и налог — чтобы строки складывались в стоимость ниже. */}
+                {price && (price.ai > 0 || price.urgency > 0 || price.tax > 0) && (
+                  <div className="mt-2 flex flex-col gap-1 rounded-xl border border-dashed border-border px-3.5 py-2.5 text-xs">
+                    {price.ai > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Нейросети · {fmtMoney(price.aiRate)} × {price.aiUnits}</span>
+                        <b className="font-bold tabular-nums">+{fmtMoney(price.ai)}</b>
+                      </div>
+                    )}
+                    {price.urgency > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Срочность · +{price.urgencyPct}%</span>
+                        <b className="font-bold tabular-nums">+{fmtMoney(price.urgency)}</b>
+                      </div>
+                    )}
+                    {price.tax > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Налог · +{Math.round(price.taxRate * 100)}%</span>
+                        <b className="font-bold tabular-nums">+{fmtMoney(price.tax)}</b>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Урок в планировании: куда уходят позиции этого заказа и что
@@ -181,7 +205,7 @@ export function OrderDetailsSheet({
 
               <div className="rounded-2xl bg-muted px-4 py-3.5">
                 <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">
-                  Сумма позиций
+                  {price && price.total !== price.base ? "Стоимость заказа" : "Сумма позиций"}
                 </div>
                 <div className="font-heading mt-1 text-2xl font-bold">{fmtMoney(pay.full)}</div>
                 <div className="mt-2.5 flex justify-between border-t border-dashed border-border pt-2.5 text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 import type { Order, Advance, ActivityLogEntry, DashboardMetric } from "@/types/models"
-import { parseNum, dateKey, addDays, orderBaseTotal, orderPayments, orderPaymentState } from "./money"
+import { parseNum, dateKey, addDays, orderPreTaxTotal, orderPayments, orderPaymentState } from "./money"
 
 /* Ported from js/app.js */
 export interface MetricTypeInfo {
@@ -74,7 +74,7 @@ export interface RevenueEvent { date: string; orderId: string; revenue: number; 
 export function revenueEventsForOrder(o: Order, advances: Advance[]): RevenueEvent[] {
   const events: RevenueEvent[] = []
   const { full, fullExact, advUsed } = orderPaymentState(o)
-  const base = orderBaseTotal(o)
+  const base = orderPreTaxTotal(o)
   if (full <= 0) return events
 
   const netRatio = fullExact > 0 ? base / fullExact : 0
@@ -136,7 +136,7 @@ function countEvents(orders: Order[]) {
 // Recognized revenue for a single order "right now" — advance + money received,
 // capped at the order's full price. Same rule as orderRecognizedRevenue in utils.js.
 export function orderRecognizedRevenue(o: Order): { revenue: number; net: number } {
-  const base = orderBaseTotal(o)
+  const base = orderPreTaxTotal(o)
   // Покрытие считает orderPaymentState — здесь лежала ещё одна копия той же
   // формулы (аванс, потом деньги, с обрезкой по стоимости заказа), и выручка
   // на дашборде разошлась бы с «к доплате» на Заказах при первой же правке.

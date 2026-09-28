@@ -40,6 +40,9 @@ export function normalizeOrderLine(l: Partial<OrderLine>, defaults: { type: stri
     rate: l.rate ?? 0,
     ignorePrice: !!l.ignorePrice,
     ready: !!l.ready,
+    // Только если отключено: у старых позиций поля нет, и лишний ключ сделал
+    // бы каждую позицию «изменённой» при сравнении со снимком облака.
+    ...(l.noAi ? { noAi: true } : {}),
   }
 }
 
@@ -62,6 +65,8 @@ export function normalizeOrder(o: Partial<Order> & { class?: string }, settings:
     payments: (o.payments && Array.isArray(o.payments) ? o.payments : []).map(normalizePayment),
     paidAmount: parseNum(o.paidAmount),
     taxType: o.taxType || "none",
+    aiRate: Math.max(0, parseNum(o.aiRate)),
+    urgencyPct: Math.max(0, parseNum(o.urgencyPct)),
     start: o.start || dateKey(new Date()),
     deadline: o.deadline || dateKey(addDays(new Date(), 7)),
     estimatedHours: o.estimatedHours ?? "",
