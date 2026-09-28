@@ -30,8 +30,14 @@ export function AccountSwitcher() {
   async function switchToAccount(userId: string) {
     const acc = known[userId]
     if (!acc) return
+    const { data: current } = await supabaseClient.auth.getSession()
     const { error } = await supabaseClient.auth.setSession({ access_token: acc.access_token, refresh_token: acc.refresh_token })
     if (error) {
+      // Неудачная попытка может выбросить и ТЕКУЩУЮ сессию: auth-js удаляет
+      // её, если сохранённый токен другого аккаунта уже отозван. Возвращаем.
+      if (current.session) {
+        await supabaseClient.auth.setSession({ access_token: current.session.access_token, refresh_token: current.session.refresh_token })
+      }
       await alertDialog({
         title: "Сессия аккаунта истекла",
         body: 'Переключиться не удалось. Войдите в этот аккаунт заново через «Войти под другим аккаунтом» — он убран из списка сохранённых.',
@@ -79,7 +85,10 @@ export function AccountSwitcher() {
           {mode === "dark" ? <Sun /> : <Moon />}
           {mode === "dark" ? "Светлая тема" : "Тёмная тема"}
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onClick={() => supabaseClient.auth.signOut().then(() => window.location.reload())}>
+        {/* scope "local": выйти только здесь. По умолчанию signOut глобальный и
+            через час выбивал этот аккаунт на всех устройствах — а там
+            приложение продолжало работать уже без входа. */}
+        <DropdownMenuItem variant="destructive" onClick={() => supabaseClient.auth.signOut({ scope: "local" }).then(() => window.location.reload())}>
           <LogOut />
           Выйти
         </DropdownMenuItem>

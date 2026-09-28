@@ -146,14 +146,31 @@ export async function selectBackupDirectory(): Promise<string | null> {
 // Насколько «похудел» бэкап по сравнению с уже лежащим за сегодня. Если данных
 // стало заметно меньше — это подозрительно (ровно так выглядела потеря журнала
 // 20.08.2026), и затирать целый файл усохшим нельзя.
+//
+// Журнал сравнивается по сумме часов, а не по числу строк: «Схлопнуть» в
+// Журнале часов законно превращает 458 строк в 44 с теми же часами, и раньше
+// после этого каждое сохранение до конца дня писало новый «ВНИМАНИЕ»-файл.
 function looksLikeDataLoss(prev: any, next: any): string | null {
-  const pairs: [string, string][] = [["orders", "заказы"], ["advances", "авансы"], ["tasks", "задачи"], ["activityLog", "журнал"]]
+  const pairs: [string, string][] = [["orders", "заказы"], ["advances", "авансы"], ["tasks", "задачи"]]
   for (const [key, label] of pairs) {
     const a = Array.isArray(prev?.[key]) ? prev[key].length : 0
     const b = Array.isArray(next?.[key]) ? next[key].length : 0
     if (a >= 5 && b < a * 0.7) return `${label}: было ${a}, стало ${b}`
   }
+  const hours = (d: any) => (Array.isArray(d?.activityLog) ? d.activityLog : []).reduce((sum: number, e: any) => sum + (e?.field === "hours" ? Number(e.delta) || 0 : 0), 0)
+  const ha = hours(prev), hb = hours(next)
+  if (ha >= 5 && hb < ha * 0.7) return `журнал: было ${Math.round(ha)} ч, стало ${Math.round(hb)} ч`
   return null
+}
+
+/**
+ * Файл «данных стало меньше» — один на день и аккаунт, перезаписывается.
+ * Прежний дневной файл при этом остаётся нетронутым (он и есть «до»), а
+ * раньше каждое сохранение создавало новый файл с минутами в имени — десятки
+ * за день.
+ */
+function shrinkFileName(slug: string): string {
+  return `crm-${slug}-${dayKey()}-ВНИМАНИЕ-данных-меньше.json`
 }
 
 async function writeBackupFile(dir: FileSystemDirectoryHandle, name: string, jsonStr: string) {
@@ -190,7 +207,7 @@ async function pruneOldBackups(dir: FileSystemDirectoryHandle) {
     for await (const entry of (dir as any).values()) {
       if (entry.kind !== "file") continue
       if (entry.name.startsWith("crm-backup-")) continue // ручная выгрузка — не наша
-      const m = /^crm-(.+)-(\d{4}-\d{2}-\d{2})\.json$/.exec(entry.name)
+      const m = /^crm-(.+)-(\d{4}-\d{2}-\d{2})(-облако)?\.json$/.exec(entry.name)
       if (!m) continue // с суффиксом (в т.ч. «ВНИМАНИЕ») — не трогаем никогда
       if (m[2] < cutoffKey) {
         try { await (dir as any).removeEntry(entry.name) } catch { /* файл занят — не беда */ }
@@ -259,8 +276,7 @@ export async function triggerDiskBackup(): Promise<{ savedToDisk: boolean }> {
         const prev = await readBackupFile(directoryHandle, todayName)
         const shrink = prev ? looksLikeDataLoss(prev, backupData) : null
         if (shrink) {
-          const stamp = new Date().toTimeString().slice(0, 5).replace(":", "-")
-          await writeBackupFile(directoryHandle, `crm-${slug}-${dayKey()}-ВНИМАНИЕ-данных-меньше-${stamp}.json`, jsonStr)
+          await writeBackupFile(directoryHandle, shrinkFileName(slug), jsonStr)
           console.warn(`Бэкап не перезаписан: данных стало меньше (${shrink}). Прежний файл сохранён.`)
         } else {
           await writeBackupFile(directoryHandle, todayName, jsonStr)
@@ -322,7 +338,10 @@ async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
     if (userId === currentId) continue
     if (excluded.has(userId)) continue // отключён в настройках (напр. тестовый аккаунт)
     const slug = accountSlug(acc.email, userId)
-    const name = `crm-${slug}-${dayKey()}.json`
+    // Своё имя, не такое, как у бэкапа, который пишет сам аккаунт: раньше
+    // имя совпадало, и неполная облачная копия (без уроков и настроек)
+    // затирала полный дневной файл того аккаунта в общей папке.
+    const name = `crm-${slug}-${dayKey()}-облако.json`
 
     // ЗДЕСЬ НЕЛЬЗЯ ОБНОВЛЯТЬ ТОКЕН. Раньше по 401 вызывался refresh_token, и это
     // было опасно: refresh_token одноразовый и общий с сессией самого владельца
@@ -335,25 +354,34 @@ async function backupOtherAccounts(dir: FileSystemDirectoryHandle) {
     // так что чужой аккаунт снимется, если в него недавно заходили на этой
     // машине, а если нет — молча пропустится. Пропущенный бэкап чужого аккаунта
     // не страшен: свой у каждой машины снимается всегда.
-    const grab = async (table: string): Promise<any> => {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
-        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token },
-      })
-      if (r.status === 401) throw new Error("токен устарел — аккаунт пропущен (сессию владельца не трогаем)")
-      if (!r.ok) throw new Error(`${table}: HTTP ${r.status}`)
-      return r.json()
+    // Постранично: PostgREST отдаёт не больше 1000 строк за запрос.
+    const grab = async (table: string, orderCol = "id"): Promise<any[]> => {
+      const out: any[] = []
+      for (let page = 0; page < 1000; page++) {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=${orderCol}&limit=1000&offset=${out.length}`, {
+          headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + acc.access_token, Prefer: "count=exact" },
+        })
+        if (r.status === 401) throw new Error("токен устарел — аккаунт пропущен (сессию владельца не трогаем)")
+        if (!r.ok) throw new Error(`${table}: HTTP ${r.status}`)
+        const rows = await r.json()
+        out.push(...rows)
+        const total = Number((r.headers.get("content-range") || "").split("/")[1])
+        if (!rows.length || (Number.isFinite(total) ? out.length >= total : rows.length < 1000)) break
+      }
+      return out
     }
     try {
-      const [orders, tasks, advances, activityLog, planning] = await Promise.all([
-        grab("orders"), grab("tasks"), grab("advances"), grab("activity_log"), grab("planning_boards"),
+      const [orders, tasks, advances, activityLog, planning, planningLessons, settingsRows] = await Promise.all([
+        grab("orders"), grab("tasks"), grab("advances"), grab("activity_log"), grab("planning_boards"), grab("planning_lessons"), grab("app_settings", "user_id"),
       ])
-      const data = { orders, tasks, advances, activityLog, planning, account: acc.email || userId, timestamp: Date.now(), raw: true }
+      // raw: строки таблиц как есть (snake_case). Восстанавливать из такого
+      // файла через «Импорт» нельзя — он это проверяет.
+      const data = { orders, tasks, advances, activityLog, planning, planningLessons, settings: settingsRows[0]?.data ?? null, account: acc.email || userId, timestamp: Date.now(), raw: true }
       const prev = await readBackupFile(dir, name)
       const shrink = prev ? looksLikeDataLoss(prev, data) : null
       const json = JSON.stringify(data, null, 2)
       if (shrink) {
-        const stamp = new Date().toTimeString().slice(0, 5).replace(":", "-")
-        await writeBackupFile(dir, `crm-${slug}-${dayKey()}-ВНИМАНИЕ-данных-меньше-${stamp}.json`, json)
+        await writeBackupFile(dir, shrinkFileName(slug + "-облако"), json)
       } else {
         await writeBackupFile(dir, name, json)
       }

@@ -23,10 +23,11 @@ import {
 } from "@/components/ui/select"
 import { getVisibleCatalog, catalogWithCurrent } from "@/lib/catalog"
 import { useAppStore } from "@/store/useAppStore"
+import { useTimerStore } from "@/store/useTimerStore"
 import { saveData, deleteFromCloud, deleteActivityLogForOrder, applyHoursDelta } from "@/lib/cloudSync"
 import { actualHours } from "@/lib/activity"
 import { cn } from "@/lib/utils"
-import { parseNum, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderTotal, orderPriceBreakdown, lineTakesAi, URGENCY_OPTIONS, draftPaymentState } from "@/lib/money"
+import { parseNum, parseHours, fmtMoney, fmtHours, dateKey, addDays, calculateLineTotal, isHourlyUnit, orderTotal, orderPriceBreakdown, lineTakesAi, URGENCY_OPTIONS, draftPaymentState } from "@/lib/money"
 import { getClientAdvanceStats, clientAdvanceRows, orderUnallocatedAdvance, allocateGreedy } from "@/lib/advances"
 import { fmtDeadline } from "@/lib/dates"
 import { normalizePayment } from "@/lib/normalize"
@@ -375,6 +376,33 @@ export function OrderFormDialog({
       notes: draft.notes.trim(),
       createdAt: editingOrder ? editingOrder.createdAt : Date.now(),
     }
+
+    // Разница часов, набранная руками в форме, — до того, как добавим время
+    // таймера: его он уже записал в журнал сам.
+    const delta = Math.round((actualHours(finalOrder) - (editingOrder ? actualHours(editingOrder) : 0)) * 10000) / 10000
+
+    // Время, которое таймер записал, пока форма была открыта. Черновик снят
+    // при открытии и об этом времени не знает: раньше сохранение возвращало
+    // часы позиций к прежним (у почасовых — и цену), а в журнале эти минуты
+    // оставались.
+    if (editingOrder) {
+      const stored = useAppStore.getState().orders.find((o) => o.id === editingOrder.id)
+      if (stored) {
+        const round4 = (n: number) => Math.round(n * 10000) / 10000
+        const openedHours = new Map(editingOrder.lines.map((l) => [l.id, parseHours(l.pomoHours)]))
+        finalOrder.lines = finalOrder.lines.map((l) => {
+          const now = stored.lines.find((x) => x.id === l.id)
+          const was = openedHours.get(l.id)
+          if (!now || was === undefined) return l
+          const timerAdded = parseHours(now.pomoHours) - was
+          return timerAdded > 1e-6 ? { ...l, pomoHours: round4(parseHours(l.pomoHours) + timerAdded) } : l
+        })
+        // Заказ без позиций: таймер пишет в «Факт. часы».
+        const factAdded = parseNum(stored.actualHours) - parseNum(editingOrder.actualHours)
+        if (!editingOrder.lines.length && factAdded > 1e-6) finalOrder.actualHours = String(round4(parseNum(finalOrder.actualHours) + factAdded))
+      }
+    }
+
     // Считаем по УЖЕ ОЧИЩЕННЫМ позициям и платежам, а не по черновику: пустые
     // строки и нулевые платежи из формы в заказ не идут.
     // paidAmount — сырая сумма платежей, без обрезки по стоимости заказа:
@@ -389,8 +417,6 @@ export function OrderFormDialog({
       return idx >= 0 ? prev.map((o, i) => (i === idx ? finalOrder : o)) : [...prev, finalOrder]
     })
 
-    // Считаем по уже очищенным позициям — то же, что уйдёт в заказ.
-    const delta = Math.round((actualHours(finalOrder) - (editingOrder ? actualHours(editingOrder) : 0)) * 10000) / 10000
     if (delta && !journalSkip) applyHoursDelta(finalOrder.id, journalDate || dateKey(new Date()), delta)
 
     saveData()
@@ -401,6 +427,7 @@ export function OrderFormDialog({
     if (!editingOrder) return
     const id = editingOrder.id
     setOrders((prev) => prev.filter((o) => o.id !== id))
+    useTimerStore.getState().orderRemoved(id)
     deleteFromCloud("orders", id)
     if (wipeStats) {
       setActivityLog((prev) => prev.filter((e) => e.orderId !== id))

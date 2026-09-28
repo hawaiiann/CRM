@@ -71,21 +71,11 @@ export function normalizeOrder(o: Partial<Order> & { class?: string }, settings:
     deadline: o.deadline || dateKey(addDays(new Date(), 7)),
     estimatedHours: o.estimatedHours ?? "",
     actualHours: o.actualHours ?? "",
-    lines:
-      o.lines && o.lines.length
-        ? o.lines.map((l) => normalizeOrderLine(l, { type: defaultType, unit: defaultUnit }))
-        : [
-            {
-              id: "l0",
-              label: defaultType,
-              type: defaultUnit,
-              qty: 10,
-              pomoHours: 0,
-              rate: 500,
-              ignorePrice: false,
-              ready: false,
-            },
-          ],
+    // Пустой состав — это пустой состав. Раньше сюда подставлялась позиция
+    // «Презентация, 10 × 500 ₽»: заказ, сохранённый без позиций, после каждой
+    // загрузки стоил 5000 ₽ и висел долгом. Позицию по умолчанию даёт форма
+    // нового заказа, а не нормализация.
+    lines: (Array.isArray(o.lines) ? o.lines : []).map((l) => normalizeOrderLine(l, { type: defaultType, unit: defaultUnit })),
     notes: o.notes || "",
     createdAt: o.createdAt || Date.now(),
     linkedLessonId: o.linkedLessonId || null,
@@ -162,10 +152,14 @@ export function applySettingsMigrations(parsed: Partial<AppSettings> | null | un
   return merged
 }
 
+// Демо-доски нового аккаунта. Идентификаторы случайные: раньше обе доски
+// нумеровали уроки одинаково ("l_1"…"l_24"), а в облаке урок — строка с
+// уникальным id, и уроки первой доски затирались уроками второй.
 export function defaultPlanningBoards(): PlanningBoard[] {
+  const lessonId = () => "l_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)
   return [
     {
-      id: "pb_1",
+      id: randId("pb_"),
       subject: "Математика",
       title: "5 класс",
       quarter: "1 четверть",
@@ -174,7 +168,7 @@ export function defaultPlanningBoards(): PlanningBoard[] {
       collapsed: false,
       archived: false,
       lessons: Array.from({ length: 24 }, (_, i) => ({
-        id: "l_" + (i + 1),
+        id: lessonId(),
         num: i + 1,
         title: `Урок ${i + 1}`,
         color: "gray",
@@ -188,7 +182,7 @@ export function defaultPlanningBoards(): PlanningBoard[] {
       })),
     },
     {
-      id: "pb_2",
+      id: randId("pb_"),
       subject: "Русский язык",
       title: "6 класс",
       quarter: "1 четверть",
@@ -197,7 +191,7 @@ export function defaultPlanningBoards(): PlanningBoard[] {
       collapsed: false,
       archived: false,
       lessons: Array.from({ length: 24 }, (_, i) => ({
-        id: "l_" + (i + 1),
+        id: lessonId(),
         num: i + 1,
         title: `Урок ${i + 1}`,
         color: "gray",

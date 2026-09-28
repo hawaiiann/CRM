@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest"
-import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog, groupByDayOrder } from "../journal"
+import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog, groupByDayOrder, scaleJournalToOrders } from "../journal"
 import type { ActivityLogEntry } from "@/types/models"
 
 const e = (date: string, orderId: string, delta: number, entryId?: string): ActivityLogEntry => ({ date, orderId, field: "hours", delta, entryId })
@@ -92,5 +92,31 @@ describe("compactLog", () => {
     expect(r.removed).toHaveLength(41)
     expect(compactLog(r.log).log).toBe(r.log)
     expect(groupByDayOrder(legacy).size).toBe(3)
+  })
+})
+
+describe("scaleJournalToOrders", () => {
+  const e = (orderId: string, date: string, delta: number): ActivityLogEntry => ({ orderId, date, field: "hours", delta, entryId: orderId + date })
+
+  test("раскладка по дням сохраняется, сумма = часы заказа", () => {
+    // Журнал размножен в 14 раз: 2 ч + 1,5 ч на заказе → 28 + 21 в журнале
+    const log = [e("a", "2026-08-01", 28), e("a", "2026-08-02", 21), e("b", "2026-08-03", 3)]
+    const r = scaleJournalToOrders(log, new Map([["a", 3.5], ["b", 3]]))
+    expect(r.log.map((x) => x.delta)).toEqual([2, 1.5, 3])
+    expect(r.orders).toEqual([{ orderId: "a", before: 49, after: 3.5 }])
+    expect(r.removed).toEqual([])
+  })
+
+  test("небольшое расхождение и неизвестные заказы не трогает", () => {
+    const log = [e("a", "2026-08-01", 4), e("gone", "2026-08-01", 9)]
+    const r = scaleJournalToOrders(log, new Map([["a", 3]]))
+    expect(r.log).toBe(log)
+    expect(r.orders).toEqual([])
+  })
+
+  test("исправления со знаком минус масштабируются вместе с остальными", () => {
+    const log = [e("a", "2026-08-01", 30), e("a", "2026-08-02", -2)]
+    const r = scaleJournalToOrders(log, new Map([["a", 2]]))
+    expect(r.log.reduce((s, x) => s + x.delta, 0)).toBeCloseTo(2)
   })
 })

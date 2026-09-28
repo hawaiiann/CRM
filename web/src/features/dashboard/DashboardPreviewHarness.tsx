@@ -115,6 +115,10 @@ function fakeActivityLog(orders: Order[]): ActivityLogEntry[] {
   log.push({ date: day(2), orderId: orders[1].id, field: "hours", delta: 2.5, entryId: "p3" })
   log.push({ date: day(3), orderId: orders[2].id, field: "hours", delta: 4, entryId: "p4" })
   log.push({ date: day(5), orderId: "deleted_order", field: "hours", delta: 1.25, entryId: "p5" })
+  // Журнал, размноженный в 14 раз (как после сбоев синхронизации): на заказе
+  // 5 ч, в журнале 70 — для проверки «Привести к заказам».
+  log.push({ date: day(9), orderId: orders[5].id, field: "hours", delta: 42, entryId: "x1" })
+  log.push({ date: day(8), orderId: orders[5].id, field: "hours", delta: 28, entryId: "x2" })
   return log
 }
 

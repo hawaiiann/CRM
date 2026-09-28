@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { Trash2, Plus, ArrowLeftRight, Layers } from "lucide-react"
+import { Trash2, Plus, ArrowLeftRight, Layers, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -20,8 +20,10 @@ import {
   setJournalDayHours,
   deleteActivityLogEntries,
   compactJournal,
+  rescaleJournalToOrders,
   saveData,
 } from "@/lib/cloudSync"
+import { triggerDiskBackup } from "@/lib/diskBackup"
 import { confirmDialog, alertDialog } from "@/store/useDialogStore"
 import { cn } from "@/lib/utils"
 import type { ActivityLogEntry, Order } from "@/types/models"
@@ -42,6 +44,8 @@ function orderTitle(o: Order | undefined, id: string): string {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
+/** Во сколько раз журнал должен превышать часы заказа, чтобы считаться размноженным. */
+const INFLATED_RATIO = 1.5
 
 export function TimeJournalTab() {
   const orders = useAppStore((s) => s.orders)
@@ -101,7 +105,11 @@ export function TimeJournalTab() {
       .filter((r) => r.inOrder || r.inJournal)
       .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
     const mismatched = list.filter((r) => Math.abs(r.diff) >= 0.01)
-    return { list, mismatched }
+    // Журнал в разы больше часов заказа — не опечатка, а размножение записей
+    // при старых сбоях синхронизации (в 2, 3, 7, 14 раз). Такие заказы
+    // чинятся разом, с сохранением раскладки по дням.
+    const inflated = list.filter((r) => r.order && r.inOrder > 0 && r.inJournal / r.inOrder >= INFLATED_RATIO)
+    return { list, mismatched, inflated }
   }, [activityLog, orders, ordersById])
 
   const orderOptions = useMemo(
@@ -148,6 +156,27 @@ export function TimeJournalTab() {
     const n = compactJournal()
     saveData()
     await alertDialog({ title: "Готово", body: `Убрано лишних строк: ${n}. Суммы по дням прежние.` })
+  }
+
+  async function fixInflated() {
+    const list = reconcile.inflated
+    const before = round2(list.reduce((s, r) => s + r.inJournal, 0))
+    const after = round2(list.reduce((s, r) => s + r.inOrder, 0))
+    const ok = await confirmDialog({
+      title: "Привести журнал к часам заказов?",
+      bullets: [
+        `Заказов: ${list.length}. В журнале по ним ${fmtHours(before)}, на самих заказах — ${fmtHours(after)}.`,
+        "Записи каждого заказа уменьшатся в одно и то же число раз: раскладка по дням сохранится, сумма станет равной часам заказа.",
+        "Перед этим запишется бэкап на диск (если папка подключена). Заказы с небольшим расхождением не трогаются.",
+      ],
+      confirmLabel: "Привести",
+    })
+    if (!ok) return
+    try { await triggerDiskBackup() } catch (e) { console.warn("Бэкап перед правкой журнала не записан:", e) }
+    const targets = new Map(list.map((r) => [r.id, r.inOrder]))
+    const done = rescaleJournalToOrders(targets)
+    saveData()
+    await alertDialog({ title: "Готово", body: `Пересчитано заказов: ${done.length}. В журнале по ним теперь ${fmtHours(round2(done.reduce((s, x) => s + x.after, 0)))}.` })
   }
 
   async function journalToOrder(r: (typeof reconcile.list)[number]) {
@@ -303,6 +332,19 @@ export function TimeJournalTab() {
             <Input type="date" value={fixDate} onChange={(e) => setFixDate(e.target.value)} className="h-8 w-auto" />
           </div>
         </div>
+
+        {reconcile.inflated.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-notice px-3.5 py-3 text-notice-foreground">
+            <div className="min-w-0 text-xs">
+              <b className="font-bold">Журнал завышен по {reconcile.inflated.length} {reconcile.inflated.length === 1 ? "заказу" : "заказам"}.</b>{" "}
+              В журнале {fmtHours(round2(reconcile.inflated.reduce((s, r) => s + r.inJournal, 0)))}, а на самих заказах{" "}
+              {fmtHours(round2(reconcile.inflated.reduce((s, r) => s + r.inOrder, 0)))}: записи размножились при старых сбоях синхронизации.
+            </div>
+            <Button size="sm" variant="outline" className="shrink-0 bg-background" onClick={fixInflated}>
+              <Wrench />Привести к заказам
+            </Button>
+          </div>
+        )}
 
         {reconcile.mismatched.length === 0 ? (
           <div className="py-4 text-sm text-muted-foreground">Расхождений нет — журнал сходится с заказами.</div>

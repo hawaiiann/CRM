@@ -103,6 +103,18 @@ export function BackupSettings() {
       return
     }
 
+    // Облачная копия другого аккаунта: строки таблиц как есть (snake_case),
+    // доски без уроков. Раньше она принималась как обычный бэкап, и «Заменить
+    // всё» удаляло из облака все уроки и весь журнал, а заказы теряли оплату,
+    // налог и аванс.
+    if (parsed.raw) {
+      await alertDialog({
+        title: "Это облачная копия, а не бэкап приложения",
+        body: "Такой файл пишется с другого устройства для страховки и в другом формате. Для восстановления возьмите файл, записанный самим аккаунтом: crm-<аккаунт>-<дата>.json без «облако» в имени. Данные в приложении не тронуты.",
+      })
+      return
+    }
+
     const settings = parsed.settings ? applySettingsMigrations({ ...appSettings, ...parsed.settings }) : appSettings
     const fileOrders = Array.isArray(parsed.orders) ? (parsed.orders as Partial<Order>[]).map((o) => normalizeOrder(o, settings)) : null
     const fileTasks = Array.isArray(parsed.tasks) ? (parsed.tasks as Partial<Task>[]).map(normalizeTask) : null

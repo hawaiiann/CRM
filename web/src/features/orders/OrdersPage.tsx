@@ -36,6 +36,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/store/useAppStore"
+import { useTimerStore } from "@/store/useTimerStore"
 import { saveData, deleteFromCloud, reassignJournalOrder } from "@/lib/cloudSync"
 import { mergeOrders, duplicateOrderGroups } from "@/lib/orderMerge"
 import { isLessonEmpty } from "@/lib/planningStats"
@@ -424,10 +425,18 @@ export function OrdersPage() {
       confirmLabel: "Объединить",
     })
     if (!ok) return
-    const merged = rest.reduce((acc, o) => mergeOrders(acc, o), primary)
-    const gone = new Set(rest.map((o) => o.id))
+    // Заказы — свежие, из хранилища, а не те, что были до вопроса: пока окно
+    // было открыто, таймер мог дописать время, и слияние затёрло бы его.
+    const current = useAppStore.getState().orders
+    const fresh = group.map((g) => current.find((o) => o.id === g.id)).filter((o): o is Order => !!o)
+    if (fresh.length < 2) return
+    const [freshPrimary, ...freshRest] = fresh
+    const merged = freshRest.reduce((acc, o) => mergeOrders(acc, o), freshPrimary)
+    const gone = new Set(freshRest.map((o) => o.id))
     setOrders((prev) => prev.filter((o) => !gone.has(o.id)).map((o) => (o.id === merged.id ? merged : o)))
-    for (const o of rest) {
+    for (const o of freshRest) {
+      // Таймер шёл по дублю — переводим его на оставшийся заказ.
+      useTimerStore.getState().orderRemoved(o.id, merged.id, merged.title)
       await reassignJournalOrder(o.id, merged.id)
       deleteFromCloud("orders", o.id)
     }

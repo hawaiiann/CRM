@@ -20,7 +20,7 @@ import {
   applySettingsMigrations,
   defaultPlanningBoards,
 } from "./normalize"
-import { orderPaymentsTotal, parseNum, dateKey } from "./money"
+import { orderPaymentsTotal, orderTotal, parseNum, dateKey } from "./money"
 import { syncPlanningWithOrders } from "./planningSync"
 import { scheduleDiskBackup } from "./diskBackup"
 import {
@@ -38,11 +38,11 @@ import { rememberDelete, forgetDelete, isPendingDelete, pendingDeleteEntries, se
 import { useToastStore } from "@/store/useToastStore"
 import { actualHours } from "./activity"
 import { wasAccountSeeded, markAccountSeeded } from "./activitySeed"
-import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog } from "./journal"
+import { mergeHoursEntry, setEntryDelta, setDayHours, compactLog, makeEntryId, scaleJournalToOrders } from "./journal"
 import { sameData } from "./stableJson"
 import { SCHEMA_ISSUE_ENTRY_ID, SCHEMA_ISSUE_ORDER_PRICING, ORDER_PRICING_COLUMNS } from "./cloudSchema"
 import { duplicateOrderGroups } from "./orderMerge"
-import { mergeUnsentLocal } from "./cloudMerge"
+import { mergeUnsentLocal, mergeFields } from "./cloudMerge"
 import type { Order, Task, Advance, PlanningBoard, PlanningLesson, ActivityLogEntry, AppSettings } from "@/types/models"
 
 type Row = Record<string, any>
@@ -138,7 +138,7 @@ interface CloudSnapshot {
   // Что именно облако знает по каждой записи журнала (число часов и день).
   // Запись дня теперь ПРАВИТСЯ, а не только добавляется (см. lib/journal.ts),
   // и без этого снимка не понять, какие строки надо обновить в облаке.
-  activityLogSynced: Record<string, { delta: number; date: string }>
+  activityLogSynced: Record<string, SyncedEntry>
   updatedAt: {
     orders: Record<string, string>
     tasks: Record<string, string>
@@ -154,10 +154,18 @@ const cloudSnapshot: CloudSnapshot = {
   updatedAt: { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} },
 }
 
+/** Что облако знает о записи журнала. orderId — с v2.36: без него перенос записи на другой заказ не доходил до облака при сбое. */
+type SyncedEntry = { delta: number; date: string; orderId?: string }
+
 function rememberSyncedEntry(e: ActivityLogEntry) {
   if (!e.entryId) return
   cloudSnapshot.activityLogSyncedIds.add(e.entryId)
-  cloudSnapshot.activityLogSynced[e.entryId] = { delta: e.delta, date: e.date }
+  cloudSnapshot.activityLogSynced[e.entryId] = { delta: e.delta, date: e.date, orderId: e.orderId }
+}
+
+/** Запись журнала совпадает с тем, что знает облако. Заказ сравниваем, только если он известен. */
+function sameAsSynced(e: { delta: number; date: string; orderId: string }, k: SyncedEntry): boolean {
+  return e.delta === k.delta && e.date === k.date && (k.orderId === undefined || e.orderId === k.orderId)
 }
 
 function resetSyncedEntries(log: ActivityLogEntry[]) {
@@ -298,9 +306,23 @@ async function tryConditionalUpdate<T>(
   return true
 }
 
+/**
+ * Без сессии запросы уходят анонимно, и RLS молча отдаёт ноль строк — это не
+ * значит «удалено». Раньше в этой ситуации запись пропадала с экрана, а
+ * сверка после простоя затирала кэш пустыми таблицами.
+ */
+async function assertSession() {
+  const { data } = await supabaseClient.auth.getSession()
+  if (!data.session) throw new Error("сессия устарела — войдите заново")
+}
+
 async function resolveSyncConflict(table: string, id: string, updatedAtMap: Record<string, string>, mergeServerRow: (row: Row | null, id: string) => void) {
-  const { data } = await supabaseClient.from(table).select("*").eq("id", id).maybeSingle()
-  if (!data) { delete updatedAtMap[id]; mergeServerRow(null, id); return }
+  const { data, error } = await supabaseClient.from(table).select("*").eq("id", id).maybeSingle()
+  if (error) throw error
+  if (!data) {
+    await assertSession()
+    delete updatedAtMap[id]; mergeServerRow(null, id); return
+  }
   updatedAtMap[id] = data.updated_at
   mergeServerRow(data, id)
 }
@@ -507,6 +529,20 @@ export function setJournalDayHours(orderId: string, date: string, hours: number)
   forgetEntriesInCloud(change.removed)
 }
 
+/**
+ * Привести завышенный журнал к часам заказов (lib/journal.ts,
+ * scaleJournalToOrders). Изменённые записи уйдут в облако обычной отправкой
+ * как UPDATE, обнулившиеся — удалением.
+ */
+export function rescaleJournalToOrders(targets: Map<string, number>) {
+  const store = useAppStore.getState()
+  const change = scaleJournalToOrders(store.activityLog, targets)
+  if (!change.orders.length) return change.orders
+  store.setActivityLog(change.log)
+  forgetEntriesInCloud(change.removed)
+  return change.orders
+}
+
 /** Схлопнуть старые построчные записи до одной на день и заказ. Возвращает, сколько строк ушло. */
 export function compactJournal(): number {
   const store = useAppStore.getState()
@@ -519,8 +555,10 @@ export function compactJournal(): number {
 
 /**
  * Перенести журнал часов с одного заказа на другой (объединение дублей).
- * Локально меняется orderId, в облаке — UPDATE по order_id: обычная отправка
- * сверяет только часы и дату записи, заказ она не трогает.
+ * Локально меняется orderId, в облаке — UPDATE по order_id. Если он не
+ * прошёл, перенос доедет обычной отправкой: она сверяет и заказ записи
+ * (снимок помнит прежний orderId). Раньше сбой здесь не повторялся, и после
+ * перезагрузки часы возвращались на удалённый дубль.
  */
 export async function reassignJournalOrder(fromOrderId: string, toOrderId: string) {
   const store = useAppStore.getState()
@@ -529,7 +567,11 @@ export async function reassignJournalOrder(fromOrderId: string, toOrderId: strin
   const userId = store.cloudUserId
   if (!userId) return
   const { error } = await supabaseClient.from("activity_log").update({ order_id: toOrderId }).eq("order_id", fromOrderId).eq("user_id", userId)
-  if (error) { console.error("Не удалось перенести журнал часов:", error); markSyncFailed(errorText(error)) }
+  if (error) { console.error("Не удалось перенести журнал часов:", error); markSyncFailed(errorText(error)); return }
+  useAppStore.getState().activityLog.forEach((e) => {
+    const k = e.entryId ? cloudSnapshot.activityLogSynced[e.entryId] : undefined
+    if (k && e.orderId === toOrderId) k.orderId = toOrderId
+  })
 }
 
 /** Удалить из облака все записи журнала по заказу — через очередь, как и всё остальное. */
@@ -568,7 +610,9 @@ export async function performCloudSync() {
   const store = useAppStore.getState()
   const userId = store.cloudUserId
   if (!userId) return
-  if (cloudSyncInFlight) { cloudSyncPending = true; return }
+  // Во время сверки с облаком не отправляем: сверка сравнивает память со
+  // снимком, снятым до запроса, и отправка посередине сбила бы её с толку.
+  if (cloudSyncInFlight || refreshInFlight) { cloudSyncPending = true; return }
   cloudSyncInFlight = true
   useAppStore.getState().setSyncStatus("syncing")
   try {
@@ -688,10 +732,7 @@ export async function performCloudSync() {
     }
 
     const appSettings = useAppStore.getState().appSettings
-    if (!sameData(appSettings, cloudSnapshot.appSettings)) {
-      await supabaseClient.from("app_settings").upsert({ user_id: userId, data: appSettings })
-      cloudSnapshot.appSettings = JSON.parse(JSON.stringify(appSettings))
-    }
+    if (!sameData(appSettings, cloudSnapshot.appSettings)) await pushSettings(userId, appSettings)
 
     await syncActivityLog()
     if (useAppStore.getState().syncStatus !== "failed") markSyncHealthy()
@@ -702,9 +743,57 @@ export async function performCloudSync() {
     // Снимок отражает то, что облако реально подтвердило, — даже если часть
     // отправки не прошла. Иначе после перезагрузки уже принятое ушло бы снова.
     if (snapshotTrusted) persistSnapshot()
+    // И кэш — вместе со снимком: при конфликте память получает версию облака,
+    // а кэш оставался с проигравшей правкой, и при следующей загрузке она
+    // выглядела «неотправленной» и затирала победившую.
+    writeCacheFromStore()
     cloudSyncInFlight = false
     if (cloudSyncPending) { cloudSyncPending = false; performCloudSync() }
   }
+}
+
+/**
+ * Настройки — одна строка на аккаунт, целиком. Раньше она перезаписывалась
+ * вслепую: устройство, открытое с утра, при любой своей правке затирало
+ * графики и ссылки, заданные на другом. Теперь перед записью читаем облако и
+ * сливаем по разделам (mergeFields, до ключей словарей вроде boardSchedules).
+ * И ошибка записи больше не глотается: раньше снимок сдвигался как
+ * «отправлено», индикатор был зелёным, а правка пропадала при загрузке.
+ */
+async function pushSettings(userId: string, local: AppSettings) {
+  const { data: row, error: readError } = await supabaseClient.from("app_settings").select("data").eq("user_id", userId).maybeSingle()
+  if (readError) throw readError
+  const cloud = (row as Row | null)?.data ?? null
+  let toSave: AppSettings = local
+  if (cloud && cloudSnapshot.appSettings && !sameData(cloud, cloudSnapshot.appSettings)) {
+    toSave = applySettingsMigrations(mergeFields(local, applySettingsMigrations(cloud), cloudSnapshot.appSettings, 2).value)
+    useAppStore.getState().setAppSettings(toSave)
+  }
+  const { error } = await supabaseClient.from("app_settings").upsert({ user_id: userId, data: toSave })
+  if (error) throw error
+  cloudSnapshot.appSettings = snapshotCopy(toSave)
+}
+
+/** Кэш на диске = память. Только для загруженного аккаунта, иначе ключи без владельца. */
+function writeCacheFromStore() {
+  const s = useAppStore.getState()
+  if (!s.cloudUserId || !s.dataLoaded) return
+  try {
+    writeCache(s.appSettings, s.orders, s.tasks, s.advances, s.planningBoards, s.activityLog)
+  } catch (err) {
+    console.warn("Не удалось записать кэш:", err)
+  }
+}
+
+let cacheWriteTimer: ReturnType<typeof setTimeout> | null = null
+/** После входящих правок (realtime) — кэш и снимок вместе, не на каждое событие. */
+function scheduleCacheWrite() {
+  if (cacheWriteTimer) clearTimeout(cacheWriteTimer)
+  cacheWriteTimer = setTimeout(() => {
+    cacheWriteTimer = null
+    writeCacheFromStore()
+    if (snapshotTrusted) persistSnapshot()
+  }, 1000)
 }
 
 /** Повтор по кнопке из сайдбара. */
@@ -737,10 +826,6 @@ function noteEntryIdMissing() {
   activityLogSupportsEntryId = false
   console.warn("activity_log.entry_id отсутствует — используется прежняя позиционная отправка. Выполните SQL из lib/cloudSchema.ts.")
   useAppStore.getState().setSchemaIssue(SCHEMA_ISSUE_ENTRY_ID)
-}
-
-function makeEntryId(): string {
-  return "al_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)
 }
 
 /**
@@ -781,12 +866,12 @@ async function syncActivityLog() {
     const changed = activityLog.filter((e) => {
       if (!e.entryId) return false
       const known = cloudSnapshot.activityLogSynced[e.entryId]
-      return !!known && (known.delta !== e.delta || known.date !== e.date)
+      return !!known && !sameAsSynced(e, known)
     })
     for (const e of changed) {
       const { error } = await supabaseClient
         .from("activity_log")
-        .update({ delta: e.delta, date: e.date })
+        .update({ delta: e.delta, date: e.date, order_id: e.orderId })
         .eq("entry_id", e.entryId as string)
         .eq("user_id", userId)
       if (error) throw error
@@ -899,19 +984,35 @@ let refreshInFlight = false
 
 export async function refreshFromCloud() {
   if (refreshInFlight || cloudSyncInFlight) return
-  if (!useAppStore.getState().cloudUserId) return
+  const before = useAppStore.getState()
+  if (!before.cloudUserId || !before.dataLoaded) return
   refreshInFlight = true
   try {
-    const local = readLocalBeforeLoad()
-    // Память свежее кэша на диске? Кэш пишется при каждом saveData, поэтому нет.
+    // Снимок — тот, что был ДО запроса (cloudLoadData его перепишет), а
+    // локальная версия — память ПОСЛЕ запроса. Раньше она читалась из кэша
+    // до запроса, и правка, сделанная, пока шла загрузка (остановка таймера
+    // сразу по возвращении во вкладку), перезаписывалась облаком.
+    const prev = snapshotTrusted ? captureSnapshotForMerge() : null
     const state = buildStateFromCloud(await cloudLoadData())
-    const merge = mergeLocalIntoState(state, local)
+    const now = useAppStore.getState()
+    const merge = mergeLocalIntoState(state, {
+      orders: now.orders, tasks: now.tasks, advances: now.advances, boards: now.planningBoards, log: now.activityLog,
+      snapshot: prev ? prev.maps : null, snapshotLog: prev ? prev.log : {},
+    })
     applyCloudState(state)
     if (merge.kept > 0) scheduleCloudSync()
   } catch (e) {
     console.warn("Сверка с облаком после простоя не удалась:", e)
   } finally {
     refreshInFlight = false
+    if (cloudSyncPending) { cloudSyncPending = false; performCloudSync() }
+  }
+}
+
+function captureSnapshotForMerge(): { maps: NonNullable<LocalBeforeLoad["snapshot"]>; log: Record<string, SyncedEntry> } {
+  return {
+    maps: snapshotCopy({ orders: cloudSnapshot.orders, tasks: cloudSnapshot.tasks, advances: cloudSnapshot.advances, planningBoards: cloudSnapshot.planningBoards, planningLessons: cloudSnapshot.planningLessons }),
+    log: snapshotCopy(cloudSnapshot.activityLogSynced),
   }
 }
 
@@ -932,12 +1033,12 @@ export async function runSyncSelfCheck(): Promise<string[] | null> {
   if (!userId) throw new Error("Нет активной сессии — сначала войдите.")
 
   const [ordersRes, tasksRes, advRes, boardsRes, lessonsRes, logRes] = await Promise.all([
-    supabaseClient.from("orders").select("*"),
-    supabaseClient.from("tasks").select("*"),
-    supabaseClient.from("advances").select("*"),
-    supabaseClient.from("planning_boards").select("*"),
-    supabaseClient.from("planning_lessons").select("*"),
-    supabaseClient.from("activity_log").select("id"),
+    fetchAll("orders"),
+    fetchAll("tasks"),
+    fetchAll("advances"),
+    fetchAll("planning_boards"),
+    fetchAll("planning_lessons"),
+    fetchAll("activity_log"),
   ])
 
   const problems: string[] = []
@@ -1055,15 +1156,12 @@ function migrateLegacyPayments(orders: Order[]): { orders: Order[]; migrated: nu
   let migrated = 0
   const next = orders.map((o) => {
     let order = o
-    if (order.isPaid && !parseNum(order.paidAmount) && !(order.payments && order.payments.length)) {
-      // orderTotal needs lines/taxType only — safe to inline here without a circular import
-      const base = (order.lines || []).reduce((s, l) => {
-        if (l.ignorePrice) return s
-        const isHourly = (l.type || "").toLowerCase().includes("час")
-        return s + (isHourly ? parseNum(l.pomoHours) * parseNum(l.rate) : parseNum(l.qty) * parseNum(l.rate))
-      }, 0)
-      const rate = order.taxType === "individual" ? 0.04 : order.taxType === "entity" ? 0.06 : 0
-      const full = Math.round(base * (1 + rate))
+    // Только настоящие старые заказы: «оплачен» без сумм И без аванса. Заказ,
+    // закрытый авансом, тоже хранит isPaid без платежей — и если потом его
+    // цена росла (таймер на почасовой позиции), при каждой загрузке ему
+    // выдумывалась оплата на разницу, а долг пропадал.
+    if (order.isPaid && !parseNum(order.paidAmount) && !(order.payments && order.payments.length) && !parseNum(order.advanceUsed) && !(order.advanceAllocations || []).length) {
+      const full = Math.round(orderTotal(order))
       const advUsed = Math.min(parseNum(order.advanceUsed), full)
       const rest = Math.max(0, Math.round((full - advUsed) * 100) / 100)
       if (rest > 0) { order = { ...order, paidAmount: rest }; migrated++ }
@@ -1079,15 +1177,40 @@ function migrateLegacyPayments(orders: Order[]): { orders: Order[]; migrated: nu
   return { orders: next, migrated }
 }
 
+/**
+ * Вся таблица, а не первые 1000 строк. PostgREST отдаёт не больше max_rows
+ * (в Supabase — 1000) за запрос и молча обрезает остальное. Журнал часов уже
+ * упирался в этот предел: на устройстве было ровно 1000 записей, остальные
+ * слияние сочло удалёнными.
+ */
+async function fetchAll(table: string, orderBy: string[] = ["id"]): Promise<{ data: Row[]; error: any }> {
+  const PAGE = 1000
+  const out: Row[] = []
+  let total: number | null = null
+  for (let page = 0; page < 1000; page++) {
+    let q: any = supabaseClient.from(table).select("*", page === 0 ? { count: "exact" } : undefined)
+    orderBy.forEach((c) => { q = q.order(c) })
+    const { data, error, count } = await q.range(out.length, out.length + PAGE - 1)
+    if (error) return { data: out, error }
+    if (page === 0) total = typeof count === "number" ? count : null
+    const rows: Row[] = data || []
+    out.push(...rows)
+    if (!rows.length) break
+    if (total !== null ? out.length >= total : rows.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
 async function cloudLoadData() {
+  await assertSession()
   const [ordersRes, tasksRes, advRes, boardsRes, lessonsRes, settingsRes, logRes] = await Promise.all([
-    supabaseClient.from("orders").select("*"),
-    supabaseClient.from("tasks").select("*"),
-    supabaseClient.from("advances").select("*"),
-    supabaseClient.from("planning_boards").select("*"),
-    supabaseClient.from("planning_lessons").select("*").order("num"),
+    fetchAll("orders"),
+    fetchAll("tasks"),
+    fetchAll("advances"),
+    fetchAll("planning_boards"),
+    fetchAll("planning_lessons", ["num", "id"]),
     supabaseClient.from("app_settings").select("*").maybeSingle(),
-    supabaseClient.from("activity_log").select("*").order("id"),
+    fetchAll("activity_log"),
   ])
   ;[ordersRes, tasksRes, advRes, boardsRes, lessonsRes, logRes].forEach((r) => { if (r.error) throw r.error })
   if (settingsRes.error) throw settingsRes.error
@@ -1157,7 +1280,9 @@ async function cloudLoadData() {
   cloudSnapshot.planningBoards = {}; boards.forEach((b) => { cloudSnapshot.planningBoards[b.id] = boardSnapshotShape(b) })
   cloudSnapshot.planningLessons = {}
   boards.forEach((b) => (b.lessons || []).forEach((l) => { cloudSnapshot.planningLessons[l.id] = snapshotCopy({ ...l, boardId: b.id }) }))
-  cloudSnapshot.appSettings = pulledSettings ? JSON.parse(JSON.stringify(pulledSettings)) : null
+  // Снимок настроек — после миграции, как в памяти: иначе они считались
+  // изменёнными после каждой загрузки (недостающие ключи по умолчанию).
+  cloudSnapshot.appSettings = pulledSettings ? snapshotCopy(settingsForSnapshot) : null
   resetSyncedEntries(pulledLog)
 
   cloudSnapshot.updatedAt = { orders: {}, tasks: {}, advances: {}, planningBoards: {}, planningLessons: {} }
@@ -1312,7 +1437,11 @@ function buildStateFromCloud(pulled: Awaited<ReturnType<typeof cloudLoadData>>):
   const { pulledOrdersRaw, pulledTasks, pulledAdvances, boards, pulledSettings, pulledLog } = pulled
   const settings = applySettingsMigrations(pulledSettings)
   const orders = pulledOrdersRaw.map((o) => normalizeOrder(o, settings))
-  const planningBoards = boards.length ? boards : defaultPlanningBoards()
+  // Демо-доски — только совсем новому аккаунту. Раньше они подставлялись при
+  // любой пустой таблице: удалил все классы — после перезагрузки вернулись
+  // «Математика 5 класс» и «Русский язык 6 класс».
+  const freshAccount = !pulledSettings && !pulledOrdersRaw.length && !pulledTasks.length && !pulledAdvances.length
+  const planningBoards = boards.length || !freshAccount ? boards : defaultPlanningBoards()
   const { orders: migratedOrders, migrated: migratedPaid } = migrateLegacyPayments(orders)
   const { log: purgedLog, purged } = purgeObsoleteJournalFields(pulledLog)
   // ВНИМАНИЕ: здесь раньше вызывался compactHoursJournal(), а ниже — снос всех
@@ -1340,21 +1469,21 @@ interface LocalBeforeLoad {
   boards: PlanningBoard[]
   log: ActivityLogEntry[]
   snapshot: Pick<CloudSnapshot, "orders" | "tasks" | "advances" | "planningBoards" | "planningLessons"> | null
-  /** entryId записей журнала, которые облако подтверждало в прошлый раз. */
-  snapshotLog: Set<string>
+  /** Записи журнала, которые облако подтверждало в прошлый раз, с их часами и датой. */
+  snapshotLog: Record<string, SyncedEntry>
 }
 
 function readLocalBeforeLoad(): LocalBeforeLoad {
   const parse = <T>(key: string): T[] => { try { const raw = readCached(key); return raw ? (JSON.parse(raw) as T[]) : [] } catch { return [] } }
   let snapshot: LocalBeforeLoad["snapshot"] = null
-  let snapshotLog = new Set<string>()
+  let snapshotLog: Record<string, SyncedEntry> = {}
   try {
     const raw = localStorage.getItem(lsKey(CLOUD_SNAPSHOT_KEY))
     const s = raw ? JSON.parse(raw) : null
     // Снимки прежних версий хранили заказы «сырыми» (см. cloudLoadData) — по
     // ним каждая запись выглядела бы правленной с обеих сторон.
     if (s && s.updatedAt && s.version >= SNAPSHOT_VERSION) snapshot = { orders: s.orders || {}, tasks: s.tasks || {}, advances: s.advances || {}, planningBoards: s.planningBoards || {}, planningLessons: s.planningLessons || {} }
-    if (s && s.activityLogSynced) snapshotLog = new Set(Object.keys(s.activityLogSynced))
+    if (s && s.activityLogSynced) snapshotLog = s.activityLogSynced
   } catch { /* снимка нет — сливать нечего */ }
   return { orders: parse<Order>(STORAGE_KEY), tasks: parse<Task>(TASKS_KEY), advances: parse<Advance>(ADVANCES_KEY), boards: parse<PlanningBoard>(PLANNING_KEY), log: parse<ActivityLogEntry>(ACTIVITY_LOG_KEY), snapshot, snapshotLog }
 }
@@ -1385,14 +1514,28 @@ function mergeLocalIntoState(state: CloudState, local: LocalBeforeLoad): { kept:
   // добавляла весь журнал ещё раз (6600 лишних строк за день).
   const cloudEntryIds = new Set(state.activityLog.map((e) => e.entryId).filter(Boolean))
   const knownBefore = local.snapshotLog
-  const unsentLog = local.log.filter((e) => !!e.entryId && !cloudEntryIds.has(e.entryId) && !knownBefore.has(e.entryId))
+  const unsentLog = local.log.filter((e) => !!e.entryId && !cloudEntryIds.has(e.entryId) && !knownBefore[e.entryId])
+  // Правки уже отправленных записей (часы за день выросли, запись перенесли
+  // на другой заказ), не успевшие уйти: как у заказов — здешняя версия
+  // побеждает, если облако эту запись с прошлого раза не меняло. Раньше
+  // побеждало облако всегда, и заказ после перезагрузки показывал 3 часа, а
+  // журнал — 1.
+  const localLogById = new Map(local.log.filter((e) => e.entryId).map((e) => [e.entryId as string, e]))
+  let keptLog = unsentLog.length
+  const cloudLog = state.activityLog.map((c) => {
+    const lo = c.entryId ? localLogById.get(c.entryId) : undefined
+    const k = c.entryId ? knownBefore[c.entryId] : undefined
+    if (!lo || !k || sameAsSynced(lo, k) || !sameAsSynced(c, k)) return c
+    keptLog++
+    return { ...c, delta: lo.delta, date: lo.date, orderId: lo.orderId }
+  })
 
   state.orders = o.merged
   state.tasks = t.merged
   state.advances = a.merged
   state.planningBoards = boards
-  state.activityLog = [...state.activityLog, ...unsentLog]
-  return { kept: o.kept + t.kept + a.kept + b.kept + l.kept + unsentLog.length, dropped: o.dropped + t.dropped + a.dropped + b.dropped + l.dropped }
+  state.activityLog = [...cloudLog, ...unsentLog]
+  return { kept: o.kept + t.kept + a.kept + b.kept + l.kept + keptLog, dropped: o.dropped + t.dropped + a.dropped + b.dropped + l.dropped }
 }
 
 function applyCloudState(state: CloudState) {
@@ -1472,6 +1615,19 @@ function hasUnsentLocalChanges(snapshotMap: Record<string, any>, id: string, cur
   return !sameData(currentShape, snap)
 }
 
+/**
+ * Входящая правка записи, которую здесь тоже меняли и ещё не отправили.
+ * Раньше она пропускалась целиком (с продвижением updated_at), и следующая
+ * отправка отсюда затирала чужую правку: так пропадали заметки и галочки
+ * урока, сделанные на другом устройстве. Теперь — по полям, как при загрузке:
+ * здешние поля остаются, остальное берётся из облака.
+ */
+function mergeIncoming<T>(localShape: T, incomingShape: T, snap: unknown): { value: T; push: boolean } {
+  if (sameData(localShape, incomingShape)) return { value: incomingShape, push: false }
+  const m = mergeFields(localShape, incomingShape, snap, 1)
+  return { value: m.value, push: m.usedLocal }
+}
+
 export function subscribeRealtime() {
   const userId = useAppStore.getState().cloudUserId
   if (!userId || realtimeChannel) return
@@ -1529,11 +1685,11 @@ function handleRealtimeActivity(payload: any) {
     const known = cloudSnapshot.activityLogSynced[row.entry_id]
     // Наша неотправленная правка новее — не затираем, но запоминаем, что
     // теперь лежит в облаке, чтобы следующая отправка ушла как UPDATE.
-    if (known && (known.delta !== local.delta || known.date !== local.date)) {
-      cloudSnapshot.activityLogSynced[row.entry_id] = { delta: row.delta, date: row.date }
+    if (known && !sameAsSynced(local, known)) {
+      cloudSnapshot.activityLogSynced[row.entry_id] = { delta: row.delta, date: row.date, orderId: row.order_id }
       return
     }
-    if (local.delta !== incoming.delta || local.date !== incoming.date) {
+    if (local.delta !== incoming.delta || local.date !== incoming.date || local.orderId !== incoming.orderId) {
       store.setActivityLog((prev) => prev.map((e) => (e === local ? incoming : e)))
     }
   } else {
@@ -1554,18 +1710,17 @@ function handleRealtimeOrders(payload: any) {
     if (isStaleRealtimeRow(cloudSnapshot.updatedAt.orders, payload.new.id, payload.new.updated_at)) return
     const o = normalizeOrder(rowToOrder(payload.new), store.appSettings)
     const existing = store.orders.find((x) => x.id === o.id)
-    if (hasUnsentLocalChanges(cloudSnapshot.orders, o.id, existing)) {
-      cloudSnapshot.updatedAt.orders[o.id] = payload.new.updated_at
-      return
-    }
+    const m = existing && hasUnsentLocalChanges(cloudSnapshot.orders, o.id, existing) ? mergeIncoming(existing, o, cloudSnapshot.orders[o.id]) : { value: o, push: false }
     store.setOrders((prev) => {
       const idx = prev.findIndex((x) => x.id === o.id)
-      return idx >= 0 ? prev.map((x, i) => (i === idx ? o : x)) : [...prev, o]
+      return idx >= 0 ? prev.map((x, i) => (i === idx ? m.value : x)) : [...prev, m.value]
     })
     cloudSnapshot.orders[o.id] = snapshotCopy(o)
     cloudSnapshot.updatedAt.orders[o.id] = payload.new.updated_at
+    if (m.push) scheduleCloudSync()
   }
   resyncPlanning()
+  scheduleCacheWrite()
 }
 
 function handleRealtimeTasks(payload: any) {
@@ -1578,17 +1733,16 @@ function handleRealtimeTasks(payload: any) {
     if (isStaleRealtimeRow(cloudSnapshot.updatedAt.tasks, payload.new.id, payload.new.updated_at)) return
     const t = normalizeTask(rowToTask(payload.new))
     const existing = store.tasks.find((x) => x.id === t.id)
-    if (hasUnsentLocalChanges(cloudSnapshot.tasks, t.id, existing)) {
-      cloudSnapshot.updatedAt.tasks[t.id] = payload.new.updated_at
-      return
-    }
+    const m = existing && hasUnsentLocalChanges(cloudSnapshot.tasks, t.id, existing) ? mergeIncoming(existing, t, cloudSnapshot.tasks[t.id]) : { value: t, push: false }
     store.setTasks((prev) => {
       const idx = prev.findIndex((x) => x.id === t.id)
-      return idx >= 0 ? prev.map((x, i) => (i === idx ? t : x)) : [...prev, t]
+      return idx >= 0 ? prev.map((x, i) => (i === idx ? m.value : x)) : [...prev, m.value]
     })
     cloudSnapshot.tasks[t.id] = snapshotCopy(t)
     cloudSnapshot.updatedAt.tasks[t.id] = payload.new.updated_at
+    if (m.push) scheduleCloudSync()
   }
+  scheduleCacheWrite()
 }
 
 function handleRealtimeAdvances(payload: any) {
@@ -1601,17 +1755,16 @@ function handleRealtimeAdvances(payload: any) {
     if (isStaleRealtimeRow(cloudSnapshot.updatedAt.advances, payload.new.id, payload.new.updated_at)) return
     const a = normalizeAdvance(rowToAdvance(payload.new))
     const existing = store.advances.find((x) => x.id === a.id)
-    if (hasUnsentLocalChanges(cloudSnapshot.advances, a.id, existing)) {
-      cloudSnapshot.updatedAt.advances[a.id] = payload.new.updated_at
-      return
-    }
+    const m = existing && hasUnsentLocalChanges(cloudSnapshot.advances, a.id, existing) ? mergeIncoming(existing, a, cloudSnapshot.advances[a.id]) : { value: a, push: false }
     store.setAdvances((prev) => {
       const idx = prev.findIndex((x) => x.id === a.id)
-      return idx >= 0 ? prev.map((x, i) => (i === idx ? a : x)) : [...prev, a]
+      return idx >= 0 ? prev.map((x, i) => (i === idx ? m.value : x)) : [...prev, m.value]
     })
     cloudSnapshot.advances[a.id] = snapshotCopy(a)
     cloudSnapshot.updatedAt.advances[a.id] = payload.new.updated_at
+    if (m.push) scheduleCloudSync()
   }
+  scheduleCacheWrite()
 }
 
 function handleRealtimeBoards(payload: any) {
@@ -1624,18 +1777,20 @@ function handleRealtimeBoards(payload: any) {
     if (isStaleRealtimeRow(cloudSnapshot.updatedAt.planningBoards, payload.new.id, payload.new.updated_at)) return
     const rowBoard = rowToBoard(payload.new)
     const existing = store.planningBoards.find((b) => b.id === rowBoard.id)
-    if (hasUnsentLocalChanges(cloudSnapshot.planningBoards, rowBoard.id, existing ? boardSnapshotShape(existing) : null)) {
-      cloudSnapshot.updatedAt.planningBoards[rowBoard.id] = payload.new.updated_at
-      return
-    }
+    const incomingShape = boardSnapshotShape(rowBoard)
+    const m = existing && hasUnsentLocalChanges(cloudSnapshot.planningBoards, rowBoard.id, boardSnapshotShape(existing))
+      ? mergeIncoming(boardSnapshotShape(existing), incomingShape, cloudSnapshot.planningBoards[rowBoard.id])
+      : { value: incomingShape, push: false }
     store.setPlanningBoards((prev) => {
       const idx = prev.findIndex((b) => b.id === rowBoard.id)
-      if (idx >= 0) return prev.map((b, i) => (i === idx ? { ...rowBoard, lessons: b.lessons } : b))
+      if (idx >= 0) return prev.map((b, i) => (i === idx ? { ...rowBoard, ...m.value, lessons: b.lessons } : b))
       return [...prev, rowBoard]
     })
-    cloudSnapshot.planningBoards[rowBoard.id] = boardSnapshotShape(rowBoard)
+    cloudSnapshot.planningBoards[rowBoard.id] = incomingShape
     cloudSnapshot.updatedAt.planningBoards[rowBoard.id] = payload.new.updated_at
+    if (m.push) scheduleCloudSync()
   }
+  scheduleCacheWrite()
 }
 
 function handleRealtimeLessons(payload: any) {
@@ -1647,30 +1802,51 @@ function handleRealtimeLessons(payload: any) {
   } else {
     if (isStaleRealtimeRow(cloudSnapshot.updatedAt.planningLessons, payload.new.id, payload.new.updated_at)) return
     const lesson = rowToLesson(payload.new)
-    const board = store.planningBoards.find((b) => b.id === payload.new.board_id)
+    const boardId = payload.new.board_id
+    const board = store.planningBoards.find((b) => b.id === boardId)
     const existingLesson = board ? board.lessons.find((l) => l.id === lesson.id) : null
-    if (hasUnsentLocalChanges(cloudSnapshot.planningLessons, lesson.id, existingLesson ? { ...existingLesson, boardId: payload.new.board_id } : null)) {
-      cloudSnapshot.updatedAt.planningLessons[lesson.id] = payload.new.updated_at
-      return
-    }
+    const incomingShape = { ...lesson, boardId }
+    const localShape = existingLesson ? { ...existingLesson, boardId } : null
+    const m = localShape && hasUnsentLocalChanges(cloudSnapshot.planningLessons, lesson.id, localShape)
+      ? mergeIncoming(localShape, incomingShape, cloudSnapshot.planningLessons[lesson.id])
+      : { value: incomingShape, push: false }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { boardId: _b, ...merged } = m.value
     store.setPlanningBoards((prev) =>
       prev.map((b) => {
-        if (b.id !== payload.new.board_id) return b
+        if (b.id !== boardId) return b
         const idx = b.lessons.findIndex((l) => l.id === lesson.id)
-        const lessons = idx >= 0 ? b.lessons.map((l, i) => (i === idx ? lesson : l)) : [...b.lessons, lesson]
+        const lessons = idx >= 0 ? b.lessons.map((l, i) => (i === idx ? merged : l)) : [...b.lessons, merged]
         return { ...b, lessons }
       })
     )
-    cloudSnapshot.planningLessons[lesson.id] = snapshotCopy({ ...lesson, boardId: payload.new.board_id })
+    cloudSnapshot.planningLessons[lesson.id] = snapshotCopy(incomingShape)
     cloudSnapshot.updatedAt.planningLessons[lesson.id] = payload.new.updated_at
+    if (m.push) scheduleCloudSync()
   }
+  scheduleCacheWrite()
 }
 
+/**
+ * Настройки с другого устройства. Раньше сравнение шло через JSON.stringify,
+ * а он зависит от порядка ключей: после загрузки строки не совпадали никогда,
+ * и правки настроек с другого устройства не применялись до перезагрузки.
+ * Если здесь есть свои неотправленные — сливаем по разделам.
+ */
 function handleRealtimeSettings(payload: any) {
   if (payload.eventType === "DELETE") return
   const store = useAppStore.getState()
-  if (JSON.stringify(store.appSettings) !== JSON.stringify(cloudSnapshot.appSettings)) return
-  const merged = applySettingsMigrations(payload.new.data || {})
-  store.setAppSettings(merged)
-  cloudSnapshot.appSettings = snapshotCopy(merged)
+  const incoming = applySettingsMigrations(payload.new.data || {})
+  const snap = cloudSnapshot.appSettings
+  let next = incoming
+  let push = false
+  if (snap && !sameData(store.appSettings, snap)) {
+    const m = mergeFields(store.appSettings, incoming, snap, 2)
+    next = applySettingsMigrations(m.value)
+    push = m.usedLocal
+  }
+  store.setAppSettings(next)
+  cloudSnapshot.appSettings = snapshotCopy(incoming)
+  if (push) scheduleCloudSync()
+  scheduleCacheWrite()
 }

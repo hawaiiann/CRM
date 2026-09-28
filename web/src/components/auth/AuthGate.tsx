@@ -31,10 +31,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // Keeps tokens fresh for ALREADY-known accounts (supabase-js rotates them
     // periodically) — never adds a new entry on its own, only refreshes one
     // that switchToAccount/login already remembered.
-    const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabaseClient.auth.onAuthStateChange((event, session) => {
       if (session) {
         setAuth(session.user.id, session.user.email ?? null)
         if (getKnownAccounts()[session.user.id]) rememberAccount(session)
+      } else if (event === "SIGNED_OUT") {
+        // Сессия пропала: вышли в другой вкладке, её отозвали на другом
+        // устройстве или не обновился токен. Раньше это событие игнорировалось,
+        // и приложение работало дальше без входа: запросы уходили анонимно,
+        // RLS отдавал пустые таблицы, записи пропадали с экрана, а сверка
+        // затирала кэш. Теперь — экран входа, данные дождутся нового входа.
+        useAppStore.getState().setDataLoaded(false)
+        setAuth(null, null)
       }
     })
     return () => {

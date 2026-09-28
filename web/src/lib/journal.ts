@@ -19,6 +19,16 @@ import type { ActivityLogEntry } from "@/types/models"
 
 const EPS = 1e-6
 
+/**
+ * Идентификатор записи журнала — выдаётся сразу при создании, а не при
+ * отправке. Раньше запись без entryId, не успевшая уйти в облако (закрыли
+ * вкладку через секунду, нет сети), при следующей загрузке выбрасывалась:
+ * её нельзя отличить от строки, которая уже лежит в облаке.
+ */
+export function makeEntryId(): string {
+  return "al_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)
+}
+
 function round4(n: number): number {
   return Math.round(n * 10000) / 10000
 }
@@ -43,7 +53,7 @@ function findDayEntry(log: ActivityLogEntry[], orderId: string, date: string): n
 export function mergeHoursEntry(log: ActivityLogEntry[], orderId: string, date: string, delta: number): JournalChange {
   if (!orderId || !date || !Number.isFinite(delta) || Math.abs(delta) < EPS) return { log, removed: [] }
   const idx = findDayEntry(log, orderId, date)
-  if (idx < 0) return { log: [...log, { date, orderId, field: "hours", delta: round4(delta) }], removed: [] }
+  if (idx < 0) return { log: [...log, { date, orderId, field: "hours", delta: round4(delta), entryId: makeEntryId() }], removed: [] }
   const cur = log[idx]
   const next = round4(cur.delta + delta)
   if (Math.abs(next) < EPS) return { log: log.filter((_, i) => i !== idx), removed: [cur] }
@@ -78,7 +88,7 @@ export function setDayHours(log: ActivityLogEntry[], orderId: string, date: stri
   const target = Math.abs(hours) < EPS ? 0 : round4(hours)
   if (!group.length) {
     if (!target) return { log, removed: [] }
-    return { log: [...log, { date, orderId, field: "hours", delta: target }], removed: [] }
+    return { log: [...log, { date, orderId, field: "hours", delta: target, entryId: makeEntryId() }], removed: [] }
   }
   const [first, ...rest] = group
   const current = round4(group.reduce((s, e) => s + e.delta, 0))
@@ -120,4 +130,41 @@ export function setEntryDelta(log: ActivityLogEntry[], entry: ActivityLogEntry, 
   if (!log.includes(entry)) return { log, removed: [] }
   if (!Number.isFinite(delta) || Math.abs(delta) < EPS) return { log: log.filter((e) => e !== entry), removed: [entry] }
   return { log: log.map((e) => (e === entry ? { ...e, delta: round4(delta) } : e)), removed: [] }
+}
+
+export interface JournalScaleResult extends JournalChange {
+  /** По каким заказам журнал пересчитан: было и стало часов. */
+  orders: { orderId: string; before: number; after: number }[]
+}
+
+/**
+ * Привести завышенный журнал к часам заказов. Записи заказа, у которого в
+ * журнале в разы больше часов, чем на самом заказе (журнал размножился при
+ * старых сбоях синхронизации: в августе-сентябре 2026 — в 2, 3, 7 и 14 раз),
+ * умножаются на одно число: раскладка по дням сохраняется, а сумма
+ * становится равной часам заказа. Заказы с небольшим расхождением не
+ * трогаются — их правят вручную в сверке.
+ */
+export function scaleJournalToOrders(log: ActivityLogEntry[], targets: Map<string, number>, minRatio = 1.5): JournalScaleResult {
+  const sums = new Map<string, number>()
+  log.forEach((e) => { if (e.field === "hours") sums.set(e.orderId, (sums.get(e.orderId) || 0) + e.delta) })
+  const factor = new Map<string, number>()
+  const orders: JournalScaleResult["orders"] = []
+  sums.forEach((sum, orderId) => {
+    const target = targets.get(orderId)
+    if (!target || target <= 0 || sum <= 0 || sum / target < minRatio) return
+    factor.set(orderId, target / sum)
+    orders.push({ orderId, before: round4(sum), after: round4(target) })
+  })
+  if (!factor.size) return { log, removed: [], orders: [] }
+  const removed: ActivityLogEntry[] = []
+  const next: ActivityLogEntry[] = []
+  log.forEach((e) => {
+    const k = e.field === "hours" ? factor.get(e.orderId) : undefined
+    if (k === undefined) { next.push(e); return }
+    const d = round4(e.delta * k)
+    if (Math.abs(d) < EPS) removed.push(e)
+    else next.push({ ...e, delta: d })
+  })
+  return { log: next, removed, orders }
 }

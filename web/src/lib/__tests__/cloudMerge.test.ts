@@ -1,5 +1,5 @@
 import { test, expect } from "vitest"
-import { mergeUnsentLocal } from "../cloudMerge"
+import { mergeUnsentLocal, mergeFields } from "../cloudMerge"
 import { sameData, canon } from "../stableJson"
 
 type R = { id: string; v: number; tags?: string[]; nested?: Record<string, unknown> }
@@ -30,6 +30,31 @@ test("правили и там и тут — облако побеждает, п
   const r = mergeUnsentLocal<R>([{ id: "a", v: 2 }], [{ id: "a", v: 5 }], snap)
   expect(r.merged).toEqual([{ id: "a", v: 5 }])
   expect(r.dropped).toBe(1)
+})
+
+test("правили разные поля — сливаются оба, без потерь", () => {
+  type O = { id: string; status: string; notes: string }
+  const snap = { a: { id: "a", status: "queue", notes: "" } }
+  const r = mergeUnsentLocal<O>([{ id: "a", status: "done", notes: "" }], [{ id: "a", status: "queue", notes: "позвонить" }], snap)
+  expect(r.merged).toEqual([{ id: "a", status: "done", notes: "позвонить" }])
+  expect(r.kept).toBe(1)
+  expect(r.dropped).toBe(0)
+})
+
+test("mergeFields: словари настроек сливаются по ключам на втором уровне", () => {
+  const snap = { ktpMode: false, boardSchedules: { b1: { perWeek: 2 } }, clients: ["A"] }
+  const local = { ktpMode: false, boardSchedules: { b1: { perWeek: 2 }, b2: { perWeek: 3 } }, clients: ["A"] }
+  const cloud = { ktpMode: true, boardSchedules: { b1: { perWeek: 4 } }, clients: ["A", "B"] }
+  const m = mergeFields(local, cloud, snap, 2)
+  expect(m.value).toEqual({ ktpMode: true, boardSchedules: { b1: { perWeek: 4 }, b2: { perWeek: 3 } }, clients: ["A", "B"] })
+  expect(m.usedLocal).toBe(true)
+  expect(m.conflict).toBe(false)
+  // Одно и то же поле с обеих сторон — облако, конфликт отмечен
+  const c = mergeFields({ x: 1 }, { x: 2 }, { x: 0 }, 1)
+  expect(c.value).toEqual({ x: 2 })
+  expect(c.conflict).toBe(true)
+  // Удалённое здесь поле остаётся удалённым, если облако его не трогало
+  expect(mergeFields({ a: 1 }, { a: 1, b: 2 }, { a: 1, b: 2 }, 1).value).toEqual({ a: 1 })
 })
 
 test("созданное офлайн остаётся, удалённое на другом устройстве не воскресает", () => {
