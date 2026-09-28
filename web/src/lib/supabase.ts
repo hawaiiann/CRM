@@ -11,7 +11,13 @@ export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lfDyJYRnafI4mDvVaR8BKg_Q
 // Чекбокс "Запомнить меня" переключает, куда supabase-js пишет сессию: localStorage
 // (переживает закрытие браузера) при включённой галочке, sessionStorage (только пока
 // открыта вкладка) — при выключенной.
-export let rememberMeOnNextSignIn = true
+//
+// null — явного выбора в этой загрузке страницы не было (например, после F5):
+// тогда сессия остаётся там, где уже лежит. Раньше здесь было true по
+// умолчанию, и первое же обновление токена после перезагрузки переносило
+// «незапомненную» сессию в localStorage — на общем компьютере следующий
+// человек попадал в CRM.
+let rememberMeOnNextSignIn: boolean | null = null
 export function setRememberMeOnNextSignIn(v: boolean) {
   rememberMeOnNextSignIn = v
 }
@@ -19,7 +25,9 @@ export function setRememberMeOnNextSignIn(v: boolean) {
 const authStorageAdapter = {
   getItem: (key: string) => localStorage.getItem(key) ?? sessionStorage.getItem(key),
   setItem: (key: string, value: string) => {
-    if (rememberMeOnNextSignIn) {
+    const sessionOnly = sessionStorage.getItem(key) !== null && localStorage.getItem(key) === null
+    const remember = rememberMeOnNextSignIn ?? !sessionOnly
+    if (remember) {
       localStorage.setItem(key, value)
       sessionStorage.removeItem(key)
     } else {

@@ -74,8 +74,19 @@ export function ActiveDaysCalendar() {
       destructive: true,
     })
     if (!ok) return
-    deleteActivityLogEntries([entry])
+    deleteActivityLogEntries([currentEntry(entry)])
+    // Без этого кэш на диске оставался со старой записью до следующей правки.
+    saveData()
   }
+
+  // Запись в журнале — неизменяемый объект: минутный сброс таймера заменяет
+  // её новым, и правка «по ссылке» на старый объект молча ничего не делала.
+  // Ищем живую запись по entryId.
+  function currentEntry(entry: ActivityLogEntry): ActivityLogEntry {
+    if (!entry.entryId) return entry
+    return useAppStore.getState().activityLog.find((e) => e.entryId === entry.entryId) || entry
+  }
+  const sameEntry = (a: ActivityLogEntry, b: ActivityLogEntry) => a === b || (!!a.entryId && a.entryId === b.entryId)
 
   /**
    * Правка числа записи вместо удаления — когда часы посчитаны неверно, но
@@ -87,8 +98,9 @@ export function ActiveDaysCalendar() {
     if (!editing) return
     const delta = parseHours(editing.value)
     setEditing(null)
-    if (!Number.isFinite(delta) || delta === editing.entry.delta) return
-    setActivityEntryDelta(editing.entry, delta)
+    const entry = currentEntry(editing.entry)
+    if (!Number.isFinite(delta) || delta === entry.delta) return
+    setActivityEntryDelta(entry, delta)
     saveData()
   }
 
@@ -165,7 +177,7 @@ export function ActiveDaysCalendar() {
               <div className="flex flex-col gap-1 border-t border-border pt-2">
                 {dayEntries.map((e, i) => {
                   const order = orders.find((o) => o.id === e.orderId)
-                  const isEditing = editing?.entry === e
+                  const isEditing = !!editing && sameEntry(editing.entry, e)
                   return (
                     <div key={i} className="flex items-center justify-between gap-2 text-xs">
                       <span className="min-w-0 truncate text-muted-foreground">

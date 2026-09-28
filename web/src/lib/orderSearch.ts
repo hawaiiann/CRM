@@ -17,8 +17,11 @@ import type { Order } from "@/types/models"
  * запросе есть «урок N» (или «ур N»), номер сверяется с полем урока точно,
  * а остальные слова ищутся как обычно.
  */
+/** ё = е: «Алёна» находится и по «алена», и наоборот. */
+const fold = (s: string) => s.toLowerCase().replace(/ё/g, "е")
+
 export function orderMatchesQuery(o: Order, query: string): boolean {
-  const q = query.trim().toLowerCase()
+  const q = fold(query.trim())
   if (!q) return true
 
   let rest = q
@@ -34,7 +37,8 @@ export function orderMatchesQuery(o: Order, query: string): boolean {
   }
 
   if (lessonWanted !== null) {
-    const lesson = String(o.lesson ?? "").trim()
+    // В поле урока бывает и «Урок 10», и «10»: сравниваем номер, а не строку.
+    const lesson = fold(String(o.lesson ?? "")).replace(/урок/g, "").trim()
     if (lesson !== lessonWanted) return false
   }
 
@@ -52,7 +56,7 @@ export function orderMatchesQuery(o: Order, query: string): boolean {
   ]
     .filter(Boolean)
     .join(" ")
-    .toLowerCase()
+  const hayFolded = fold(hay)
 
-  return words.every((w) => hay.includes(w))
+  return words.every((w) => hayFolded.includes(w))
 }

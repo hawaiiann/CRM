@@ -157,15 +157,31 @@ function groupKey(o: Order): string {
 function groupLabel(o: Order): string {
   return [o.subject, o.grade, o.quarter].map((s) => (s || "").trim()).filter(Boolean).join(" · ") || "Без класса"
 }
+// Сравнение — по тем же нормализованным строкам, что и ключ группы: раньше
+// «Литература» и «литература » попадали в одну группу, но сортировались
+// порознь, и заголовок группы повторялся несколько раз.
+const normText = (s: string) => (s || "").trim().toLowerCase()
 function compareGroups(a: Order, b: Order): number {
   const [an, at] = gradeSortKey(a.grade)
   const [bn, bt] = gradeSortKey(b.grade)
-  return (a.subject || "").localeCompare(b.subject || "", "ru") || an - bn || at.localeCompare(bt, "ru") || (a.quarter || "").localeCompare(b.quarter || "", "ru")
+  return normText(a.subject).localeCompare(normText(b.subject), "ru") || an - bn || at.localeCompare(bt, "ru") || normText(a.quarter).localeCompare(normText(b.quarter), "ru") || groupKey(a).localeCompare(groupKey(b), "ru")
 }
 
-/** Пропущенные номера уроков внутри класса: между первым и последним заказом. */
+/** Все номера, которые закрывает заказ: «10» → 10, «10-11» → 10 и 11, «10а» → 10. */
+function lessonNumsCovered(o: Order): number[] {
+  const text = String(o.lesson || "")
+  const range = text.match(/(\d+)\s*[-–—]\s*(\d+)/)
+  if (range) {
+    const from = parseInt(range[1], 10), to = parseInt(range[2], 10)
+    if (to >= from && to - from < 20) return Array.from({ length: to - from + 1 }, (_, i) => from + i)
+  }
+  const n = lessonNum(o)
+  return n === Number.MAX_SAFE_INTEGER ? [] : [n]
+}
+
+/** Пропущенные номера уроков внутри класса: между первым и последним заказом. Сдвоенный урок «10-11» закрывает оба номера. */
 function missingLessons(orders: Order[]): number[] {
-  const nums = [...new Set(orders.map(lessonNum).filter((n) => n !== Number.MAX_SAFE_INTEGER))].sort((a, b) => a - b)
+  const nums = [...new Set(orders.flatMap(lessonNumsCovered))].sort((a, b) => a - b)
   if (nums.length < 2) return []
   const have = new Set(nums)
   const out: number[] = []
@@ -272,6 +288,9 @@ export function OrdersPage() {
     handledHotkey.current = token
     if (st?.newOrder) openNewOrder()
     if (st?.focusSearch) searchRef.current?.focus()
+    // Метка в истории отработана — убираем, иначе «Назад» на эту запись
+    // открывал форму нового заказа ещё раз.
+    navigate(location.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
   useEffect(() => {
@@ -460,11 +479,17 @@ export function OrdersPage() {
     const list = [...map.values()].sort((a, b) => compareGroups(a.sample, b.sample))
     // Уроки, помеченные в планировании «без материала», пропуском не считаются.
     const norm = (s: string) => (s || "").trim().toLowerCase()
+    // Четверть — по номеру («1» и «1 четверть» — одна): раньше она не
+    // сравнивалась, и пустой урок 7 первой четверти прятал настоящий пропуск
+    // урока 7 во второй. Архивные доски не в счёт.
+    const quarterKey = (s: string) => (String(s || "").match(/\d+/) || [norm(s)])[0]
     const emptyNums = (o: Order) => {
       const set = new Set<number>()
       boards.forEach((b) => {
+        if (b.archived) return
         if (norm(b.title) !== norm(o.grade)) return
         if (b.subject && o.subject && norm(b.subject) !== norm(o.subject)) return
+        if (b.quarter && o.quarter && quarterKey(b.quarter) !== quarterKey(o.quarter)) return
         b.lessons.forEach((l) => { if (isLessonEmpty(l)) set.add(l.num) })
       })
       return set
@@ -476,7 +501,10 @@ export function OrdersPage() {
   // Старые в архиве: сделанные и оплаченные (или отменённые) больше месяца назад.
   const archiveCutoff = dateKey(new Date(Date.now() - 30 * 86400000))
   const isOldArchived = (r: Row) => {
-    const when = r.order.paidAt || r.order.deadline || ""
+    // По ПОСЛЕДНЕЙ оплате: paidAt — дата первой. Заказ с давней предоплатой и
+    // вчерашним расчётом прятался в «старше месяца».
+    const lastPaid = (r.order.payments || []).map((p) => p.date).filter(Boolean).sort().pop()
+    const when = [lastPaid, r.order.paidAt, r.order.deadline].filter(Boolean).sort().pop() || ""
     if (r.order.status === "cancelled") return !!when && when < archiveCutoff
     return r.pay.remaining <= 0 && !!when && when < archiveCutoff
   }
@@ -494,13 +522,16 @@ export function OrdersPage() {
   /** Строки с заголовками групп между классами (только когда список по классам). */
   function withGroupHeaders<T>(list: Row[], renderRow: (r: Row) => T, renderHeader: (g: { key: string; label: string; count: number; missing: number[]; due: number }) => T): T[] {
     if (!grouped) return list.map(renderRow)
+    // Число в заголовке — по всем страницам, а не по текущей: иначе у класса
+    // на стыке страниц было «2 заказа», хотя их восемь.
+    const countFrom = list === pagedActive ? visibleActive : list
     const out: T[] = []
     let prev: string | null = null
     list.forEach((r) => {
       const key = groupKey(r.order)
       if (key !== prev) {
         prev = key
-        const count = list.filter((x) => groupKey(x.order) === key).length
+        const count = countFrom.filter((x) => groupKey(x.order) === key).length
         out.push(renderHeader({ key, label: groupLabel(r.order), count, missing: groups.missing.get(key) || [], due: groups.list.find((g) => g.key === key)?.due || 0 }))
       }
       out.push(renderRow(r))
