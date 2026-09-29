@@ -303,40 +303,37 @@ export function BoardCard({
 
       {!collapsed && (
         <div className="px-4 pb-4">
-          <div className="mb-3 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))" }}>
-            <div className="rounded-xl border-[1.5px] border-overlay/25 bg-overlay/5 px-3 py-2.5">
-              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Пункты</div>
-              <div className="font-heading mt-0.5 text-sm font-bold">{doneItems}/{totalItems} · {mainPct}%</div>
-              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/80" style={{ width: `${mainPct}%` }} /></div>
-            </div>
-            <div className="rounded-xl bg-muted px-3 py-2.5">
-              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Уроки</div>
-              <div className="font-heading mt-0.5 text-sm font-bold">{greenLessons}/{lessonsTotal}</div>
-              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${lessonsPct}%` }} /></div>
+          {/* Две главные цифры — сколько уроков готово и идёт ли класс по
+              графику, — остальное одной строкой. Раньше это были четыре-пять
+              одинаковых плиток, и главное терялось среди «Пунктов» и разбивки
+              по типам работ. */}
+          <div className="mb-3.5 flex flex-wrap items-end gap-x-8 gap-y-3">
+            <div className="w-40">
+              <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">Уроков готово</div>
+              <div className="font-heading mt-0.5 text-2xl font-bold tabular-nums">
+                {greenLessons}<span className="text-base text-muted-foreground">/{lessonsTotal}</span>
+              </div>
+              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/70" style={{ width: `${lessonsPct}%` }} /></div>
             </div>
             {plan && (
               // График: где программа должна быть сегодня и сколько уроков
               // отстаёт. Считается по неделям от даты старта (lib/boardSchedule.ts).
-              <div className={cn("rounded-xl px-3 py-2.5", plan.behind > 0 ? "bg-destructive/10" : "bg-muted")}>
+              <div>
                 <div className="text-2xs font-bold tracking-wide text-muted-foreground uppercase">График</div>
-                <div className="font-heading mt-0.5 text-sm font-bold">
-                  {plan.currentWeek < 0 ? "до старта" : plan.currentWeek >= plan.weeks.length ? "завершён" : `${plan.currentWeek + 1} из ${plan.weeks.length} нед`}
+                <div className={cn("font-heading mt-0.5 text-2xl font-bold", plan.behind > 0 && "text-destructive")}>
+                  {plan.behind > 0 ? `отстаёт на ${plan.behind}` : "в графике"}
                 </div>
-                <div className={cn("mt-1 text-2xs font-bold", plan.behind > 0 ? "text-destructive" : "text-muted-foreground")}>
-                  {plan.behind > 0 ? `отстаёт на ${plan.behind}` : "в графике"} · план {plan.plannedByNow}, готово {plan.done}
+                <div className="mt-1 text-2xs font-bold text-muted-foreground">
+                  {plan.currentWeek < 0 ? "до старта" : plan.currentWeek >= plan.weeks.length ? "завершён" : `${plan.currentWeek + 1} из ${plan.weeks.length} нед`} · план {plan.plannedByNow}, готово {plan.done}
                 </div>
               </div>
             )}
-            {Object.entries(typeBreakdown).map(([name, stat]) => {
-              const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0
-              return (
-                <div key={name} className="rounded-xl bg-muted px-3 py-2.5">
-                  <div className="truncate text-2xs font-bold tracking-wide text-muted-foreground uppercase">{name}</div>
-                  <div className="font-heading mt-0.5 text-sm font-bold">{stat.done}/{stat.total}</div>
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-overlay/10"><div className="h-full rounded-full bg-emphasis/60" style={{ width: `${pct}%` }} /></div>
-                </div>
-              )
-            })}
+            <div className="min-w-0 flex-1 pb-0.5 text-xs text-muted-foreground sm:text-right">
+              Пункты <b className="font-bold text-foreground tabular-nums">{doneItems}/{totalItems}</b> · {mainPct}%
+              {Object.entries(typeBreakdown).map(([name, stat]) => (
+                <span key={name}> · {name} <b className="font-bold text-foreground tabular-nums">{stat.done}/{stat.total}</b></span>
+              ))}
+            </div>
           </div>
 
           {view === "rows" ? (

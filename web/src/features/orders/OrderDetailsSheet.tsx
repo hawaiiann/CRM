@@ -100,11 +100,11 @@ export function OrderDetailsSheet({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col divide-y divide-border rounded-xl border border-border">
                     {order.lines.map((line) => (
                       <div
                         key={line.id}
-                        className="flex items-center justify-between gap-2.5 rounded-xl bg-muted px-3.5 py-2.5"
+                        className="flex items-center justify-between gap-2.5 px-3.5 py-2.5"
                       >
                         <div>
                           <div className="text-sm font-bold">

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { OrderLink } from "@/components/ui/order-link"
-import { Wallet, Clock3, ArrowRight, CalendarClock, Play } from "lucide-react"
+import { Wallet, Clock3, ArrowRight, CalendarClock, Play, AlertCircle, Layers } from "lucide-react"
 import { PageHeader } from "@/components/layout/AppShell"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/useAppStore"
@@ -113,7 +113,7 @@ export function TodayPage() {
             {inWork.length === 0 ? (
               <EmptyHint icon={Play} text="Ничего не в работе. Возьмите урок из очереди ниже — статус меняется прямо в строке." />
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col divide-y divide-border/70">
                 {inWork.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o, { ktpMode })} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
               </div>
             )}
@@ -129,7 +129,7 @@ export function TodayPage() {
             {upcoming.length === 0 ? (
               <EmptyHint icon={CalendarClock} text="Очередь пуста. Новый урок заводится из планирования — кнопкой в карточке урока." />
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col divide-y divide-border/70">
                 {upcoming.map((o) => <OrderRow key={o.id} order={o} title={orderTitleWithTopic(boards, o, { ktpMode })} today={today} onStatus={(s) => changeStatus(o.id, s)} />)}
               </div>
             )}
@@ -147,14 +147,22 @@ export function TodayPage() {
               <Stat label="Часы сегодня" value={fmtHours(money.hoursToday)} />
               <Stat label="За неделю" value={fmtHours(money.hoursWeek)} />
             </div>
-            {money.legacyDays > 0 && (
-              <Link to="/finance?tab=journal" className="mt-3 block rounded-lg bg-notice px-3 py-2 text-xs font-bold text-notice-foreground hover:opacity-90">
-                В журнале {money.legacyDays} {money.legacyDays === 1 ? "день" : money.legacyDays < 5 ? "дня" : "дней"} со старыми поминутными строками — схлопнуть в Журнале часов
-              </Link>
-            )}
-            {overdueCount > 0 && (
-              <div className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs font-bold text-danger-soft-foreground">
-                Просрочено: {overdueCount}. Они наверху в списках, с красной пометкой.
+            {/* Напоминания — строками с иконкой, а не цветными плашками: заливки
+                перебивали сами суммы, ради которых этот блок и открывают. */}
+            {(money.legacyDays > 0 || overdueCount > 0) && (
+              <div className="mt-3.5 flex flex-col gap-2 border-t border-border pt-3 text-xs">
+                {overdueCount > 0 && (
+                  <div className="flex items-start gap-2 font-bold text-destructive">
+                    <AlertCircle className="mt-px size-3.5 shrink-0" />
+                    <span>Просрочено: {overdueCount}. Они наверху в списках, с красной пометкой.</span>
+                  </div>
+                )}
+                {money.legacyDays > 0 && (
+                  <Link to="/finance?tab=journal" className="flex items-start gap-2 font-semibold text-notice-foreground hover:underline">
+                    <Layers className="mt-px size-3.5 shrink-0" />
+                    <span>В журнале {money.legacyDays} {money.legacyDays === 1 ? "день" : money.legacyDays < 5 ? "дня" : "дней"} со старыми поминутными строками — схлопнуть в Журнале часов</span>
+                  </Link>
+                )}
               </div>
             )}
             <div className="mt-3 flex gap-2">
@@ -182,14 +190,14 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "de
   return (
     <div>
       <div className="text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">{label}</div>
-      <div className={cn("font-heading mt-0.5 text-2xl font-bold tabular-nums", tone === "destructive" && "text-destructive")}>{value}</div>
+      <div className={cn("font-heading mt-0.5 text-xl font-bold tabular-nums", tone === "destructive" && "text-destructive")}>{value}</div>
     </div>
   )
 }
 
 function EmptyHint({ icon: Icon, text }: { icon: typeof Play; text: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-muted/60 px-4 py-4 text-sm text-muted-foreground">
+    <div className="flex items-center gap-3 rounded-xl border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
       <Icon className="size-4 shrink-0" strokeWidth={1.8} />
       {text}
     </div>
@@ -200,20 +208,27 @@ function OrderRow({ order, title, today, onStatus }: { order: Order; title: stri
   const due = deadlineLabel(order.deadline, today)
   const ready = order.lines.filter((l) => l.ready).length
   return (
-    // На телефоне таймер, название и статус не влезают в одну строку:
-    // название уезжало в «Литература, …». Там название идёт первой строкой
-    // на всю ширину, таймер и статус — второй.
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl bg-muted/60 px-3 py-2.5">
-      <div className="order-2 sm:order-1"><OrderTimerButton order={order} /></div>
-      <OrderLink orderId={order.id} className="order-1 min-w-0 basis-full sm:order-2 sm:flex-1 sm:basis-auto">
-        <div className="truncate text-sm font-bold hover:underline">{title}</div>
+    // Таймер — круглая иконка слева, статус — точкой справа, поэтому строка
+    // помещается и на телефоне. Название там не обрезается в «Литература, …»,
+    // а переносится на вторую строку.
+    // Строки — без серой плашки: двадцать одинаковых полос сливались в стену.
+    // Подсвечены только те, что требуют внимания: просроченные и приоритетные.
+    <div
+      className={cn(
+        "-mx-2 flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50 sm:items-center",
+        due.tone === "overdue" ? "bg-danger-soft/60 hover:bg-danger-soft" : order.priority && "bg-muted/60"
+      )}
+    >
+      <div className="pt-0.5 sm:pt-0"><OrderTimerButton order={order} /></div>
+      <OrderLink orderId={order.id} className="min-w-0 flex-1">
+        <div className="line-clamp-2 text-sm font-bold hover:underline sm:truncate">{title}</div>
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           <span className={cn("font-bold", due.tone === "overdue" && "text-destructive", due.tone === "soon" && "text-warning-foreground")}>{due.text}</span>
           {order.lines.length > 0 && <span>{ready}/{order.lines.length} поз.</span>}
           {order.client && <span className="truncate">{order.client}</span>}
         </div>
       </OrderLink>
-      <div className="order-3 ml-auto sm:ml-0"><StatusBadge status={order.status} onChange={onStatus} /></div>
+      <div className="shrink-0"><StatusBadge status={order.status} onChange={onStatus} variant="dot" /></div>
     </div>
   )
 }

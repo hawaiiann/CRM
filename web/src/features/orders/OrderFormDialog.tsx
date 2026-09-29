@@ -320,6 +320,7 @@ export function OrderFormDialog({
   )
   const unallocated = orderUnallocatedAdvance(draft)
   // Сумма, а не первая строка: после слияния дублей на один аванс бывало две.
+  const hasAdvanceData = advanceRows.length > 0 || unallocated > 0 || parseNum(draft.advanceUsed) > 0 || (draft.advanceAllocations || []).length > 0
   const allocationOf = (advanceId: string) => (draft.advanceAllocations || []).filter((a) => a.advanceId === advanceId).reduce((s, a) => s + parseNum(a.amount), 0)
   // Списания с авансов, которых нет среди авансов клиента: аванс удалили или
   // у заказа сменили клиента. Раньше таких строк в форме не было вовсе —
@@ -576,8 +577,173 @@ export function OrderFormDialog({
               </div>
             )}
 
-            {/* Аванс */}
-            <div className="rounded-xl border border-border bg-muted/60 p-4">
+            {/* Позиции */}
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <Label>Состав заказа</Label>
+                {appSettings.orderTemplates.length > 0 && (
+                  <Select onValueChange={applyTemplate}>
+                    <SelectTrigger size="sm" className="w-auto"><SelectValue placeholder="Вставить шаблон..." /></SelectTrigger>
+                    <SelectContent>
+                      {appSettings.orderTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {draft.lines.map((line) => (
+                  <div
+                    key={line.id}
+                    className={cn(
+                      "rounded-lg border border-border p-2",
+                      // Подсвечиваем позицию, в которую сейчас капает время: без
+                      // этого механизм таймера никак не виден, и непонятно,
+                      // куда попадут часы.
+                      line.id === timerLineId && "border-cta/50 bg-cta/5"
+                    )}
+                  >
+                    {line.id === timerLineId && (
+                      <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-2xs font-bold text-cta">
+                        <Clock className="size-3" strokeWidth={2.5} />
+                        Сюда таймер записывает время
+                      </div>
+                    )}
+                    {/* desktop / wide dialog — one compact row */}
+                    <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[24px_1.3fr_1fr_60px_80px_90px_80px_28px]">
+                      <LineReady line={line} onToggle={() => toggleReady(line.id)} />
+                      <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" inputClassName="h-8" />
+                      <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} placeholder="Ед. изм." inputClassName="h-8" />
+                      <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
+                      <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
+                      <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
+                      <div className="text-center text-sm font-bold tabular-nums">{fmtMoney(calculateLineTotal(line))}</div>
+                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
+                    </div>
+
+                    {/* mobile — stacked, labeled fields so nothing needs to scroll sideways */}
+                    <div className="flex flex-col gap-2 sm:hidden">
+                      <div className="flex items-center gap-2">
+                        <LineReady line={line} onToggle={() => toggleReady(line.id)} />
+                        <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" className="flex-1" inputClassName="h-8" />
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <MiniField label="Ед. изм.">
+                          <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} inputClassName="h-8" />
+                        </MiniField>
+                        <MiniField label="Кол-во">
+                          <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
+                        </MiniField>
+                        <MiniField label="Часы" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"}>
+                          <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" />
+                        </MiniField>
+                        <MiniField label="Цена, ₽">
+                          <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
+                        </MiniField>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-muted-foreground">Итого по позиции</span>
+                        <span className="tabular-nums">{fmtMoney(calculateLineTotal(line))}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addLine}><Plus />Добавить позицию</Button>
+
+              {/* Надбавки идут в том же порядке, в каком считаются: нейросети
+                  к позициям, срочность к этой сумме, налог ко всему. */}
+              <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Нейросети, ₽ за единицу</div>
+                  <div className="flex items-center gap-2">
+                    <NumberInput
+                      value={draft.aiRate}
+                      onChange={(n) => setDraft((d) => ({ ...d, aiRate: Math.max(0, n) }))}
+                      placeholder="0"
+                      className="h-8 w-20"
+                    />
+                    <span className="min-w-0 text-xs text-muted-foreground">
+                      {price.aiRate > 0 ? <>× {price.aiUnits} ед. = <b className="text-foreground tabular-nums">{fmtMoney(price.ai)}</b></> : "за слайд, страницу…"}
+                    </span>
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Срочность</div>
+                  <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+                    {[0, ...URGENCY_OPTIONS].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setDraft((d) => ({ ...d, urgencyPct: p }))}
+                        className={cn(
+                          "h-7 rounded px-3 text-xs font-bold tabular-nums transition-colors",
+                          draft.urgencyPct === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {p ? `+${p}%` : "Нет"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* На какие позиции идёт надбавка: по умолчанию на все штучные.
+                    Клик убирает позицию из расчёта (например, видео без нейросетей). */}
+                {price.aiRate > 0 && aiLines.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+                    <span className="text-2xs font-bold text-muted-foreground">Считать с:</span>
+                    {aiLines.map((l) => {
+                      const on = lineTakesAi(l)
+                      return (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => updateLine(l.id, { noAi: on ? true : undefined })}
+                          title={on ? "Надбавка идёт — нажмите, чтобы убрать с этой позиции" : "Без надбавки — нажмите, чтобы вернуть"}
+                          className={cn(
+                            "rounded-md border px-2 py-0.5 text-xs font-bold transition-colors",
+                            on ? "border-border bg-background text-foreground" : "border-dashed border-border text-muted-foreground line-through"
+                          )}
+                        >
+                          {l.label || l.type} · {parseNum(l.qty)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <Field label="Налог" className="sm:col-span-2">
+                  <Select value={draft.taxType} onValueChange={(v) => setDraft((d) => ({ ...d, taxType: v as TaxType }))}>
+                    <SelectTrigger className="w-full bg-background"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Без налога</SelectItem>
+                      <SelectItem value="individual">Физ. лицо (+4%)</SelectItem>
+                      <SelectItem value="entity">Юр. лицо (+6%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-0.5 text-sm">
+                <PriceRow label="Сумма позиций" value={fmtMoney(price.base)} />
+                {price.ai > 0 && <PriceRow label={`Нейросети · ${fmtMoney(price.aiRate)} × ${price.aiUnits}`} value={`+${fmtMoney(price.ai)}`} />}
+                {price.urgency > 0 && <PriceRow label={`Срочность · +${price.urgencyPct}%`} value={`+${fmtMoney(price.urgency)}`} />}
+                {price.tax > 0 && <PriceRow label={`Налог · +${Math.round(price.taxRate * 100)}%`} value={`+${fmtMoney(price.tax)}`} />}
+                <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-bold">
+                  <span>Конечная цена</span>
+                  <span className="tabular-nums">{fmtMoney(totalWithTax)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Аванс. Если у клиента авансов нет и на заказ ничего не списано —
+                одна строка вместо целого блока из трёх нулей. */}
+            {!hasAdvanceData ? (
+              <div className="rounded-xl border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
+                У {draft.client.trim() ? "клиента" : "заказа"} нет авансов — внести аванс можно на Финансах или в карточке клиента.
+              </div>
+            ) : (
+            <div className="rounded-xl border border-border p-4">
               <div className="mb-3 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Аванс клиента по заказу</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
@@ -668,9 +834,10 @@ export function OrderFormDialog({
                 Списать всё
               </button>
             </div>
+            )}
 
             {/* Оплата */}
-            <div className="rounded-xl border border-border bg-muted/60 p-4">
+            <div className="rounded-xl border border-border p-4">
               <div className="mb-3 text-2xs font-extrabold tracking-wide text-muted-foreground uppercase">Оплата по заказу</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
@@ -721,177 +888,25 @@ export function OrderFormDialog({
               </div>
             </div>
 
-            {/* Позиции */}
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <Label>Состав заказа</Label>
-                {appSettings.orderTemplates.length > 0 && (
-                  <Select onValueChange={applyTemplate}>
-                    <SelectTrigger size="sm" className="w-auto"><SelectValue placeholder="Вставить шаблон..." /></SelectTrigger>
-                    <SelectContent>
-                      {appSettings.orderTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                {draft.lines.map((line) => (
-                  <div
-                    key={line.id}
-                    className={cn(
-                      "rounded-lg border border-border p-2",
-                      // Подсвечиваем позицию, в которую сейчас капает время: без
-                      // этого механизм таймера никак не виден, и непонятно,
-                      // куда попадут часы.
-                      line.id === timerLineId && "border-cta/50 bg-cta/5"
-                    )}
-                  >
-                    {line.id === timerLineId && (
-                      <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-2xs font-bold text-cta">
-                        <Clock className="size-3" strokeWidth={2.5} />
-                        Сюда таймер записывает время
-                      </div>
-                    )}
-                    {/* desktop / wide dialog — one compact row */}
-                    <div className="hidden items-center gap-1.5 sm:grid sm:grid-cols-[24px_1.3fr_1fr_60px_80px_90px_80px_28px]">
-                      <LineReady line={line} onToggle={() => toggleReady(line.id)} />
-                      <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" inputClassName="h-8" />
-                      <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} placeholder="Ед. изм." inputClassName="h-8" />
-                      <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
-                      <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"} />
-                      <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
-                      <div className="text-center text-sm font-bold tabular-nums">{fmtMoney(calculateLineTotal(line))}</div>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
-                    </div>
-
-                    {/* mobile — stacked, labeled fields so nothing needs to scroll sideways */}
-                    <div className="flex flex-col gap-2 sm:hidden">
-                      <div className="flex items-center gap-2">
-                        <LineReady line={line} onToggle={() => toggleReady(line.id)} />
-                        <ComboInput value={line.label} onChange={(v) => updateLine(line.id, { label: v })} options={catalogWithCurrent(appSettings, "types", line.label)} placeholder="Тип" className="flex-1" inputClassName="h-8" />
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(line.id)}><Trash2 className="text-muted-foreground" /></Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <MiniField label="Ед. изм.">
-                          <ComboInput value={line.type} onChange={(v) => updateLine(line.id, { type: v })} options={catalogWithCurrent(appSettings, "units", line.type)} inputClassName="h-8" />
-                        </MiniField>
-                        <MiniField label="Кол-во">
-                          <NumberInput value={line.qty} onChange={(n) => updateLine(line.id, { qty: n })} className="h-8" />
-                        </MiniField>
-                        <MiniField label="Часы" title={isHourlyUnit(line) ? "Часы — по ним считается стоимость (часовая единица)" : "Часы для учёта, на стоимость не влияют"}>
-                          <NumberInput value={line.pomoHours} onChange={(n) => updateLine(line.id, { pomoHours: n })} placeholder="0 ч" className="h-8" />
-                        </MiniField>
-                        <MiniField label="Цена, ₽">
-                          <NumberInput value={line.rate} onChange={(n) => updateLine(line.id, { rate: n })} className="h-8" />
-                        </MiniField>
-                      </div>
-                      <div className="flex justify-between text-sm font-bold">
-                        <span className="text-muted-foreground">Итого по позиции</span>
-                        <span className="tabular-nums">{fmtMoney(calculateLineTotal(line))}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addLine}><Plus />Добавить позицию</Button>
-
-              {/* Надбавки идут в том же порядке, в каком считаются: нейросети
-                  к позициям, срочность к этой сумме, налог ко всему. */}
-              <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-border bg-muted/60 p-4 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Нейросети, ₽ за единицу</div>
-                  <div className="flex items-center gap-2">
-                    <NumberInput
-                      value={draft.aiRate}
-                      onChange={(n) => setDraft((d) => ({ ...d, aiRate: Math.max(0, n) }))}
-                      placeholder="0"
-                      className="h-8 w-20"
-                    />
-                    <span className="min-w-0 text-xs text-muted-foreground">
-                      {price.aiRate > 0 ? <>× {price.aiUnits} ед. = <b className="text-foreground tabular-nums">{fmtMoney(price.ai)}</b></> : "за слайд, страницу…"}
-                    </span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="mb-1.5 text-2xs font-bold tracking-wide text-muted-foreground uppercase">Срочность</div>
-                  <div className="inline-flex rounded-md border border-border bg-background p-0.5">
-                    {[0, ...URGENCY_OPTIONS].map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setDraft((d) => ({ ...d, urgencyPct: p }))}
-                        className={cn(
-                          "h-7 rounded px-3 text-xs font-bold tabular-nums transition-colors",
-                          draft.urgencyPct === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {p ? `+${p}%` : "Нет"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* На какие позиции идёт надбавка: по умолчанию на все штучные.
-                    Клик убирает позицию из расчёта (например, видео без нейросетей). */}
-                {price.aiRate > 0 && aiLines.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
-                    <span className="text-2xs font-bold text-muted-foreground">Считать с:</span>
-                    {aiLines.map((l) => {
-                      const on = lineTakesAi(l)
-                      return (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => updateLine(l.id, { noAi: on ? true : undefined })}
-                          title={on ? "Надбавка идёт — нажмите, чтобы убрать с этой позиции" : "Без надбавки — нажмите, чтобы вернуть"}
-                          className={cn(
-                            "rounded-md border px-2 py-0.5 text-xs font-bold transition-colors",
-                            on ? "border-border bg-background text-foreground" : "border-dashed border-border text-muted-foreground line-through"
-                          )}
-                        >
-                          {l.label || l.type} · {parseNum(l.qty)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-                <Field label="Налог" className="sm:col-span-2">
-                  <Select value={draft.taxType} onValueChange={(v) => setDraft((d) => ({ ...d, taxType: v as TaxType }))}>
-                    <SelectTrigger className="w-full bg-background"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Без налога</SelectItem>
-                      <SelectItem value="individual">Физ. лицо (+4%)</SelectItem>
-                      <SelectItem value="entity">Юр. лицо (+6%)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-0.5 text-sm">
-                <PriceRow label="Сумма позиций" value={fmtMoney(price.base)} />
-                {price.ai > 0 && <PriceRow label={`Нейросети · ${fmtMoney(price.aiRate)} × ${price.aiUnits}`} value={`+${fmtMoney(price.ai)}`} />}
-                {price.urgency > 0 && <PriceRow label={`Срочность · +${price.urgencyPct}%`} value={`+${fmtMoney(price.urgency)}`} />}
-                {price.tax > 0 && <PriceRow label={`Налог · +${Math.round(price.taxRate * 100)}%`} value={`+${fmtMoney(price.tax)}`} />}
-                <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-bold">
-                  <span>Конечная цена</span>
-                  <span className="tabular-nums">{fmtMoney(totalWithTax)}</span>
-                </div>
-              </div>
-            </div>
-
             <Field label="Заметки и требования">
               <Textarea value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Ссылка на ТЗ, правки..." rows={3} />
             </Field>
 
-            <DialogFooter className="sticky bottom-0 -mx-1 mt-2 gap-2 border-t border-border bg-popover px-1 pt-3">
+            <DialogFooter className="sticky bottom-0 -mx-1 mt-2 flex-row flex-wrap items-center gap-2 border-t border-border bg-popover px-1 pt-3">
               {editingOrder && (
-                <Button type="button" variant="destructive" className="mr-auto" onClick={() => setConfirmDelete(true)}>
+                <Button type="button" variant="destructive" className="order-2 sm:order-none" onClick={() => setConfirmDelete(true)}>
                   Удалить
                 </Button>
               )}
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
-              <Button type="submit" className="bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta">
+              {/* Итог — рядом с «Сохранить»: раньше, чтобы увидеть цену после
+                  правки позиций, приходилось листать форму. */}
+              <div className="order-1 flex basis-full items-baseline justify-between gap-2 sm:order-none sm:mr-auto sm:ml-2 sm:basis-auto sm:justify-start">
+                <span className="text-xs text-muted-foreground">Итого</span>
+                <span className="font-heading text-lg font-bold tabular-nums">{fmtMoney(totalWithTax)}</span>
+                {remaining > 0 && remaining < totalWithTax && <span className="text-xs text-muted-foreground">к доплате {fmtMoney(remaining)}</span>}
+              </div>
+              <Button type="button" variant="outline" className="order-3 flex-1 sm:order-none sm:flex-none" onClick={() => onOpenChange(false)}>Отмена</Button>
+              <Button type="submit" className="order-4 flex-1 bg-cta/90 font-extrabold text-cta-foreground hover:bg-cta sm:order-none sm:flex-none">
                 Сохранить
               </Button>
             </DialogFooter>

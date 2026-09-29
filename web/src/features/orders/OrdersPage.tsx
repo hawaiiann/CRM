@@ -4,7 +4,6 @@ import {
   Search,
   Plus,
   Columns3,
-  ChevronDown,
   MoreVertical,
   Pencil,
   Copy,
@@ -600,17 +599,19 @@ export function OrdersPage() {
         <Kpi label="В архиве" value={String(doneThisMonthCount)} hint="завершённые, см. под таблицей" />
       </div>
 
-      {/* toolbar */}
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+      {/* Управление — одной строкой: поиск и быстрые виды слева, порядок,
+          клиент, колонки и «Новый заказ» справа. Раньше это были два ряда
+          плюс три ряда чипов классов — пять рядов до первого заказа. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2.5">
+        <div className="flex w-full flex-wrap items-center gap-2.5 lg:w-auto">
           <div className="relative w-full sm:w-auto">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск: класс, урок, клиент, предмет..."
-              className="w-full pl-8 sm:w-60"
+              placeholder="Поиск: класс, урок, клиент..."
+              className="w-full pl-8 sm:w-56"
             />
           </div>
           <div className="bg-muted inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg p-[3px]">
@@ -637,6 +638,8 @@ export function OrdersPage() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">
           {/* Сортировка и отбор по клиенту. Быстрые виды слева отвечают за
               «что показать», эти два — за «в каком порядке» и «чьё». */}
           <Select
@@ -646,7 +649,7 @@ export function OrdersPage() {
               if (preset) setSort(preset.sort)
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-52">
+            <SelectTrigger size="sm" className="w-full sm:w-48">
               <SelectValue>{sortLabel(sort)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -656,21 +659,16 @@ export function OrdersPage() {
             </SelectContent>
           </Select>
           <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger size="sm" className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+            <SelectTrigger size="sm" className="w-[calc(100%-7.5rem)] sm:w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Клиент: любой</SelectItem>
               {clientOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="icon-sm" title="Колонки таблицы">
                 <Columns3 />
-                Колонки
-                <ChevronDown className="text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44">
@@ -700,12 +698,15 @@ export function OrdersPage() {
           это быстрее любого поиска. */}
       {/* На телефоне чипы одной прокручиваемой строкой: десять классов в
           три ряда съедали половину экрана до первого заказа. */}
+      {/* И на широком экране — одной строкой с прокруткой: в три ряда чипы
+          занимали больше места, чем первые заказы. Невыбранные — контуром,
+          без заливки: сплошные серые пилюли спорили с таблицей. */}
       {groups.list.length > 1 && (
-        <div className="mb-3.5 flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+        <div className="mb-3.5 flex items-center gap-1.5 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => setClassFilter(null)}
-            className={cn("shrink-0 rounded-full px-3 py-1 text-xs font-bold transition-colors", !classFilter ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground")}
+            className={cn("shrink-0 rounded-full border px-3 py-1 text-xs font-bold transition-colors", !classFilter ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground")}
           >
             Все классы
           </button>
@@ -716,12 +717,12 @@ export function OrdersPage() {
               onClick={() => setClassFilter((v) => (v === g.key ? null : g.key))}
               title={`${g.all.length} заказов, ${g.activeCount} в работе${g.due > 0 ? `, к доплате ${fmtMoney(g.due)}` : ""}`}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-colors",
-                classFilter === g.key ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/70"
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold whitespace-nowrap transition-colors",
+                classFilter === g.key ? "border-foreground bg-foreground text-background" : "border-border text-foreground hover:bg-muted"
               )}
             >
               {g.label}
-              <span className={cn("rounded-full px-1.5 text-2xs tabular-nums", classFilter === g.key ? "bg-background/20" : "bg-overlay/15 text-muted-foreground")}>{g.activeCount}</span>
+              <span className={cn("text-2xs tabular-nums", classFilter === g.key ? "text-background/70" : "text-muted-foreground")}>{g.activeCount}</span>
               {g.overdue && <span className="size-1.5 rounded-full bg-destructive" title="Есть просроченные" />}
             </button>
           ))}
@@ -1026,7 +1027,7 @@ function GroupHeadingInner({ label, count, missing, due }: { label: string; coun
 
 function GroupRow({ colSpan, muted, ...rest }: { label: string; count: number; missing: number[]; due: number; colSpan: number; muted?: boolean }) {
   return (
-    <TableRow className={cn("hover:bg-transparent", muted ? "bg-muted/30" : "bg-muted/60")}>
+    <TableRow className={cn("hover:bg-transparent", muted ? "bg-muted/20" : "bg-muted/40")}>
       <TableCell colSpan={colSpan} className="px-3 py-2 whitespace-normal">
         <GroupHeadingInner {...rest} />
       </TableCell>

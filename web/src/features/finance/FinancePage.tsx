@@ -470,7 +470,7 @@ export function FinancePage() {
             </div>
 
             {/* mobile — stacked cards */}
-            <div className="flex flex-col gap-2.5 sm:hidden">
+            <div className="flex flex-col divide-y divide-border sm:hidden">
               {finList.length === 0 && <div className="py-8 text-center text-muted-foreground">Нет данных</div>}
               {pagedFinList.map((o) => {
                 const base = orderPreTaxTotal(o)
@@ -478,7 +478,7 @@ export function FinancePage() {
                 const tax = full - base
                 const pay = orderPaymentState(o)
                 return (
-                  <div key={o.id} className="rounded-xl bg-muted/60 p-3.5">
+                  <div key={o.id} className="py-3.5 first:pt-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <OrderLink orderId={o.id} className="block truncate font-semibold text-foreground hover:underline">{o.title || "Без названия"}</OrderLink>
@@ -609,12 +609,12 @@ export function FinancePage() {
             )}
 
             {/* mobile — stacked cards */}
-            <div className="flex flex-col gap-2.5 sm:hidden">
+            <div className="flex flex-col divide-y divide-border sm:hidden">
               {advList.length === 0 && <div className="py-8 text-center text-muted-foreground">{advances.length ? "Ничего не найдено" : "Авансы ещё не вносились"}</div>}
               {pagedAdvances.map((a) => {
                 const stats = advanceRowStats(a)
                 return (
-                  <div key={a.id} className="rounded-xl bg-muted/60 p-3.5">
+                  <div key={a.id} className="py-3.5 first:pt-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate font-bold">{a.client}</div>

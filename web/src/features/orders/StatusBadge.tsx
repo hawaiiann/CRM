@@ -43,23 +43,41 @@ export { STATUS_LABEL }
  * просто подписью, и завершить заказ можно было только открыв форму и найдя
  * там поле «Статус» — неочевидно настолько, что способ вообще не находился.
  */
+// Цвет точки в компактном виде — тот же смысл, что у заливки пилюли.
+const STATUS_DOT: Record<OrderStatus, string> = {
+  queue: "bg-muted-foreground/50",
+  progress: "bg-warning-foreground",
+  review: "bg-foreground/60",
+  done: "bg-success-foreground",
+  cancelled: "bg-destructive",
+}
+
 export function StatusBadge({
   status,
   onChange,
+  variant = "pill",
 }: {
   status: OrderStatus
   onChange?: (next: OrderStatus) => void
+  /**
+   * dot — точка и подпись без заливки. Для списков, где у всех строк один и
+   * тот же статус («В работе сейчас»): колонка одинаковых жёлтых пилюль
+   * ничего не сообщала и перебивала названия.
+   */
+  variant?: "pill" | "dot"
 }) {
   const Icon = STATUS_ICON[status]
-  const base = cn(
-    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-2xs font-bold whitespace-nowrap",
-    STATUS_STYLE[status]
-  )
+  const base = variant === "dot"
+    ? "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-2xs font-bold whitespace-nowrap text-muted-foreground"
+    : cn("inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-2xs font-bold whitespace-nowrap", STATUS_STYLE[status])
+  const mark = variant === "dot"
+    ? <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[status])} />
+    : <Icon className="size-3" strokeWidth={2.25} />
 
   if (!onChange) {
     return (
       <span className={base}>
-        <Icon className="size-3" strokeWidth={2.25} />
+        {mark}
         {STATUS_LABEL[status]}
       </span>
     )
@@ -72,9 +90,9 @@ export function StatusBadge({
           type="button"
           title="Сменить статус"
           onClick={(e) => e.stopPropagation()}
-          className={cn(base, "cursor-pointer transition-opacity hover:opacity-80")}
+          className={cn(base, "cursor-pointer transition-colors", variant === "dot" ? "hover:bg-muted hover:text-foreground" : "transition-opacity hover:opacity-80")}
         >
-          <Icon className="size-3" strokeWidth={2.25} />
+          {mark}
           {STATUS_LABEL[status]}
           <ChevronDown className="size-3 opacity-70" />
         </button>
