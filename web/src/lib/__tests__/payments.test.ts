@@ -1,5 +1,6 @@
 import { test, expect } from "vitest"
-import { distributePayment, applyPayments, allocateAdvanceToOrders } from "../payments"
+import { distributePayment, applyPayments, allocateAdvanceToOrders, spendAdvancesOnOrders } from "../payments"
+import { clientAdvanceRows, getClientAdvanceStats } from "../advances"
 import { orderPaymentState } from "../money"
 import type { Order } from "@/types/models"
 
@@ -39,4 +40,41 @@ test("аванс списывается на выбранные заказы с 
   expect(r.orders[1]).toBe(orders[1])
   expect(r.orders[2]).toMatchObject({ advanceUsed: 300, advanceAllocations: [{ advanceId: "adv1", amount: 300 }] })
   expect(orderPaymentState(r.orders[0]).remaining).toBe(0)
+})
+
+test("закрыть долг авансом: по срокам, авансы от старых, не больше свободного", () => {
+  const advances = [
+    { id: "old", client: "Школа", amount: 700, date: "2026-07-01", note: "" },
+    { id: "new", client: "школа ", amount: 1000, date: "2026-08-01", note: "" },
+  ]
+  // Старый заказ уже взял 200 с «old», ещё 100 списано без привязки (старая версия).
+  const orders = [
+    order("a", 1000, { deadline: "2026-08-01" }),
+    order("b", 800, { deadline: "2026-08-05" }),
+    order("x", 300, { advanceUsed: 300, advanceAllocations: [{ advanceId: "old", amount: 200 }] }),
+  ]
+  const rows = clientAdvanceRows("Школа", advances, orders)
+  const budget = getClientAdvanceStats("Школа", advances, orders).available
+  expect(budget).toBe(1400) // 1700 внесено − 300 списано
+  const r = spendAdvancesOnOrders(orders, ["a", "b"], rows, budget)
+  // «a» закрыт целиком: 500 со старого + 500 с нового; «b» получает остаток 400 (потолок 1400), не 500.
+  expect(r.splits).toEqual([{ orderId: "a", amount: 1000 }, { orderId: "b", amount: 400 }])
+  expect(r.total).toBe(1400)
+  const a = r.orders.find((o) => o.id === "a")!
+  expect(a.advanceAllocations).toEqual([{ advanceId: "old", amount: 500 }, { advanceId: "new", amount: 500 }])
+  expect(a.isPaid).toBe(true)
+  expect(orderPaymentState(r.orders.find((o) => o.id === "b")!).remaining).toBe(400)
+})
+
+test("закрыть долг: сначала аванс, на остаток — деньги, долга не остаётся", () => {
+  const advances = [{ id: "adv", client: "Школа", amount: 500, date: "2026-07-01", note: "" }]
+  const orders = [order("a", 1000, { deadline: "2026-08-01" }), order("b", 700, { deadline: "2026-08-02" })]
+  const adv = spendAdvancesOnOrders(orders, ["a", "b"], clientAdvanceRows("Школа", advances, orders), 500)
+  const rest = ["a", "b"].map((id) => adv.orders.find((o) => o.id === id)!)
+  const due = rest.reduce((s, o) => s + orderPaymentState(o).remaining, 0)
+  expect(due).toBe(1200)
+  const { splits, leftover } = distributePayment(rest, due)
+  const final = applyPayments(adv.orders, splits, "2026-10-02", "за сентябрь")
+  expect(leftover).toBe(0)
+  expect(final.every((o) => orderPaymentState(o).remaining === 0 && o.isPaid)).toBe(true)
 })

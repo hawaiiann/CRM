@@ -59,6 +59,8 @@ export function ClientsContent() {
   const setActiveClient = (name: string | null) => navigate(name ? `/clients/${encodeURIComponent(name)}` : "/clients", { replace: !!activeClient })
   const [depositClient, setDepositClient] = useState<string | null>(null)
   const [receiveClient, setReceiveClient] = useState<string | null>(null)
+  // «Закрыть долг» — то же окно, но сразу со всеми неоплаченными заказами.
+  const [receiveAll, setReceiveAll] = useState(false)
   const [actClient, setActClient] = useState<string | null>(null)
 
   const rows = useMemo(() => {
@@ -223,12 +225,13 @@ export function ClientsContent() {
         clientName={activeClient}
         onOpenChange={(open) => !open && setActiveClient(null)}
         onDeposit={(client) => { setActiveClient(null); setDepositClient(client) }}
-        onReceive={(client) => { setActiveClient(null); setReceiveClient(client) }}
+        onReceive={(client) => { setActiveClient(null); setReceiveAll(false); setReceiveClient(client) }}
+        onCloseDebt={(client) => { setActiveClient(null); setReceiveAll(true); setReceiveClient(client) }}
         onAct={(client) => { setActiveClient(null); setActClient(client) }}
       />
       <ActDialog open={!!actClient} onOpenChange={(open) => !open && setActClient(null)} initialClient={actClient || undefined} />
       <DepositDialog open={!!depositClient} onOpenChange={(open) => !open && setDepositClient(null)} initialClient={depositClient || undefined} />
-      <ReceivePaymentDialog open={!!receiveClient} onOpenChange={(open) => !open && setReceiveClient(null)} initialClient={receiveClient || undefined} />
+      <ReceivePaymentDialog open={!!receiveClient} onOpenChange={(open) => !open && setReceiveClient(null)} initialClient={receiveClient || undefined} selectAll={receiveAll} />
     </div>
   )
 }

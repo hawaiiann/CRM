@@ -1,6 +1,7 @@
 import type { Order, Payment } from "@/types/models"
 import { orderPaymentState, parseNum, dateKey } from "./money"
 import { normalizePayment } from "./normalize"
+import type { AdvanceRow } from "./advances"
 
 /**
  * Деньги приходят пачками: один платёж за несколько сданных уроков, один
@@ -64,4 +65,62 @@ export function allocateAdvanceToOrders(orders: Order[], advanceId: string, amou
     }
   })
   return { orders: next, splits, leftover }
+}
+
+/**
+ * Списать свободный аванс клиента на заказы — для «Закрыть долг»: раньше это
+ * делалось в форме каждого заказа по очереди.
+ *
+ * Заказы — в порядке targetIds (обычно по сроку сдачи), каждому не больше его
+ * «к доплате». Авансы — от старых к новым (rows из clientAdvanceRows), каждый
+ * не больше своего остатка. Всего — не больше budget: сколько у клиента
+ * реально свободно (getClientAdvanceStats). Списания без привязки к авансу у
+ * старых заказов уменьшают именно его, и без этого потолка аванс ушёл бы в
+ * перерасход.
+ */
+export function spendAdvancesOnOrders(
+  orders: Order[],
+  targetIds: string[],
+  rows: AdvanceRow[],
+  budget: number
+): { orders: Order[]; splits: Split[]; total: number } {
+  const pools = rows.map((r) => ({ id: r.advance.id, left: r.available }))
+  let budgetLeft = Math.max(0, round2(budget))
+  const perOrder = new Map<string, { advanceId: string; amount: number }[]>()
+  const splits: Split[] = []
+  for (const id of targetIds) {
+    if (budgetLeft <= 0) break
+    const o = orders.find((x) => x.id === id)
+    if (!o) continue
+    let room = round2(Math.min(orderPaymentState(o).remaining, budgetLeft))
+    const allocs: { advanceId: string; amount: number }[] = []
+    for (const p of pools) {
+      if (room <= 0) break
+      const take = round2(Math.min(p.left, room))
+      if (take <= 0) continue
+      allocs.push({ advanceId: p.id, amount: take })
+      p.left = round2(p.left - take)
+      room = round2(room - take)
+      budgetLeft = round2(budgetLeft - take)
+    }
+    if (allocs.length) {
+      perOrder.set(id, allocs)
+      splits.push({ orderId: id, amount: round2(allocs.reduce((s, a) => s + a.amount, 0)) })
+    }
+  }
+  const next = orders.map((o) => {
+    const allocs = perOrder.get(o.id)
+    if (!allocs) return o
+    const byAdvance = new Map<string, number>()
+    ;(o.advanceAllocations || []).forEach((a) => byAdvance.set(a.advanceId, round2((byAdvance.get(a.advanceId) || 0) + parseNum(a.amount))))
+    allocs.forEach((a) => byAdvance.set(a.advanceId, round2((byAdvance.get(a.advanceId) || 0) + a.amount)))
+    const add = allocs.reduce((s, a) => s + a.amount, 0)
+    const updated: Order = {
+      ...o,
+      advanceAllocations: [...byAdvance.entries()].map(([advanceId, amount]) => ({ advanceId, amount })),
+      advanceUsed: round2(parseNum(o.advanceUsed) + add),
+    }
+    return { ...updated, isPaid: orderPaymentState(updated).isFullyPaid }
+  })
+  return { orders: next, splits, total: round2(splits.reduce((s, x) => s + x.amount, 0)) }
 }
